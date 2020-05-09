@@ -1,6 +1,8 @@
 # MorrowindUnity
 Unity implementation of TES III: Morrowind engine
 
+Video link: https://youtu.be/-a1GMOyWWHQ
+
 This project does not contain any code or assets from the game itself. It requires a valid Steam installation to be present on your PC. Currently it only searches in the default Steam installation on the C: drive.
 
 It requires Unity 2019.3.0f6 or later.
