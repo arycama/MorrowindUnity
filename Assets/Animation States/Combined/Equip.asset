@@ -1,0 +1,174 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4fb1beb0e66dcd9499ccb38aaa253c10, type: 3}
+  m_Name: Equip
+  m_EditorClassIdentifier: 
+  hasSpeedParameter: 0
+  speedParameter: 
+  transitions:
+  - targetState: {fileID: 11400000, guid: 860864f50cb87044e8de1635a4ce5ffd, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: 
+      type: 5
+      compareOp: 51
+      boolValue: 0
+      floatValue: 0.95
+      intValue: 0
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0.95
+      intValue: -1
+  - targetState: {fileID: 11400000, guid: 40655781a6c04eb49b112d8f999252b5, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: 
+      type: 5
+      compareOp: 51
+      boolValue: 0
+      floatValue: 0.95
+      intValue: 0
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0.95
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 40655781a6c04eb49b112d8f999252b5, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: 
+      type: 5
+      compareOp: 51
+      boolValue: 0
+      floatValue: 0.95
+      intValue: 0
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0.95
+      intValue: 1
+  enterTransitions:
+  - animationName: HandToHandEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: -1
+  - animationName: WeaponOneHandEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 0
+  - animationName: WeaponOneHandEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 1
+  - animationName: WeaponTwoHandEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 2
+  - animationName: WeaponOneHandEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 3
+  - animationName: WeaponTwoHandEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 4
+  - animationName: WeaponTwoWideEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 5
+  - animationName: WeaponTwoWideEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 6
+  - animationName: WeaponOneHandEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 7
+  - animationName: WeaponTwoHandEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 8
+  - animationName: BowAndArrowEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 9
+  - animationName: CrossbowEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 10
+  - animationName: ThrowWeaponEquip
+    conditions:
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 11
+  stateTransitions: []

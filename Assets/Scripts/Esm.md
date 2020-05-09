@@ -1,0 +1,1 @@
+The scripts that load the ESM (Elder Scrolls Master) files are in this folder.

@@ -1,0 +1,17 @@
+{
+    "name": "Esm",
+    "references": [
+        "Nif",
+        "Singleton",
+        "BufferReader",
+        "Bsa",
+        "Audio",
+        "Record",
+        "AnimationState",
+        "Utilities"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false
+}

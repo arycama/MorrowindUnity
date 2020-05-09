@@ -1,0 +1,106 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fec1585cd6fa69a4bb5cdc9751bf0a1e, type: 3}
+  m_Name: Idlehh
+  m_EditorClassIdentifier: 
+  hasSpeedParameter: 0
+  speedParameter: 
+  transitions:
+  - targetState: {fileID: 11400000, guid: 7118806519db26547a7bba12209d1587, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Equip
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: d96b226cfd30b134d99fef01af4d3fe7, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Jump
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: f7d0e495894a46b468ee4b50d42b40ec, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Attack
+      type: 1
+      compareOp: 48
+      boolValue: 1
+      floatValue: 0
+      intValue: 1
+  - targetState: {fileID: 11400000, guid: ae1908636c9b7c74bb5f4e349cf08ec3, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Sneak
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: bc332391f27e7ee4fae4994ce4b4f528, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Forward
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: a7aabeb0dfe25d04bb6e6f96392f85f2, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Back
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: b992c5f422a855a408e65edf5addd786, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Left
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 0ea9ef3466a6bb24fa08d02e1f1ceca8, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Right
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  animationName: Idlehh

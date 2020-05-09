@@ -1,0 +1,8 @@
+{
+    "name": "Record",
+    "references": [
+        "BufferReader"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

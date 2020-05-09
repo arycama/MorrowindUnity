@@ -1,0 +1,174 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4fb1beb0e66dcd9499ccb38aaa253c10, type: 3}
+  m_Name: Idle
+  m_EditorClassIdentifier: 
+  hasSpeedParameter: 1
+  speedParameter: 
+  transitions:
+  - targetState: {fileID: 11400000, guid: 502bba49e6c57424ba66a4db14b006cb, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Walk
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+    - name: Run
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 5479a4ae5129df64f9d347233df60260, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Walk
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+    - name: Sneak
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 4ae76ae6a7d20174fb5055f3b21cf7e5, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Walk
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 21d6d9f4c43152d4c801548a11833582, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Jump
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: e53b35dc75b6edb4bbf559f203c88991, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Equip
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  enterTransitions:
+  - animationName: Idle2
+    conditions:
+    - name: Idle
+      type: 2
+      compareOp: 53
+      boolValue: 0
+      floatValue: -0.05
+      intValue: 2
+  - animationName: Idle3
+    conditions:
+    - name: Idle
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: -0.05
+      intValue: 3
+  - animationName: Idle4
+    conditions:
+    - name: Idle
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: -0.05
+      intValue: 4
+  - animationName: Idle5
+    conditions:
+    - name: Idle
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: -0.05
+      intValue: 5
+  - animationName: Idle6
+    conditions:
+    - name: Idle
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: -0.05
+      intValue: 6
+  - animationName: Idle7
+    conditions:
+    - name: Idle
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: -0.05
+      intValue: 7
+  - animationName: Idle8
+    conditions:
+    - name: Idle
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: -0.05
+      intValue: 8
+  - animationName: Idle9
+    conditions:
+    - name: Idle
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: -0.05
+      intValue: 9
+  stateTransitions:
+  - animationName: TurnLeft
+    conditions:
+    - name: Yaw
+      type: 3
+      compareOp: 52
+      boolValue: 0
+      floatValue: -0.05
+      intValue: 0
+  - animationName: TurnRight
+    conditions:
+    - name: Yaw
+      type: 3
+      compareOp: 50
+      boolValue: 0
+      floatValue: 0.05
+      intValue: 0
+  - animationName: IdleSneak
+    conditions:
+    - name: Sneak
+      type: 1
+      compareOp: 48
+      boolValue: 1
+      floatValue: 0
+      intValue: 2

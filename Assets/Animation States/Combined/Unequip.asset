@@ -1,0 +1,70 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4fb1beb0e66dcd9499ccb38aaa253c10, type: 3}
+  m_Name: Unequip
+  m_EditorClassIdentifier: 
+  hasSpeedParameter: 0
+  speedParameter: 
+  transitions:
+  - targetState: {fileID: 11400000, guid: 27dbaeae835257546b3f0da0efe26bf0, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Equip
+      type: 5
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0.95
+      intValue: 0
+  enterTransitions:
+  - animationName: HandToHandUnequip
+    conditions:
+    - name: 
+      type: 0
+      compareOp: 0
+      boolValue: 0
+      floatValue: 0
+      intValue: 0
+  - animationName: BowAndArrowUnequip
+    conditions: []
+  - animationName: CrossbowUnequip
+    conditions: []
+  - animationName: ThrowWeaponUnequip
+    conditions: []
+  - animationName: WeaponOneHandUnequip
+    conditions: []
+  - animationName: WeaponTwoHandUnequip
+    conditions: []
+  - animationName: WeaponTwoWideUnequip
+    conditions: []
+  stateTransitions:
+  - animationName: HandToHandUnequip
+    conditions:
+    - name: 
+      type: 0
+      compareOp: 0
+      boolValue: 0
+      floatValue: 0
+      intValue: 0
+  - animationName: BowAndArrowUnequip
+    conditions: []
+  - animationName: CrossbowUnequip
+    conditions: []
+  - animationName: ThrowWeaponUnequip
+    conditions: []
+  - animationName: WeaponOneHandUnequip
+    conditions: []
+  - animationName: WeaponTwoHandUnequip
+    conditions: []
+  - animationName: WeaponTwoWideUnequip
+    conditions: []

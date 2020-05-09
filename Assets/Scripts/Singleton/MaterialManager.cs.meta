@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 926a5f7cafec063428dad34c2e00992c
+timeCreated: 1519811173
+licenseType: Free
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - defaultShader: {fileID: 4800000, guid: 3ccccb8a788d20845becb2c612e8b454, type: 3}
+  - terrainShader: {fileID: 4800000, guid: ec5d6386443e8304da45e32fcc7bda1e, type: 3}
+  - skyShader: {fileID: 4800000, guid: fa26dcbafeabb7b499f78fd97602cda3, type: 3}
+  - waterShader: {fileID: 4800000, guid: d71c7ec2f6ab57747b282476d12d56bc, type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

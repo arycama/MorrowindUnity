@@ -1,0 +1,73 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fec1585cd6fa69a4bb5cdc9751bf0a1e, type: 3}
+  m_Name: IdleSneak
+  m_EditorClassIdentifier: 
+  hasSpeedParameter: 0
+  speedParameter: 
+  transitions:
+  - targetState: {fileID: 11400000, guid: 9e387f3034fee3d45b40973e26ed5abc, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Sneak
+      type: 1
+      compareOp: 0
+      boolValue: 0
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: b70e37961f994f64ab3cc52075e5d7dd, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Forward
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 22efe92dc04cdcc44b43cd21dd7efa43, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Back
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 407676b90d7846b4299d88d269357ffc, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Right
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 63c85d6da6d1ebf4f8c84b92dd4a44ff, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Left
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  animationName: IdleSneak

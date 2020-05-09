@@ -1,0 +1,127 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4fb1beb0e66dcd9499ccb38aaa253c10, type: 3}
+  m_Name: Run
+  m_EditorClassIdentifier: 
+  hasSpeedParameter: 0
+  speedParameter: 
+  transitions:
+  - targetState: {fileID: 11400000, guid: 27dbaeae835257546b3f0da0efe26bf0, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Walk
+      type: 1
+      compareOp: 0
+      boolValue: 0
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 4ae76ae6a7d20174fb5055f3b21cf7e5, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Run
+      type: 1
+      compareOp: 0
+      boolValue: 0
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 5479a4ae5129df64f9d347233df60260, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Sneak
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 21d6d9f4c43152d4c801548a11833582, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Jump
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  enterTransitions:
+  - animationName: RunForward
+    conditions:
+    - name: Forward
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - animationName: RunBack
+    conditions:
+    - name: Back
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - animationName: RunLeft
+    conditions:
+    - name: Left
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - animationName: RunRight
+    conditions:
+    - name: Right
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  stateTransitions:
+  - animationName: RunForward
+    conditions:
+    - name: Forward
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - animationName: RunBack
+    conditions:
+    - name: Back
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - animationName: RunLeft
+    conditions:
+    - name: Left
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - animationName: RunRight
+    conditions:
+    - name: Right
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0

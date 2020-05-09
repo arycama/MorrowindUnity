@@ -1,0 +1,21 @@
+fileFormatVersion: 2
+guid: 1052d1bc2beaedd408c57d1f567b5e29
+timeCreated: 1497775162
+licenseType: Free
+TrueTypeFontImporter:
+  serializedVersion: 4
+  fontSize: 16
+  forceTextureCase: -2
+  characterSpacing: 0
+  characterPadding: 1
+  includeFontData: 1
+  fontName: OblivionFont
+  fontNames:
+  - OblivionFont
+  fallbackFontReferences: []
+  customCharacters: 
+  fontRenderingMode: 0
+  ascentCalculationMode: 1
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

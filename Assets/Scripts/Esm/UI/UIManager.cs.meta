@@ -1,0 +1,19 @@
+fileFormatVersion: 2
+guid: 9b041fde7d008964bb969a043afcdd5f
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - dialogUI: {fileID: 114975035771396078, guid: 4b60479529ce17040b8645fee1232a27,
+      type: 2}
+  - infoPanel: {fileID: 114987156764797156, guid: 9c3613b94e6e28a4fb5f6353a1ab3633,
+      type: 2}
+  - listPanelUI: {fileID: 114804990037461364, guid: d29de6139c334784e9d2b6a361820a5a,
+      type: 2}
+  - characterMenu: {fileID: 114649624377303442, guid: 103418b1a2051ce4287371dc78eaff22,
+      type: 2}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

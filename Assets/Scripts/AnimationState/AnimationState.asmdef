@@ -1,0 +1,10 @@
+{
+    "name": "AnimationState",
+    "references": [
+        "Singleton"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false
+}

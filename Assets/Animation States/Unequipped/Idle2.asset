@@ -1,0 +1,134 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fec1585cd6fa69a4bb5cdc9751bf0a1e, type: 3}
+  m_Name: Idle2
+  m_EditorClassIdentifier: 
+  hasSpeedParameter: 0
+  speedParameter: 
+  transitions:
+  - targetState: {fileID: 11400000, guid: c7c9e812068442e449512ccf09921581, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Jump
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: ffb9d2733eca8b246933eab8ba59441b, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Sneak
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 40824890b3b6e324585c9cb5089d82e5, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Forward
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: c5a9df0317457f045bb3a965e2e973a9, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Back
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 91e65967290b1e647989597b24db12e8, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Left
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 35e934eef475ea349bb86d91df9e099e, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Right
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 9736b61a31b3e094e87f3d0e9502da40, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Yaw
+      type: 3
+      compareOp: 52
+      boolValue: 1
+      floatValue: -0.1
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 2f71c91558fe0b94e8b345ec181a1c2d, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Yaw
+      type: 3
+      compareOp: 50
+      boolValue: 1
+      floatValue: 0.1
+      intValue: 0
+  - targetState: {fileID: 11400000, guid: 92c3885a0bef3a54f8bd890c1bfbcae2, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Equip
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+    - name: WeaponType
+      type: 2
+      compareOp: 48
+      boolValue: 1
+      floatValue: 0
+      intValue: -1
+  - targetState: {fileID: 11400000, guid: 38f435aa43f0cf84ea3c6f661c3220a3, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: Equip
+      type: 1
+      compareOp: 0
+      boolValue: 1
+      floatValue: 0
+      intValue: 0
+  animationName: Idle2

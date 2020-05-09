@@ -1,0 +1,21 @@
+fileFormatVersion: 2
+guid: 8df8fcc10fe5d054587d731463a4bc21
+timeCreated: 1497775162
+licenseType: Free
+TrueTypeFontImporter:
+  serializedVersion: 4
+  fontSize: 16
+  forceTextureCase: -2
+  characterSpacing: 0
+  characterPadding: 1
+  includeFontData: 1
+  fontName: Kingthings Exeter
+  fontNames:
+  - Kingthings Exeter
+  fallbackFontReferences: []
+  customCharacters: 
+  fontRenderingMode: 0
+  ascentCalculationMode: 1
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

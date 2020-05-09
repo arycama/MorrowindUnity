@@ -1,0 +1,13 @@
+{
+    "name": "Nif",
+    "references": [
+        "BufferReader",
+        "Bsa",
+        "Singleton",
+        "Utilities"
+    ],
+    "optionalUnityReferences": [],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false
+}

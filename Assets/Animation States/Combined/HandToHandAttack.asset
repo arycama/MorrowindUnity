@@ -1,0 +1,90 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4fb1beb0e66dcd9499ccb38aaa253c10, type: 3}
+  m_Name: HandToHandAttack
+  m_EditorClassIdentifier: 
+  hasSpeedParameter: 1
+  speedParameter: AttackSpeed
+  transitions:
+  - targetState: {fileID: 11400000, guid: 83d896a53633578479d70294dfa8c2e7, type: 2}
+    hasExitTime: 0
+    exitTime: 0
+    enterTime: 0
+    conditions:
+    - name: AttackType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 0
+    - name: 
+      type: 5
+      compareOp: 0
+      boolValue: 0
+      floatValue: 0
+      intValue: 0
+    - name: AttackStrength
+      type: 2
+      compareOp: 50
+      boolValue: 0
+      floatValue: 1
+      intValue: 0
+  enterTransitions:
+  - animationName: HandToHandChop
+    conditions:
+    - name: AttackType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 1
+  - animationName: HandToHandSlash
+    conditions:
+    - name: AttackType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 2
+  - animationName: HandToHandThrust
+    conditions:
+    - name: AttackType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 3
+  stateTransitions:
+  - animationName: HandToHandChop
+    conditions:
+    - name: AttackType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 1
+  - animationName: HandToHandSlash
+    conditions:
+    - name: AttackType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 2
+  - animationName: HandToHandThrust
+    conditions:
+    - name: AttackType
+      type: 2
+      compareOp: 48
+      boolValue: 0
+      floatValue: 0
+      intValue: 3
