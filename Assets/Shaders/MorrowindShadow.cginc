@@ -14,11 +14,15 @@
 	#define UNITY_STANDARD_USE_SHADOW_OUTPUT_STRUCT
 #endif
 
-half4       _Color;
-half        _Cutoff;
-sampler2D   _MainTex;
-float4      _MainTex_ST;
+cbuffer UnityPerMaterial
+{
+	half4 _Color;
+	half _Cutoff;
+	float4 _MainTex_ST;
+};
+
 sampler3D   _DitherMaskLOD;
+sampler2D _MainTex;
 
 struct VertexInput
 {

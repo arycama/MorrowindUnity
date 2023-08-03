@@ -71,7 +71,7 @@ public class WeatherManager : Singleton<WeatherManager>
 
 	private void Awake()
 	{
-		Camera.onPreCull += OnCameraPreCull;
+		RenderPipelineManager.beginCameraRendering += OnCameraPreCull;
 		CellManager.OnFinishedLoadingCells += SwitchCell;
 
 		// Night Sky
@@ -103,7 +103,7 @@ public class WeatherManager : Singleton<WeatherManager>
 
 		var renderer = go.GetComponentInChildren<Renderer>();
 
-		skyboxMaterial = new Material(MaterialManager.Instance.SkyShader);
+		skyboxMaterial = new Material(MaterialManager.Instance.SkyShader) { enableInstancing = true };
 		//var skyCommandBuffer = new CommandBuffer();
 		skyboxMesh = go.GetComponentInChildren<MeshFilter>().sharedMesh;
 		//skyCommandBuffer.DrawMesh(skyboxMesh, Matrix4x4.TRS(new Vector3(0, -15, 0), Quaternion.identity, Vector3.one), skyboxMaterial);
@@ -122,24 +122,26 @@ public class WeatherManager : Singleton<WeatherManager>
 		maximumTimeBetweenEnvironmentalSounds = IniManager.GetFloat("Weather", "Maximum Time Between Environmental Sounds");
 	}
 
-	private void OnCameraPreCull(Camera camera)
+	private void OnCameraPreCull(ScriptableRenderContext context, Camera camera)
 	{
-		if(!cameraBuffers.TryGetValue(camera, out var buffer))
-		{
-			buffer = new CommandBuffer() { name = "Camera Skybox Buffer" };
-			cameraBuffers.Add(camera, buffer);
-			camera.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, buffer);
-		}
+		//if(!cameraBuffers.TryGetValue(camera, out var buffer))
+		//{
+		//	buffer = new CommandBuffer() { name = "Camera Skybox Buffer" };
+		//	cameraBuffers.Add(camera, buffer);
+		//	camera.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, buffer);
+		//}
 
 		var localMatrix = Matrix4x4.TRS(new Vector3(0, -15, 0) + camera.transform.position, Quaternion.identity, Vector3.one);
 
-		buffer.Clear();
-		buffer.DrawMesh(skyboxMesh, localMatrix, skyboxMaterial);
+		//buffer.Clear();
+		//buffer.DrawMesh(skyboxMesh, localMatrix, skyboxMaterial);
+
+		Graphics.DrawMesh(skyboxMesh, localMatrix, skyboxMaterial, 0, camera);
 	}
 
 	private void OnDestroy()
 	{
-		Camera.onPreCull -= OnCameraPreCull;
+        RenderPipelineManager.beginCameraRendering -= OnCameraPreCull;
 		CellManager.OnFinishedLoadingCells -= SwitchCell;
 
 		foreach(var buffer in cameraBuffers)

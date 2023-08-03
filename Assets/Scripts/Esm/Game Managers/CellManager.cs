@@ -8,7 +8,7 @@ using UnityEngine.SceneManagement;
 /// </summary>
 public class CellManager : Singleton<CellManager>
 {
-	public static List<GameObject> StaticBatching = new List<GameObject>();
+	//public static List<GameObject> StaticBatching = new List<GameObject>();
 
 	[SerializeField, Tooltip("Additional cells to load in each direction around the player")]
 	private int cellsToLoad = 1;
@@ -71,7 +71,7 @@ public class CellManager : Singleton<CellManager>
 		SceneManager.SetActiveScene(newScene);
 
 		cell.CellData.LoadTerrain();
-		StaticBatching.Clear();
+		//StaticBatching.Clear();
 
 		// Load the cell objects
 		foreach (var reference in cell.ReferenceData)
@@ -87,7 +87,7 @@ public class CellManager : Singleton<CellManager>
 			}
 		}
 
-		StaticBatchingUtility.Combine(StaticBatching.ToArray(), new GameObject("Static Batch Root"));
+		//StaticBatchingUtility.Combine(StaticBatching.ToArray(), new GameObject("Static Batch Root"));
 
 		// Set the original scene as the active scene. This stops weather from changing when new cells are loaded
 		SceneManager.SetActiveScene(activeScene);

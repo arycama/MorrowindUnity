@@ -32,13 +32,13 @@ public class ActivatorRecord : CreatableRecord
 	{
 		var gameObject = base.CreateGameObject(referenceData, parent);
 
-		var childGameObjects = gameObject.GetComponentsInChildren<MeshFilter>();
-		var length = childGameObjects.Length;
-		for (var i = 0; i < length; i++)
-		{
-			childGameObjects[i].gameObject.isStatic = true;
-			CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
-		}
+		//var childGameObjects = gameObject.GetComponentsInChildren<MeshFilter>();
+		//var length = childGameObjects.Length;
+		//for (var i = 0; i < length; i++)
+		//{
+			//childGameObjects[i].gameObject.isStatic = true;
+			//CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
+		//}
 
 		Activator.Create(gameObject, this, referenceData);
 

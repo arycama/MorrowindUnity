@@ -12,3 +12,5 @@
 *.sln
 /.vs
 /Logs
+/UserSettings
+*.vsconfig

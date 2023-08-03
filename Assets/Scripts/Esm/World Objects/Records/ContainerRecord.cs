@@ -56,15 +56,15 @@ public class ContainerRecord : CreatableRecord, IInventoryRecord
 	{
 		var gameObject = base.CreateGameObject(referenceData, parent);
 
-		var childGameObjects = gameObject.GetComponentsInChildren<MeshFilter>();
-		var length = childGameObjects.Length;
-		for (var i = 0; i < length; i++)
-		{
-			childGameObjects[i].gameObject.isStatic = true;
-			CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
-		}
+		//var childGameObjects = gameObject.GetComponentsInChildren<MeshFilter>();
+		//var length = childGameObjects.Length;
+		//for (var i = 0; i < length; i++)
+		//{
+		//	childGameObjects[i].gameObject.isStatic = true;
+		//	CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
+		//}
 
-		var lockData = new LockData(referenceData.LockLevel, referenceData.Trap, referenceData.Key);
+		//var lockData = new LockData(referenceData.LockLevel, referenceData.Trap, referenceData.Key);
 
 		Container.Create(gameObject, this, referenceData);
 

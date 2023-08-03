@@ -29,7 +29,7 @@ public class TerrainFactory
 
 		var meshRenderer = gameObject.AddComponent<MeshRenderer>();
 		meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.TwoSided;
-		meshRenderer.sharedMaterial = new Material(MaterialManager.Instance.TerrainShader);
+		meshRenderer.sharedMaterial = new Material(MaterialManager.Instance.TerrainShader) { enableInstancing = true };
 		meshRenderer.sharedMaterial.mainTextureScale = new Vector2(16, 16);
 
 		// Generate the mesh
@@ -90,9 +90,11 @@ public class TerrainFactory
 			vertices = vertices,
 			triangles = triangles,
 			uv = uvs,
-			normals = normals,
-			colors32 = record.ColorData.Colors
+			normals = normals
 		};
+
+		if(record.ColorData != null)
+			mesh.colors32 = record.ColorData.Colors;
 
 		meshFilter.sharedMesh = mesh;
 

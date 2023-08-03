@@ -10,7 +10,7 @@
 
 	SubShader
 	{
-		Tags {"Queue"="Transparent" "RenderType"="Transparent"}
+		Tags {"Queue"="Transparent" }
 		Offset 1, 0
 
 		CGPROGRAM

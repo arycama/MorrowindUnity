@@ -1,5 +1,6 @@
 ﻿#pragma warning disable 0108
 
+using System;
 using UnityEngine;
 
 public class Water : Singleton<Water>
@@ -85,9 +86,46 @@ public class Water : Singleton<Water>
 		mesh.bounds = new Bounds(Vector3.zero, new Vector3(bigNumber, 20.0f, bigNumber));
 		mesh.MarkDynamic();
 		meshFilter.sharedMesh = mesh;
+
+		Camera.onPreCull += OnCameraPreCull;
 	}
 
-	private void OnDestroy()
+    private void OnCameraPreCull(Camera cam)
+    {
+        projection.UpdateProjection(cam);
+        interpolation = projection.Interpolation;
+
+        // Update each vertex position
+        var vertices = meshFilter.sharedMesh.vertices;
+        for (var i = 0; i < vertices.Length; i++)
+        {
+            var uv = meshFilter.sharedMesh.uv[i];
+            Vector4 p;
+
+            p.x = Mathf.Lerp(Mathf.Lerp(interpolation[0, 0], interpolation[1, 0], uv.x), Mathf.Lerp(interpolation[3, 0], interpolation[2, 0], uv.x), uv.y);
+            p.y = Mathf.Lerp(Mathf.Lerp(interpolation[0, 1], interpolation[1, 1], uv.x), Mathf.Lerp(interpolation[3, 1], interpolation[2, 1], uv.x), uv.y);
+            p.z = Mathf.Lerp(Mathf.Lerp(interpolation[0, 2], interpolation[1, 2], uv.x), Mathf.Lerp(interpolation[3, 2], interpolation[2, 2], uv.x), uv.y);
+            p.w = Mathf.Lerp(Mathf.Lerp(interpolation[0, 3], interpolation[1, 3], uv.x), Mathf.Lerp(interpolation[3, 3], interpolation[2, 3], uv.x), uv.y);
+
+            vertices[i] = p / p.w;
+        }
+
+        meshFilter.sharedMesh.vertices = vertices;
+
+        if (Time.time > nextUpdateTime)
+        {
+            lastTextureIndex++;
+            if (lastTextureIndex == textures.Length)
+            {
+                lastTextureIndex = 0;
+            }
+
+            meshRenderer.sharedMaterial.mainTexture = textures[lastTextureIndex];
+            nextUpdateTime = Time.time + 1 / surfaceFps;
+        }
+    }
+
+    private void OnDestroy()
 	{
 		CellManager.OnFinishedLoadingCells -= SetupWater;
 	}
@@ -108,41 +146,6 @@ public class Water : Singleton<Water>
 		else
 		{
 			gameObject.SetActive(true);
-		}
-	}
-
-	private void Update()
-	{
-		projection.UpdateProjection(Camera.main);
-		interpolation = projection.Interpolation;
-
-		// Update each vertex position
-		var vertices = meshFilter.mesh.vertices;
-		for (var i = 0; i < vertices.Length; i++)
-		{
-			var uv = meshFilter.mesh.uv[i];
-			Vector4 p;
-
-			p.x = Mathf.Lerp(Mathf.Lerp(interpolation[0, 0], interpolation[1, 0], uv.x), Mathf.Lerp(interpolation[3, 0], interpolation[2, 0], uv.x), uv.y);
-			p.y = Mathf.Lerp(Mathf.Lerp(interpolation[0, 1], interpolation[1, 1], uv.x), Mathf.Lerp(interpolation[3, 1], interpolation[2, 1], uv.x), uv.y);
-			p.z = Mathf.Lerp(Mathf.Lerp(interpolation[0, 2], interpolation[1, 2], uv.x), Mathf.Lerp(interpolation[3, 2], interpolation[2, 2], uv.x), uv.y);
-			p.w = Mathf.Lerp(Mathf.Lerp(interpolation[0, 3], interpolation[1, 3], uv.x), Mathf.Lerp(interpolation[3, 3], interpolation[2, 3], uv.x), uv.y);
-
-			vertices[i] = p / p.w;
-		}
-
-		meshFilter.mesh.vertices = vertices;
-
-		if (Time.time > nextUpdateTime)
-		{
-			lastTextureIndex++;
-			if (lastTextureIndex == textures.Length)
-			{
-				lastTextureIndex = 0;
-			}
-
-			meshRenderer.material.mainTexture = textures[lastTextureIndex];
-			nextUpdateTime = Time.time + 1 / surfaceFps;
 		}
 	}
 }
