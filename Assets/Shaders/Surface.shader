@@ -31,7 +31,7 @@
 			ZWrite [_ZWrite]
 
 			HLSLPROGRAM
-			#pragma multi_compile_instancing
+			//#pragma multi_compile_instancing
 
 			#pragma vertex Vertex
 			#pragma fragment Fragment
@@ -48,7 +48,7 @@
             Tags { "LightMode" = "ShadowCaster" }
 
             HLSLPROGRAM
-			#pragma multi_compile_instancing
+			//#pragma multi_compile_instancing
 
             #pragma vertex Vertex
             #pragma fragment Fragment

@@ -43,7 +43,7 @@ float4 Fragment(FragmentInput input) : SV_Target
 	float4 color = _MainTex.Sample(_LinearRepeatSampler, input.uv);
 	color.a = _Alpha;
 	
-	float3 lighting = GetLighting(float3(0, 1, 0), input.worldPosition) + _Ambient;
+	float3 lighting = GetLighting(float3(0, 1, 0), input.worldPosition) + _AmbientLightColor;
 	color.rgb *= lighting;
 	color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
 	

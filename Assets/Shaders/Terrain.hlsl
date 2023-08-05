@@ -200,7 +200,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 	float3 normal = normalize(input.normal);
 	float3 lighting = GetLighting(normal, input.worldPosition);
 	
-	lighting += _Ambient;
+	lighting += _AmbientLightColor;
 	color.rgb *= lighting * input.color;
 	color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
 	

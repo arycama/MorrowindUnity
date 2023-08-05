@@ -34,7 +34,7 @@ FragmentInput Vertex(VertexInput input)
 	output.position = WorldToClip(output.worldPosition);
 	output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
 	output.normal = ObjectToWorldNormal(input.normal, input.instanceID);
-	output.color = _Ambient * input.color + _EmissionColor;
+	output.color = _AmbientLightColor * input.color + _EmissionColor;
 	return output;
 }
 
@@ -47,7 +47,7 @@ float4 Fragment(FragmentInput input) : SV_Target
 	// Emissive
 	lighting += input.color;
 	color.rgb *= lighting;
-	color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
+	//color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
 	
 	#if defined(UNITY_PASS_SHADOWCASTER) && defined(_ALPHABLEND_ON)
 		clip(color.a - InterleavedGradientNoise(input.position.xy, 0));

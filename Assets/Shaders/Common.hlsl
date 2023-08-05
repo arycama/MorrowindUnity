@@ -1,9 +1,9 @@
 ﻿#ifndef COMMON_INCLUDED
 #define COMMON_INCLUDED
 
-float4 _Time, _FogColor;
-float3 _Ambient, _SunDirection, _SunColor, _WorldSpaceCameraPos;
-float _FogStartDistance, _FogEndDistance, _FogEnabled;
+float4 _Time;
+float3 _AmbientLightColor, _SunDirection, _SunColor, _WorldSpaceCameraPos, _FogColor;
+float _FogStartDistance, _FogEndDistance, _FogEnabled, _SunShadowsOn;
 matrix unity_MatrixVP, _WorldToShadow;
 SamplerState _LinearRepeatSampler, _PointClampSampler;
 SamplerComparisonState _LinearClampCompareSampler;
@@ -45,8 +45,8 @@ float Sq(float x)
 
 float GetDirectionalShadow(float3 worldPosition)
 {
-	float4 shadowPosition = mul(_WorldToShadow, float4(worldPosition, 1.0));
-	if (all(saturate(shadowPosition.xyz) == shadowPosition.xyz))
+	float3 shadowPosition = mul(_WorldToShadow, float4(worldPosition, 1.0)).xyz;
+	if (_SunShadowsOn && all(saturate(shadowPosition) == shadowPosition))
 		return _DirectionalShadows.SampleCmpLevelZero(_LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z);
 	
 	return 1.0;
@@ -107,7 +107,8 @@ float3 ApplyFog(float3 color, float3 worldPosition, float dither)
 	float3 rayStep = ray / samples;
 	float ds = length(rayStep);
 	
-	float3 luminance = 0.0, shadowSum = 0.0, opticalDepth = 0.0;
+	float opticalDepth = 0.0;
+	float3 luminance = 0.0, shadowSum = 0.0;
 	for (float i = dither; i < samples; i++)
 	{
 		float3 position = rayStep * i + rayStart;
