@@ -2,6 +2,7 @@
 
 using System;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class Water : Singleton<Water>
 {
@@ -87,12 +88,18 @@ public class Water : Singleton<Water>
 		mesh.MarkDynamic();
 		meshFilter.sharedMesh = mesh;
 
-		Camera.onPreCull += OnCameraPreCull;
-	}
+		RenderPipelineManager.beginCameraRendering += OnCameraPreCull;
+    }
 
-    private void OnCameraPreCull(Camera cam)
+    private void OnDestroy()
     {
-        projection.UpdateProjection(cam);
+        RenderPipelineManager.beginCameraRendering -= OnCameraPreCull;
+		CellManager.OnFinishedLoadingCells -= SetupWater;
+    }
+
+    private void OnCameraPreCull(ScriptableRenderContext context, Camera camera)
+    {
+        projection.UpdateProjection(camera);
         interpolation = projection.Interpolation;
 
         // Update each vertex position
@@ -124,11 +131,6 @@ public class Water : Singleton<Water>
             nextUpdateTime = Time.time + 1 / surfaceFps;
         }
     }
-
-    private void OnDestroy()
-	{
-		CellManager.OnFinishedLoadingCells -= SetupWater;
-	}
 
 	private void SetupWater(CellRecord cell)
 	{

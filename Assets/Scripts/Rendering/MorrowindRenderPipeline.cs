@@ -1,20 +1,24 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.Rendering;
 
-public  class MorrowindRenderPipeline : RenderPipeline
+public class MorrowindRenderPipeline : RenderPipeline
 {
     private MorrowindRenderPipelineAsset renderPipelineAsset;
     private CommandBuffer commandBuffer;
+    private ComputeBuffer pointLightBuffer;
 
     public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset)
     {
         this.renderPipelineAsset = renderPipelineAsset;
         commandBuffer = new CommandBuffer() { name = "Render Camera" };
+        pointLightBuffer = new ComputeBuffer(1, 32);
     }
 
     protected override void Dispose(bool disposing)
     {
         commandBuffer.Release();
+        pointLightBuffer.Release();
     }
 
     Matrix4x4 ConvertToAtlasMatrix(Matrix4x4 m)
@@ -30,7 +34,7 @@ public  class MorrowindRenderPipeline : RenderPipeline
 
     protected override void Render(ScriptableRenderContext context, Camera[] cameras)
     {
-        foreach(var camera in cameras)
+        foreach (var camera in cameras)
         {
             BeginCameraRendering(context, camera);
 
@@ -46,7 +50,7 @@ public  class MorrowindRenderPipeline : RenderPipeline
 
             // Setup ambient
             commandBuffer.SetGlobalColor("_Ambient", RenderSettings.ambientLight);
-            commandBuffer.SetGlobalColor("_FogColor", RenderSettings.fogColor);
+            commandBuffer.SetGlobalColor("_FogColor", RenderSettings.fogColor.linear);
             commandBuffer.SetGlobalFloat("_FogStartDistance", RenderSettings.fogStartDistance);
             commandBuffer.SetGlobalFloat("_FogEndDistance", RenderSettings.fogEndDistance);
 
@@ -61,54 +65,73 @@ public  class MorrowindRenderPipeline : RenderPipeline
             context.ExecuteCommandBuffer(commandBuffer);
             commandBuffer.Clear();
 
+            var pointLightList = new List<PointLightData>();
+
+            commandBuffer.SetGlobalVector("_SunDirection", Vector3.up);
+            commandBuffer.SetGlobalColor("_SunColor", Color.black);
+
             // Setup lights
             for (var i = 0; i < cullingResults.visibleLights.Length; i++)
             {
                 var visibleLight = cullingResults.visibleLights[i];
-                if (visibleLight.lightType != LightType.Directional)
-                    continue;
+                if (visibleLight.lightType == LightType.Directional)
+                {
+                    var light = visibleLight.light;
+                    commandBuffer.SetGlobalVector("_SunDirection", -light.transform.forward);
+                    commandBuffer.SetGlobalColor("_SunColor", visibleLight.light.color.linear);
+                    context.ExecuteCommandBuffer(commandBuffer);
+                    commandBuffer.Clear();
 
-                var light = visibleLight.light;
-                commandBuffer.SetGlobalVector("_SunDirection", -light.transform.forward);
-                commandBuffer.SetGlobalColor("_SunColor", visibleLight.finalColor);
-                context.ExecuteCommandBuffer(commandBuffer);
-                commandBuffer.Clear();
+                    var shadowResolution = renderPipelineAsset.ShadowResolution;
+                    if (!cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(i, 0, 1, Vector3.zero, shadowResolution, light.shadowNearPlane, out var viewMatrix, out var projectionMatrix, out var shadowSplitData))
+                        continue;
 
-                var shadowResolution = renderPipelineAsset.ShadowResolution;
-                if (!cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(i, 0, 1, Vector3.zero, shadowResolution, light.shadowNearPlane, out var viewMatrix, out var projectionMatrix, out var shadowSplitData))
-                    continue;
+                    commandBuffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
+                    commandBuffer.SetGlobalFloat("_ZClip", 0);
+                    commandBuffer.SetGlobalDepthBias(renderPipelineAsset.ShadowBias, renderPipelineAsset.ShadowSlopeBias);
 
-                commandBuffer.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
-                commandBuffer.SetGlobalFloat("_ZClip", 0);
-                commandBuffer.SetGlobalDepthBias(renderPipelineAsset.ShadowBias, renderPipelineAsset.ShadowSlopeBias);
+                    var directionalShadowsId = Shader.PropertyToID("_DirectionalShadows");
+                    commandBuffer.GetTemporaryRT(directionalShadowsId, shadowResolution, shadowResolution, 16, FilterMode.Point, RenderTextureFormat.Shadowmap);
+                    commandBuffer.SetRenderTarget(directionalShadowsId);
+                    commandBuffer.ClearRenderTarget(true, false, Color.clear);
+                    context.ExecuteCommandBuffer(commandBuffer);
+                    commandBuffer.Clear();
 
-                var directionalShadowsId = Shader.PropertyToID("_DirectionalShadows");
-                commandBuffer.GetTemporaryRT(directionalShadowsId, shadowResolution, shadowResolution, 16, FilterMode.Point, RenderTextureFormat.Shadowmap);
-                commandBuffer.SetRenderTarget(directionalShadowsId);
-                commandBuffer.ClearRenderTarget(true, false, Color.clear);
-                context.ExecuteCommandBuffer(commandBuffer);
-                commandBuffer.Clear();
+                    var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, i) { splitData = shadowSplitData };
+                    context.DrawShadows(ref shadowDrawingSettings);
 
-                var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, i) { splitData = shadowSplitData };
-                context.DrawShadows(ref shadowDrawingSettings);
+                    commandBuffer.SetGlobalTexture("_DirectionalShadows", directionalShadowsId);
 
-                commandBuffer.SetGlobalTexture("_DirectionalShadows", directionalShadowsId);
+                    var worldToShadow = ConvertToAtlasMatrix(projectionMatrix * viewMatrix);
+                    commandBuffer.SetGlobalMatrix("_WorldToShadow", worldToShadow);
+                    commandBuffer.SetGlobalFloat("_ZClip", 1);
+                    commandBuffer.SetGlobalDepthBias(0f, 0f);
 
-                var worldToShadow = ConvertToAtlasMatrix(projectionMatrix * viewMatrix);
-                commandBuffer.SetGlobalMatrix("_WorldToShadow", worldToShadow);
-                commandBuffer.SetGlobalFloat("_ZClip", 1);
-                commandBuffer.SetGlobalDepthBias(0f, 0f);
-
-                context.ExecuteCommandBuffer(commandBuffer);
-                commandBuffer.Clear();
+                    context.ExecuteCommandBuffer(commandBuffer);
+                    commandBuffer.Clear();
+                }
+                else if (visibleLight.lightType == LightType.Point)
+                {
+                    pointLightList.Add(new PointLightData(visibleLight.localToWorldMatrix.GetPosition(), visibleLight.range, (Vector4)visibleLight.light.color.linear, uint.MaxValue));
+                }
             }
+
+            if (pointLightList.Count >= pointLightBuffer.count)
+            {
+                pointLightBuffer.Release();
+                pointLightBuffer = new ComputeBuffer(pointLightList.Count, 32);
+            }
+
+            commandBuffer.SetBufferData(pointLightBuffer, pointLightList);
+            commandBuffer.SetGlobalBuffer("_PointLights", pointLightBuffer);
+            commandBuffer.SetGlobalInt("_PointLightCount", pointLightList.Count);
+
+            context.ExecuteCommandBuffer(commandBuffer);
+            commandBuffer.Clear();
 
             context.SetupCameraProperties(camera);
 
-            var clearDepth = camera.clearFlags != CameraClearFlags.Nothing;
-            var clearColor = camera.clearFlags == CameraClearFlags.Color;
-
-            commandBuffer.ClearRenderTarget(clearDepth, clearColor, camera.backgroundColor.linear);
+            commandBuffer.ClearRenderTarget(true, true, RenderSettings.fogColor.linear);
             context.ExecuteCommandBuffer(commandBuffer);
             commandBuffer.Clear();
 
@@ -140,5 +163,21 @@ public  class MorrowindRenderPipeline : RenderPipeline
 
             context.Submit();
         }
+    }
+}
+
+public readonly struct PointLightData
+{
+    public Vector3 Position { get; }
+    public float Range { get; }
+    public Vector3 Color { get; }
+    public uint ShadowIndex { get; }
+
+    public PointLightData(Vector3 position, float range, Vector3 color, uint shadowIndex)
+    {
+        Position = position;
+        Range = range;
+        Color = color;
+        ShadowIndex = shadowIndex;
     }
 }

@@ -53,6 +53,8 @@
             #pragma vertex Vertex
             #pragma fragment Fragment
 
+			#pragma multi_compile _ _ALPHABLEND_ON
+
 			#include "Surface.hlsl"
 			ENDHLSL
 		}
