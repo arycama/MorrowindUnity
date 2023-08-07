@@ -47,10 +47,11 @@ float4 Fragment(FragmentInput input) : SV_Target
 	// Emissive
 	lighting += input.color;
 	color.rgb *= lighting;
-	//color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
+	color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
 	
 	#if defined(UNITY_PASS_SHADOWCASTER) && defined(_ALPHABLEND_ON)
 		clip(color.a - InterleavedGradientNoise(input.position.xy, 0));
+		//clip(color.a - _BlueNoise1D[uint2(input.position.xy) % 64]);
 	#endif
 	
 	return color;

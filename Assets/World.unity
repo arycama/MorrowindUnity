@@ -304,7 +304,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1079448418
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -851,7 +851,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e4c14d18c5c9c0d4d80e7b28d601d5b5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  cellsToLoad: 3
+  cellsToLoad: 2
   currentCell: {fileID: 0}
 --- !u!114 &1594392079
 MonoBehaviour:
@@ -877,7 +877,7 @@ MonoBehaviour:
   currentWeatherSettings: {fileID: 0}
   seconds: 0.19351196
   minute: 26
-  hour: 11
+  hour: 15
   day: 0
   month: 7
   skyboxMaterial: {fileID: 1600696161}

@@ -12,7 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fb3b5037eb3a80a459c23f054a097a1d, type: 3}
   m_Name: Render Pipeline
   m_EditorClassIdentifier: 
-  shadowDistance: 16384
+  shadowDistance: 8192
   shadowResolution: 4096
   shadowBias: 1
   shadowSlopeBias: 1
+  tileSize: 8
+  depthSlices: 64

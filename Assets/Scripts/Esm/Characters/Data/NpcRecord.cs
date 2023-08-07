@@ -156,6 +156,7 @@ public class NpcRecord : AIRecord
 		AddServices(gameObject);
 
 		var rigidbody = gameObject.AddComponent<Rigidbody>();
+		rigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
 		//rigidbody.isKinematic = true;
 		rigidbody.constraints = RigidbodyConstraints.FreezeRotation;
 

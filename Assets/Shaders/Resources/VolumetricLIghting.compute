@@ -1,0 +1,130 @@
+#include "../Common.hlsl"
+
+#pragma kernel Compute
+#pragma kernel FilterX KERNEL=FilterX HORIZONTAL
+#pragma kernel FilterY KERNEL=FilterY VERTICAL
+#pragma kernel Accumulate
+
+RWTexture3D<float4> _Result;
+Texture3D<float4> _Input;
+uint _VolumeTileSize;
+float _BlurSigma;
+
+[numthreads(8, 8, 8)]
+void Compute(uint3 id : SV_DispatchThreadID)
+{
+	float jitter = _BlueNoise1D[id.xy % 64];
+	//jitter = InterleavedGradientNoise(id.xy, 0);
+	
+	float3 positionCS;
+	positionCS.xy = (id.xy + 0.5) / float2(_VolumeWidth, _VolumeHeight) * 2.0 - 1.0;
+	positionCS.z = GetDeviceDepth((id.z + jitter) / _VolumeSlices);
+	
+	float3 positionWS = MultiplyPointProj(_InvViewProjectionMatrix, positionCS);
+	float3 lighting = _AmbientLightColor;
+	
+	float viewDistance = distance(positionWS, _WorldSpaceCameraPos);
+	float shadow = GetDirectionalShadow(positionWS);
+	lighting += _SunColor * shadow;
+	
+	// Point lights
+	for (uint j = 0; j < _PointLightCount; j++)
+	{
+		PointLight pointLight = _PointLights[j];
+		
+		float3 unnormalizedLightVector = (pointLight.position - positionWS) / 69.99125109;
+		float sqrDist = dot(unnormalizedLightVector, unnormalizedLightVector);
+		float rcpDist = rcp(sqrDist);
+		float3 L = unnormalizedLightVector * rcpDist;
+		float attenuation = rcpDist;
+		attenuation = min(rcp(Sq(0.01)), attenuation);
+		attenuation *= Sq(saturate(1.0 - Sq(sqrDist / Sq(pointLight.range / 69.99125109))));
+		lighting += pointLight.color * saturate(attenuation);
+	}
+	
+	float extinction = viewDistance > _FogStartDistance && viewDistance < _FogEndDistance ? rcp(_FogEndDistance - viewDistance) : 0.0;;
+	
+	float3 albedo = _FogColor / (_SunColor + _AmbientLightColor);
+	float3 scatter = albedo * extinction;
+	
+	float4 luminanceExtinction = float4(scatter * lighting, extinction);
+	
+	// Reproject previous frame. Needs to use unjittered world position
+	float3 unjitteredPositionCS;
+	unjitteredPositionCS.xy = (id.xy + 0.5) / float2(_VolumeWidth, _VolumeHeight) * 2.0 - 1.0;
+	unjitteredPositionCS.z = GetDeviceDepth((id.z + 0.5) / _VolumeSlices);
+	float3 unjitteredPositionWS = MultiplyPointProj(_InvViewProjectionMatrix, unjitteredPositionCS);
+	
+	float4 prevPositionCS = MultiplyPointProj(_PreviousViewProjectionMatrix, unjitteredPositionWS);
+	prevPositionCS.xy = 0.5 * prevPositionCS.xy + 0.5;
+	
+	float normalizedDepth = GetVolumetricUv(prevPositionCS.w);
+	float3 volumeUv = float3(prevPositionCS.xy, normalizedDepth);
+
+	if (all(saturate(volumeUv) == volumeUv))
+	{
+		float4 previousLuminanceExtinction = _Input.SampleLevel(_LinearClampSampler, volumeUv, 0.0);
+		luminanceExtinction = lerp(previousLuminanceExtinction, luminanceExtinction, 0.05);
+	}
+	
+	_Result[id] = luminanceExtinction;
+}
+
+[numthreads(8, 8, 8)]
+void KERNEL(uint3 id : SV_DispatchThreadID)
+{
+	float4 result = 0.0;
+	float weightSum = 0.0;
+	
+	int radius = 2;
+	for (int i = -radius; i <= radius; i++)
+	{
+		#ifdef HORIZONTAL
+			int3 coord = id + int3(i, 0, 0);
+		#else
+			int3 coord = id + int3(0, i, 0);
+		#endif
+		
+		//coord = clamp(coord, 0, int3(_VolumeWidth, _VolumeHeight, _VolumeSlices) - 1);
+		
+		if (any(coord < 0 || coord >= int3(_VolumeWidth, _VolumeHeight, _VolumeSlices)))
+			continue;
+		
+		float4 luminanceExtinction = _Input[coord];
+		float weight = exp(-Sq(i / _BlurSigma));
+		result += luminanceExtinction * weight;
+		weightSum += weight;
+	}
+	
+	if(weightSum > 0.0)
+		result /= weightSum;
+	
+	_Result[id] = result;
+	//_Result[id] = _Input[id];
+}
+
+[numthreads(8, 8, 1)]
+void Accumulate(uint2 id : SV_DispatchThreadID)
+{
+	float3 positionCS;
+	positionCS.xy = (id + 0.5) / float2(_VolumeWidth, _VolumeHeight) * 2.0 - 1.0;
+	positionCS.z = GetDeviceDepth(0.0);
+	float3 positionWS = MultiplyPointProj(_InvViewProjectionMatrix, positionCS);
+	
+	float4 result = float2(0.0, 1.0).xxxy;
+	for (uint i = 0; i < uint(_VolumeSlices); i++)
+	{
+		positionCS.z = GetDeviceDepth((i + 1.0) / _VolumeSlices);
+		float3 nextPositionWS = MultiplyPointProj(_InvViewProjectionMatrix, positionCS);
+		float ds = distance(nextPositionWS, positionWS);
+		positionWS = nextPositionWS;
+		
+		float4 luminanceExtinction = _Input[uint3(id.xy, i)];
+		float transmittance = exp(-luminanceExtinction.a * ds);
+		float3 integScatt = luminanceExtinction.rgb * (1.0 - transmittance) / max(luminanceExtinction.a, 1e-7);
+		
+		result.rgb += result.a * integScatt;
+		result.a *= transmittance;
+		_Result[uint3(id, i)] = result;
+	}
+}

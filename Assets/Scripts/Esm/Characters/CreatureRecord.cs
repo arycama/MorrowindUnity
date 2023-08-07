@@ -86,6 +86,7 @@ public class CreatureRecord : AIRecord
 		var gameObject = base.CreateGameObject(referenceData, parent);
 
 		var rigidbody = gameObject.AddComponent<Rigidbody>();
+		rigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
 		//rigidbody.isKinematic = true;
 		rigidbody.constraints = RigidbodyConstraints.FreezeRotation;
 
