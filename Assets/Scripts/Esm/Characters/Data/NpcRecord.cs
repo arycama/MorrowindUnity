@@ -4,35 +4,18 @@ using UnityEngine;
 
 public class NpcRecord : AIRecord
 {
-	[SerializeField]
-	private string cellEscortFollow;
+	[SerializeField] private string cellEscortFollow;
+	[SerializeField, EnumFlags]	private NpcFlags npcFlags;
+	[SerializeField] private List<string> destinations = new List<string>();
+	[SerializeField] private BodyPartRecord hair;
+	[SerializeField] private BodyPartRecord head;
+	[SerializeField] private ClassRecord classId;
+	[SerializeField] private Faction faction;
+	[SerializeField] private NpcRecordData npcData;
+	[SerializeField] private Race race;
+	[SerializeField] private List<DoorExitData> destinationData = new List<DoorExitData>();
 
-	[SerializeField, EnumFlags]
-	private NpcFlags npcFlags;
-
-	[SerializeField]
-	private List<string> destinations = new List<string>();
-
-	[SerializeField]
-	private BodyPartRecord hair;
-
-	[SerializeField]
-	private BodyPartRecord head;
-
-	[SerializeField]
-	private ClassRecord classId;
-
-	[SerializeField]
-	private Faction faction;
-
-	[SerializeField]
-	private NpcRecordData npcData;
-
-	[SerializeField]
-	private Race race;
-
-	[SerializeField]
-	private List<DoorExitData> destinationData = new List<DoorExitData>();
+	private Rigidbody rb;
 
 	public bool IsFemale => npcFlags.HasFlag(NpcFlags.Female);
 
@@ -154,11 +137,6 @@ public class NpcRecord : AIRecord
 		}
 
 		AddServices(gameObject);
-
-		var rigidbody = gameObject.AddComponent<Rigidbody>();
-		rigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
-		//rigidbody.isKinematic = true;
-		rigidbody.constraints = RigidbodyConstraints.FreezeRotation;
 
 		CharacterAudio.Create(gameObject);
 

@@ -32,10 +32,7 @@ public class CharacterAnimation : MonoBehaviour
 	private void Awake()
 	{
 		animation = GetComponent<Animation>();
-	}
 
-	private void Start()
-	{
         currentAnimState = AnimationManager.Instance.IdleState;
         currentAnimState.OnStateEnter(this);
 

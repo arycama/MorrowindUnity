@@ -84,19 +84,13 @@ public class CreatureRecord : AIRecord
 	public override GameObject CreateGameObject(ReferenceData referenceData, Transform parent = null)
 	{
 		var gameObject = base.CreateGameObject(referenceData, parent);
-
-		var rigidbody = gameObject.AddComponent<Rigidbody>();
-		rigidbody.collisionDetectionMode = CollisionDetectionMode.Continuous;
-		//rigidbody.isKinematic = true;
-		rigidbody.constraints = RigidbodyConstraints.FreezeRotation;
-
 		if (flags.HasFlag(CreatureFlags.Flies))
 		{
-			rigidbody.useGravity = false;
+			var rigidbody = gameObject.GetComponent<Rigidbody>();
+            rigidbody.useGravity = false;
 		}
 
 		CharacterAudio.Create(gameObject, soundGeneratorName);
-
 		return gameObject;
 	}
 
