@@ -24,7 +24,7 @@ public class MorrowindRenderPipeline : RenderPipeline
         command = new CommandBuffer() { name = "Test" };
         envCommand = new() { name = "Environment" };
 
-        lightingSetup = new(renderPipelineAsset);
+        lightingSetup = new(renderPipelineAsset.ShadowSettings);
         environmentSettings = new();
         volumetricLighting = new();
         opaqueObjectRenderer = new(RenderQueueRange.opaque, SortingCriteria.CommonOpaque);
@@ -33,6 +33,7 @@ public class MorrowindRenderPipeline : RenderPipeline
 
     protected override void Dispose(bool disposing)
     {
+        lightingSetup.Release();
         command.Release();
         envCommand.Release();
         volumetricLighting.Dispose();
@@ -60,7 +61,7 @@ public class MorrowindRenderPipeline : RenderPipeline
         if (!camera.TryGetCullingParameters(out var cullingParameters))
             return;
 
-        cullingParameters.shadowDistance = renderPipelineAsset.ShadowDistance;
+        cullingParameters.shadowDistance = renderPipelineAsset.ShadowSettings.ShadowDistance;
         cullingParameters.cullingOptions = CullingOptions.NeedsLighting | CullingOptions.DisablePerObjectCulling | CullingOptions.ShadowCasters;
         var cullingResults = context.Cull(ref cullingParameters);
 

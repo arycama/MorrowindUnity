@@ -150,20 +150,6 @@ public class CharacterMovement : MonoBehaviour
         movement = transform.TransformDirection(direction) * movementSpeed;
     }
 
-    private Vector3 delta, adjustedDelta, finalPos;
-
-    private void OnDrawGizmosSelected()
-    {
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(finalPos, 5f);
-
-        Gizmos.color = Color.white;
-        Gizmos.DrawLine(finalPos, finalPos + delta * 16);
-
-        Gizmos.color = Color.green;
-        Gizmos.DrawLine(finalPos, finalPos + adjustedDelta * 16);
-    }
-
     private void FixedUpdate()
     {
         var box = GetComponentInChildren<BoxCollider>();
@@ -180,7 +166,6 @@ public class CharacterMovement : MonoBehaviour
         var boxHits = Physics.OverlapBox(center, box.size * 0.5f + Vector3.one * groundedThreshold, rotation, layerMask);
 
         isGrounded = false;
-        var adjustedMovement = finalMovement;
         foreach (var boxHit in boxHits)
         {
             if (boxHit == box)
@@ -188,7 +173,7 @@ public class CharacterMovement : MonoBehaviour
 
             if (Physics.ComputePenetration(box, center, rotation, boxHit, boxHit.transform.position, boxHit.transform.rotation, out var normal, out var depenetrationDistance))
             {
-                adjustedMovement += normal * depenetrationDistance;
+                finalMovement += normal * depenetrationDistance;
                 var direction = Vector3.Dot(Vector3.up, normal);
                 if (direction > 0)
                     isGrounded = true;
@@ -197,13 +182,8 @@ public class CharacterMovement : MonoBehaviour
                 isGrounded = true;
         }
 
+        transform.position += finalMovement;
         animation.SetParameter("IsGrounded", isGrounded);
-
-        finalPos = center;
-        delta = finalMovement;
-        adjustedDelta = adjustedMovement;
-
-        transform.position += adjustedMovement;// Vector3.Normalize(adjustedMovement - rb.position) * finalMovement.magnitude;
     }
 
     private void OnCollisionEnter(Collision collision)

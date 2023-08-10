@@ -21,6 +21,7 @@
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
+			#pragma target 5.0
 
 			#include "Water.hlsl"
 			ENDHLSL

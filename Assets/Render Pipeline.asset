@@ -12,9 +12,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fb3b5037eb3a80a459c23f054a097a1d, type: 3}
   m_Name: Render Pipeline
   m_EditorClassIdentifier: 
-  shadowDistance: 8192
-  shadowResolution: 4096
-  shadowBias: 1
-  shadowSlopeBias: 1
+  shadowSettings:
+    shadowCascades: 4
+    shadowCascadeSplits: {x: 0.015625, y: 0.0625, z: 0.25}
+    shadowDistance: 8192
+    directionalShadowResolution: 512
+    shadowBias: 10
+    shadowSlopeBias: 1
+    pointShadowResolution: 256
   tileSize: 8
   depthSlices: 64
+  blurSigma: 1
+  nonLinearDepth: 0

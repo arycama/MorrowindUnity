@@ -31,10 +31,12 @@
 			ZWrite [_ZWrite]
 
 			HLSLPROGRAM
-			//#pragma multi_compile_instancing
+			#pragma multi_compile_instancing
+			//#pragma enable_d3d11_debug_symbols
 
 			#pragma vertex Vertex
 			#pragma fragment Fragment
+			#pragma target 5.0
 
 			#include "Surface.hlsl"
 			ENDHLSL
@@ -48,10 +50,11 @@
             Tags { "LightMode" = "ShadowCaster" }
 
             HLSLPROGRAM
-			//#pragma multi_compile_instancing
+			#pragma multi_compile_instancing
 
             #pragma vertex Vertex
             #pragma fragment Fragment
+			#pragma target 5.0
 
 			#pragma multi_compile _ _ALPHABLEND_ON
 
