@@ -9,6 +9,8 @@ public class LightingSetup
 {
     private static readonly int directionalShadowsId = Shader.PropertyToID("_DirectionalShadows");
     private static readonly int pointShadowsId = Shader.PropertyToID("_PointShadows");
+    private static readonly IndexedString cascadeStrings = new IndexedString("Cascade ");
+    private static readonly IndexedString faceStrings = new IndexedString("Face ");
 
     private readonly ShadowSettings settings; 
 
@@ -146,6 +148,7 @@ public class LightingSetup
         if (directionalShadowRequests.Count > 0)
         {
             // Process directional shadows
+            commandBuffer.BeginSample("Directional Shadows");
             commandBuffer.SetGlobalFloat("_ZClip", 0);
 
             // Setup shadow map for directional shadows
@@ -156,24 +159,30 @@ public class LightingSetup
             };
 
             commandBuffer.GetTemporaryRT(directionalShadowsId, directionalShadowsDescriptor);
+            commandBuffer.SetRenderTarget(directionalShadowsId, 0, CubemapFace.Unknown, -1);
+            commandBuffer.ClearRenderTarget(true, false, Color.clear);
 
             for (var i = 0; i < directionalShadowRequests.Count; i++)
             {
                 var shadowRequest = directionalShadowRequests[i];
+                commandBuffer.BeginSample(cascadeStrings.GetString(i % 4));
                 commandBuffer.SetRenderTarget(directionalShadowsId, 0, CubemapFace.Unknown, i);
-                commandBuffer.ClearRenderTarget(true, false, Color.clear);
 
                 commandBuffer.SetViewProjectionMatrices(shadowRequest.ViewMatrix, shadowRequest.ProjectionMatrix);
+                commandBuffer.BeginSample("Render Shadows");
                 context.ExecuteCommandBuffer(commandBuffer);
                 commandBuffer.Clear();
 
                 var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, shadowRequest.VisibleLightIndex) { splitData = shadowRequest.ShadowSplitData };
                 context.DrawShadows(ref shadowDrawingSettings);
+
+                commandBuffer.EndSample("Render Shadows");
+                commandBuffer.EndSample(cascadeStrings.GetString(i % 4));
             }
 
             commandBuffer.SetGlobalFloat("_ZClip", 1);
+            commandBuffer.EndSample("Directional Shadows");
         }
-
 
         // Process point shadows 
         // Setup shadow map for point shadows
@@ -185,24 +194,36 @@ public class LightingSetup
                 volumeDepth = pointShadowRequests.Count * 6,
             };
 
+            commandBuffer.BeginSample("Point Shadows");
             commandBuffer.GetTemporaryRT(pointShadowsId, pointShadowsDescriptor);
+            commandBuffer.SetRenderTarget(pointShadowsId, 0, CubemapFace.Unknown, -1);
+            commandBuffer.ClearRenderTarget(true, false, Color.clear);
 
             for (var i = 0; i < pointShadowRequests.Count; i++)
             {
+                commandBuffer.BeginSample($"Light {i / 6}");
+                commandBuffer.BeginSample($"Face {i % 6}");
+
                 var shadowRequest = pointShadowRequests[i];
                 if (!shadowRequest.IsValid)
                     continue;
 
                 commandBuffer.SetRenderTarget(pointShadowsId, 0, CubemapFace.Unknown, i);
-                commandBuffer.ClearRenderTarget(true, false, Color.clear);
 
                 commandBuffer.SetViewProjectionMatrices(shadowRequest.ViewMatrix, shadowRequest.ProjectionMatrix);
+                commandBuffer.BeginSample("Render Shadows");
                 context.ExecuteCommandBuffer(commandBuffer);
                 commandBuffer.Clear();
 
                 var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, shadowRequest.VisibleLightIndex) { splitData = shadowRequest.ShadowSplitData };
                 context.DrawShadows(ref shadowDrawingSettings);
+
+                commandBuffer.EndSample("Render Shadows");
+                commandBuffer.EndSample($"Light {i % 6}");
+                commandBuffer.EndSample($"Light {i / 6}");
             }
+
+            commandBuffer.EndSample("Point Shadows");
         }
 
         commandBuffer.SetGlobalDepthBias(0f, 0f);

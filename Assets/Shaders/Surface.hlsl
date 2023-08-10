@@ -44,8 +44,24 @@ float4 Fragment(FragmentInput input) : SV_Target
 	float3 normal = normalize(input.normal);
 	float3 lighting = GetLighting(normal, input.worldPosition);
 	
+	//switch (_LightDebug)
+	//{
+	//	case 0:
+	//		return float4(0, 0, 0, 1);
+	//	case 1:
+	//		return float4(0, 1, 0, 1);
+	//	case 2:
+	//		return float4(1, 1, 0, 1);
+	//	case 3:
+	//		return float4(1, 0.5, 0, 1);
+	//	case 4:
+	//		return float4(1, 0, 0, 1);
+	//	default:
+	//		return float4(1, 1, 1, 1);
+	//}
+	
 	// Emissive
-	lighting += input.color;
+		lighting += input.color;
 	color.rgb *= lighting;
 	color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
 	

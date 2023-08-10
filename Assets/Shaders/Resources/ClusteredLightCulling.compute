@@ -1,0 +1,86 @@
+#pragma kernel ClusteredLighting
+
+#include "../Common.hlsl"
+
+const static float _NearClipPlane = _ProjectionParams.y, _FarClipPlane = _ProjectionParams.z;
+
+RWStructuredBuffer<uint> _LightCounter, _LightClusterListWrite;
+RWTexture3D<uint2> _LightClusterIndicesWrite;
+
+groupshared uint _LightIndices[64][64];
+float _RcpClusterDepth;
+
+bool IntersectSphereAABB(float3 position, float radius, float3 aabbMin, float3 aabbMax)
+{
+	float x = max(aabbMin.x, min(position.x, aabbMax.x));
+	float y = max(aabbMin.y, min(position.y, aabbMax.y));
+	float z = max(aabbMin.z, min(position.z, aabbMax.z));
+	float distance2 = ((x - position.x) * (x - position.x) + (y - position.y) * (y - position.y) + (z - position.z) * (z - position.z));
+	return distance2 < Sq(radius);
+}
+
+[numthreads(64, 1, 1)]
+void ClusteredLighting(uint3 id : SV_DispatchThreadId, uint groupIndex : SV_GroupIndex)
+{
+	float3 minBounds = 0.0, maxBounds = 0.0;
+    
+	[unroll]
+	for (uint z = 0; z < 2; z++)
+	{
+		[unroll]
+		for (uint y = 0; y < 2; y++)
+		{
+			[unroll]
+			for (uint x = 0; x < 2; x++)
+			{
+				float eyeDepth = _NearClipPlane * pow(_FarClipPlane / _NearClipPlane, (id.z + z) * _RcpClusterDepth);
+                
+				float3 positionSS;
+				positionSS.x = (id.x + x) * _TileSize;
+				positionSS.y = (id.y + y) * _TileSize;
+				positionSS.z = (1.0 - eyeDepth * _ZBufferParams.w) / (eyeDepth * _ZBufferParams.z);
+                
+				float3 positionWS = PixelToWorld(positionSS);
+                
+				if (x == 0 && y == 0 && z == 0)
+				{
+					minBounds = maxBounds = positionWS;
+				}
+				else
+				{
+					minBounds = min(minBounds, positionWS);
+					maxBounds = max(maxBounds, positionWS);
+				}
+			}
+		}
+	}
+    
+    // Multiple iterations for > threadCount lights
+	uint lightCount = 0;
+	for (uint i = 0; i < _PointLightCount; i++)
+	{
+		PointLight lightData = _PointLights[i];
+
+        // For spotlights, modify their culling sphere
+		float radius = lightData.range;
+		float3 centerWS = lightData.position;
+
+		if (!IntersectSphereAABB(centerWS, radius, minBounds, maxBounds))
+			continue;
+
+		_LightIndices[groupIndex][lightCount++] = i;
+	}
+
+	uint lightOffset = 0;
+	if (lightCount > 0)
+	{
+		InterlockedAdd(_LightCounter[0], lightCount, lightOffset);
+
+		for (i = 0; i < lightCount; i++)
+		{
+			_LightClusterListWrite[lightOffset + i] = _LightIndices[groupIndex][i];
+		}
+	}
+	
+	_LightClusterIndicesWrite[id] = uint2(lightOffset, lightCount);
+}

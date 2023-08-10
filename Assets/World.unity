@@ -877,7 +877,7 @@ MonoBehaviour:
   currentWeatherSettings: {fileID: 0}
   seconds: 0.19351196
   minute: 26
-  hour: 15
+  hour: 9
   day: 0
   month: 7
   skyboxMaterial: {fileID: 1600696161}

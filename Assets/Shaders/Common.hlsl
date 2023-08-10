@@ -21,6 +21,7 @@ struct PointLight
 	float padding;
 };
 
+Buffer<uint> _LightClusterList;
 SamplerComparisonState _LinearClampCompareSampler;
 SamplerState _LinearClampSampler, _LinearRepeatSampler, _PointClampSampler;
 StructuredBuffer<DirectionalLight> _DirectionalLights;
@@ -29,7 +30,12 @@ StructuredBuffer<PointLight> _PointLights;
 Texture2D<float> _BlueNoise1D;
 Texture2DArray<float> _DirectionalShadows;
 Texture3D<float4> _VolumetricLighting;
+Texture3D<uint2> _LightClusterIndices;
 TextureCubeArray<float> _PointShadows;
+
+uint _TileSize;
+float _ClusterScale;
+float _ClusterBias;
 
 float4 _Time, _ProjectionParams, _ZBufferParams, _ScreenParams;
 float3 _AmbientLightColor, _WorldSpaceCameraPos, _FogColor;
@@ -226,6 +232,8 @@ float GetDeviceDepth(float normalizedDepth)
 	}
 }
 
+uint _LightDebug;
+
 float3 GetLighting(float3 normal, float3 worldPosition, bool isVolumetric = false)
 {
 	// Directional lights
@@ -256,10 +264,26 @@ float3 GetLighting(float3 normal, float3 worldPosition, bool isVolumetric = fals
 			lighting += (isVolumetric ? 1.0 : saturate(dot(normal, light.direction))) * light.color * shadow;
 	}
 	
+	float4 positionCS = PerspectiveDivide(WorldToClip(worldPosition));
+	positionCS.xy = (positionCS.xy * 0.5 + 0.5) * _ScreenParams.xy;
+	
+	uint3 clusterIndex;
+	clusterIndex.xy = floor(positionCS.xy) / 16;//_TileSize;
+	clusterIndex.z = log2(positionCS.w) * _ClusterScale + _ClusterBias;
+	
+	uint2 lightOffsetAndCount = _LightClusterIndices[clusterIndex];
+	uint startOffset = lightOffsetAndCount.x;
+	uint lightCount = lightOffsetAndCount.y;
+	
+	_LightDebug = lightCount;
+	
 	// Point lights
-	for (i = 0; i < _PointLightCount; i++)
+	for (i = 0; i < lightCount; i++)
+	//for (i = 0; i < _PointLightCount; i++)
 	{
-		PointLight light = _PointLights[i];
+		int index = _LightClusterList[startOffset + i];
+		//PointLight light = _PointLights[i];
+		PointLight light = _PointLights[index];
 		
 		float3 lightVector = light.position - worldPosition;
 		float sqrLightDist = dot(lightVector, lightVector);
@@ -307,7 +331,6 @@ float4 SampleVolumetricLighting(float3 worldPosition)
 {
 	float4 positionCS = PerspectiveDivide(WorldToClip(worldPosition));
 	positionCS.xy = 0.5 * positionCS.xy + 0.5;
-	positionCS.y = 1 - positionCS.y;
 	float normalizedDepth = GetVolumetricUv(positionCS.w);
 	float3 volumeUv = float3(positionCS.xy, normalizedDepth);
 	

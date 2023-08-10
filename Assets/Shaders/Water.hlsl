@@ -13,11 +13,14 @@ struct FragmentInput
 	float2 uv : TEXCOORD;
 };
 
+Texture2D<float3> _SceneTexture;
+Texture2D<float> _DepthTexture;
 Texture2D _MainTex, _EmissionMap;
 
 cbuffer UnityPerMaterial
 {
 	float4 _MainTex_ST;
+	float3 _Albedo, _Extinction;
 	float _Alpha, _Fade, _Tiling;
 };
 
@@ -38,14 +41,32 @@ FragmentInput Vertex(VertexInput input)
 	return output;
 }
 
-float4 Fragment(FragmentInput input) : SV_Target
+float3 Fragment(FragmentInput input) : SV_Target
 {
-	float4 color = _MainTex.Sample(_LinearRepeatSampler, input.uv);
-	color.a = _Alpha;
+	float depth = _DepthTexture[input.position.xy];
+	float3 backgroundPositionWS = MultiplyPointProj(_InvViewProjectionMatrix, float3(input.position.xy / _ScreenParams.xy * 2.0 - 1.0, depth));
 	
+	
+	float difference = max(0.0, distance(backgroundPositionWS, input.worldPosition));
+	
+	float3 transmittance = exp(-difference * _Extinction);
+	
+	float3 color = _MainTex.Sample(_LinearRepeatSampler, input.uv);
+	color = lerp(_Albedo, color, _Alpha); // 
 	float3 lighting = GetLighting(float3(0, 1, 0), input.worldPosition) + _AmbientLightColor;
 	color.rgb *= lighting;
-	color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
 	
+	float3 scene = _SceneTexture[input.position.xy];
+	
+	// Need to remove fog from background
+	if (_FogEnabled)
+	{
+		float4 backgroundFog = SampleVolumetricLighting(backgroundPositionWS);
+		if(backgroundFog.a)
+			scene = max(0.0, scene - backgroundFog.rgb) * rcp(backgroundFog.a);
+	}
+	
+	color.rgb = lerp(color.rgb, scene, transmittance);
+	color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
 	return color;
 }

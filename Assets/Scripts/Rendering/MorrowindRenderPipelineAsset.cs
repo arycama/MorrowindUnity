@@ -6,6 +6,7 @@ using UnityEngine.Rendering;
 public class MorrowindRenderPipelineAsset : RenderPipelineAsset
 {
     [SerializeField] private ShadowSettings shadowSettings;
+    [SerializeField] private ClusteredLightingSettings clusteredLightingSettings;
 
     [Header("Volumetric Lighting")]
     [SerializeField] private int tileSize = 8;
@@ -19,6 +20,7 @@ public class MorrowindRenderPipelineAsset : RenderPipelineAsset
     public bool NonLinearDepth => nonLinearDepth;
 
     public ShadowSettings ShadowSettings => shadowSettings;
+    public ClusteredLightingSettings ClusteredLightingSettings => clusteredLightingSettings;
 
     protected override RenderPipeline CreatePipeline()
     {
@@ -44,4 +46,16 @@ public class ShadowSettings
     public float ShadowBias => shadowBias;
     public float ShadowSlopeBias => shadowSlopeBias;
     public int PointShadowResolution => pointShadowResolution;
+}
+
+[Serializable]
+public class ClusteredLightingSettings
+{
+    [SerializeField] private int tileSize = 16;
+    [SerializeField] private int clusterDepth = 32;
+    [SerializeField] private int maxLightsPerTile = 32;
+
+    public int TileSize => tileSize;
+    public int ClusterDepth => clusterDepth;
+    public int MaxLightsPerTile => maxLightsPerTile;
 }

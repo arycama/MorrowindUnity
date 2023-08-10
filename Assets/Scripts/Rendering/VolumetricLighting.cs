@@ -6,7 +6,7 @@ public class VolumetricLighting
     private static readonly int volumetricLightingId = Shader.PropertyToID("_VolumetricLighting");
     private CameraTextureCache volumetricLightingTextureCache = new();
 
-    public void Dispose()
+    public void Release()
     {
         volumetricLightingTextureCache.Dispose();
     }

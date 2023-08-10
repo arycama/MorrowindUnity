@@ -2,6 +2,8 @@
 {
 	Properties 
 	{
+		_Albedo("Albedo", Color) = (1, 1, 1, 1)
+		[HDR] _Extinction("Extinction", Color) = (1, 1, 1, 1)
 		_Alpha ("Alpha", Range(0, 1)) = 0.75
 		_MainTex ("Fallback texture", 2D) = "black" {}
 		_Fade("Blend parameter", Float) = 0.15
@@ -15,7 +17,7 @@
 
 		Pass
 		{
-			Blend SrcAlpha OneMinusSrcAlpha
+			//Blend SrcAlpha OneMinusSrcAlpha
 			ZWrite Off
 
 			HLSLPROGRAM
