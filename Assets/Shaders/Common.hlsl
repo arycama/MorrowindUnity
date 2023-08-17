@@ -261,6 +261,14 @@ float GetShadow(float3 worldPosition, uint lightIndex)
 	float2 jitter = _BlueNoise2D[uint2(positionCS.xy) % 128];
 	float3 lightPosition = MultiplyPoint3x4(light.worldToLight, worldPosition);
 	
+	//float3 shadowPosition;
+	//uint cascade = GetShadowCascade(lightIndex, lightPosition, shadowPosition);
+	//if(cascade == ~0u)
+	//	return 1.0;
+	
+	//return _DirectionalShadows.SampleCmpLevelZero(_PointClampCompareSampler, float3(shadowPosition.xy, light.shadowIndex + cascade), shadowPosition.z);
+	
+	
 	// PCS filtering
 	float occluderDepth = 0.0, occluderWeightSum = 0.0;
 	float goldenAngle = Pi * (3.0 - sqrt(5.0));

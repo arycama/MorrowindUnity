@@ -5,7 +5,7 @@ using UnityEngine;
 public class ShadowSettings
 {
     [SerializeField] private bool closeFit = true;
-    [SerializeField] private bool texelSnap = true;
+    [SerializeField] private bool overlapFix = true;
     [SerializeField, Range(1, 4)] private int shadowCascades = 1;
     [SerializeField] private Vector3 shadowCascadeSplits = new Vector3(0.25f, 0.5f, 0.75f);
     [SerializeField] private float shadowDistance = 4096;
@@ -20,7 +20,7 @@ public class ShadowSettings
     [SerializeField, Min(0f)] private float pcssSoftness = 1f;
 
     public bool CloseFit => closeFit;
-    public bool TexelSnap => texelSnap;
+    public bool OverlapFix => overlapFix;
     public int ShadowCascades => shadowCascades;
     public Vector3 ShadowCascadeSplits => shadowCascadeSplits;
     public float ShadowDistance => shadowDistance;

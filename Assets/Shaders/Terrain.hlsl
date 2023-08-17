@@ -3,19 +3,24 @@
 struct VertexInput
 {
 	float3 position : POSITION;
-	float3 normal : NORMAL;
-    float3 color : COLOR;
-    float4 uv : TEXCOORD;
-	uint instanceID : SV_InstanceID;
+	
+	#ifndef UNITY_PASS_SHADOWCASTER
+		float3 normal : NORMAL;
+		float3 color : COLOR;
+		float4 uv : TEXCOORD;
+	#endif
 };
 
 struct FragmentInput
 {
 	float4 position : SV_Position;
-	float3 worldPosition : POSITION1;
-	float3 normal : NORMAL;
-	float3 color : COLOR;
-	float4 uv : TEXCOORD;
+	
+	#ifndef UNITY_PASS_SHADOWCASTER
+		float3 worldPosition : POSITION1;
+		float3 normal : NORMAL;
+		float3 color : COLOR;
+		float4 uv : TEXCOORD;
+	#endif
 };
 
 Texture2DArray<float3> _MainTex;
@@ -24,12 +29,18 @@ float4 _Control_ST, _MainTex_ST, _Control_TexelSize;
 
 FragmentInput Vertex(VertexInput input)
 {
+	float3 worldPosition = ObjectToWorld(input.position, 0);
+	
     FragmentInput output;
-	output.worldPosition = ObjectToWorld(input.position, input.instanceID);
-	output.position = WorldToClip(output.worldPosition);
-	output.uv = float4(input.uv.xy, input.uv.zw * _MainTex_ST.xy + _MainTex_ST.zw);
-	output.color = input.color;
-	output.normal = input.normal;
+	output.position = WorldToClip(worldPosition);
+	
+	#ifndef UNITY_PASS_SHADOWCASTER
+		output.uv = float4(input.uv.xy, input.uv.zw * _MainTex_ST.xy + _MainTex_ST.zw);
+		output.worldPosition = worldPosition;
+		output.color = input.color;
+		output.normal = input.normal;
+	#endif
+	
 	return output;
 }
 
@@ -185,6 +196,9 @@ void hex2colTex(out float4 color, out float3 weights, Texture2D tex, SamplerStat
 	weights = ProduceHexWeights(W.xyz, vertex1, vertex2, vertex3);
 }
 
+#ifdef UNITY_PASS_SHADOWCASTER
+void Fragment() { }
+#else
 float3 Fragment(FragmentInput input) : SV_Target
 {
 	float z = EyeToDeviceDepth(input.position.w);
@@ -203,23 +217,10 @@ float3 Fragment(FragmentInput input) : SV_Target
 	float3 normal = normalize(input.normal);
 	float3 lighting = GetLighting(normal, input.worldPosition);
 	
-	//switch (_LightDebug)
-	//{
-	//	case 1:
-	//		return float4(0, 1, 0, 1);
-	//	case 2:
-	//		return float4(1, 1, 0, 1);
-	//	case 3:
-	//		return float4(1, 0.5, 0, 1);
-	//	case 4:
-	//		return float4(1, 0, 0, 1);
-	//	case 5:
-	//		return float4(1, 1, 1, 1);
-	//}
-	
 	lighting += _AmbientLightColor;
 	color.rgb *= lighting * input.color;
 	color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
 	
 	return color;
 }
+#endif

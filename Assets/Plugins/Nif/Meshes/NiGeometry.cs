@@ -60,7 +60,6 @@ namespace Nif
 			GameObject.AddComponent<MeshFilter>().sharedMesh = Mesh;
 			var meshRenderer = GameObject.AddComponent<MeshRenderer>();
 			meshRenderer.sharedMaterial = Material;
-			meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.TwoSided;
 		}
 	}
 }

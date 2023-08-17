@@ -32,11 +32,12 @@
 
 			HLSLPROGRAM
 			#pragma multi_compile_instancing
-			//#pragma enable_d3d11_debug_symbols
 
 			#pragma vertex Vertex
 			#pragma fragment Fragment
 			#pragma target 5.0
+
+			#pragma multi_compile _ _ALPHATEST_ON _ALPHABLEND_ON
 
 			#include "Surface.hlsl"
 			ENDHLSL
@@ -56,7 +57,7 @@
             #pragma fragment Fragment
 			#pragma target 5.0
 
-			#pragma multi_compile _ _ALPHABLEND_ON
+			#pragma multi_compile _ _ALPHATEST_ON _ALPHABLEND_ON
 
 			#include "Surface.hlsl"
 			ENDHLSL
