@@ -43,23 +43,7 @@ float4 Fragment(FragmentInput input) : SV_Target
 	float4 color = _MainTex.Sample(_LinearRepeatSampler, input.uv);
 	float3 normal = normalize(input.normal);
 	float3 lighting = GetLighting(normal, input.worldPosition);
-	
-	//switch (_LightDebug)
-	//{
-	//	case 0:
-	//		return float4(0, 0, 0, 1);
-	//	case 1:
-	//		return float4(0, 1, 0, 1);
-	//	case 2:
-	//		return float4(1, 1, 0, 1);
-	//	case 3:
-	//		return float4(1, 0.5, 0, 1);
-	//	case 4:
-	//		return float4(1, 0, 0, 1);
-	//	default:
-	//		return float4(1, 1, 1, 1);
-	//}
-	
+
 	// Emissive
 		lighting += input.color;
 	color.rgb *= lighting;
@@ -67,7 +51,7 @@ float4 Fragment(FragmentInput input) : SV_Target
 	
 	#if defined(UNITY_PASS_SHADOWCASTER) && defined(_ALPHABLEND_ON)
 		clip(color.a - InterleavedGradientNoise(input.position.xy, 0));
-		//clip(color.a - _BlueNoise1D[uint2(input.position.xy) % 64]);
+		//clip(color.a - _BlueNoise1D[uint2(input.position.xy) % 128]);
 	#endif
 	
 	return color;

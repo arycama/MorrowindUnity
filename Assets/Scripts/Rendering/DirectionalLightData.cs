@@ -1,22 +1,19 @@
 ﻿using UnityEngine;
 
-public struct DirectionalLightData
+public readonly struct DirectionalLightData
 {
-    private Vector3 color;
-    private int shadowIndex;
-    private Vector3 direction;
-    private int cascadeCount;
+    public Vector3 Color { get; }
+    public int ShadowIndex { get; }
+    public Vector3 Direction { get; }
+    public int CascadeCount { get; }
+    public Matrix3x4 WorldToLight { get; }
 
-    public DirectionalLightData(Vector3 color, int shadowIndex, Vector3 direction, int cascadeCount)
+    public DirectionalLightData(Vector3 color, int shadowIndex, Vector3 direction, int cascadeCount, Matrix3x4 worldToLight)
     {
-        this.color = color;
-        this.shadowIndex = shadowIndex;
-        this.direction = direction;
-        this.cascadeCount = cascadeCount;
+        Color = color;
+        ShadowIndex = shadowIndex;
+        Direction = direction;
+        CascadeCount = cascadeCount;
+        WorldToLight = worldToLight;
     }
-
-    public Vector3 Color => color;
-    public int ShadowIndex => shadowIndex;
-    public Vector3 Direction => direction;
-    public int CascadeCount => cascadeCount;
 }

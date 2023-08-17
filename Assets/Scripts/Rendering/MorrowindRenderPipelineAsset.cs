@@ -27,35 +27,3 @@ public class MorrowindRenderPipelineAsset : RenderPipelineAsset
         return new MorrowindRenderPipeline(this);
     }
 }
-
-[Serializable]
-public class ShadowSettings
-{
-    [SerializeField, Range(1, 4)] private int shadowCascades = 1;
-    [SerializeField] private Vector3 shadowCascadeSplits = new Vector3(0.25f, 0.5f, 0.75f);
-    [SerializeField] private float shadowDistance = 4096;
-    [SerializeField] private int directionalShadowResolution = 2048;
-    [SerializeField] private float shadowBias = 0.0f;
-    [SerializeField] private float shadowSlopeBias = 0.0f;
-    [SerializeField] private int pointShadowResolution = 256;
-
-    public int ShadowCascades => shadowCascades;
-    public Vector3 ShadowCascadeSplits => shadowCascadeSplits;
-    public float ShadowDistance => shadowDistance;
-    public int DirectionalShadowResolution => directionalShadowResolution;
-    public float ShadowBias => shadowBias;
-    public float ShadowSlopeBias => shadowSlopeBias;
-    public int PointShadowResolution => pointShadowResolution;
-}
-
-[Serializable]
-public class ClusteredLightingSettings
-{
-    [SerializeField] private int tileSize = 16;
-    [SerializeField] private int clusterDepth = 32;
-    [SerializeField] private int maxLightsPerTile = 32;
-
-    public int TileSize => tileSize;
-    public int ClusterDepth => clusterDepth;
-    public int MaxLightsPerTile => maxLightsPerTile;
-}

@@ -1,12 +1,12 @@
-﻿using System;
-using System.Security.AccessControl;
-using Unity.Collections.LowLevel.Unsafe;
+﻿using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.Rendering;
 
 public class LightingSetup
 {
+    private static readonly Plane[] frustumPlanes = new Plane[6];
+
     private static readonly int directionalShadowsId = Shader.PropertyToID("_DirectionalShadows");
     private static readonly int pointShadowsId = Shader.PropertyToID("_PointShadows");
     private static readonly IndexedString cascadeStrings = new IndexedString("Cascade ");
@@ -17,6 +17,8 @@ public class LightingSetup
     private ComputeBuffer directionalLightBuffer; // Can't be readonly as we resize if needed.
     private ComputeBuffer pointLightBuffer; // Can't be readonly as we resize if needed.
     private ComputeBuffer directionalMatrixBuffer;
+    private ComputeBuffer directionalTexelSizeBuffer;
+    private ComputeBuffer pointTexelSizeBuffer;
 
     private RenderTexture emptyArray, emptyCubemapArray;
 
@@ -26,6 +28,8 @@ public class LightingSetup
         directionalLightBuffer = new ComputeBuffer(1, UnsafeUtility.SizeOf<DirectionalLightData>());
         pointLightBuffer = new ComputeBuffer(1, UnsafeUtility.SizeOf<PointLightData>());
         directionalMatrixBuffer = new ComputeBuffer(1, UnsafeUtility.SizeOf<Matrix4x4>());
+        directionalTexelSizeBuffer = new ComputeBuffer(1, UnsafeUtility.SizeOf<Vector4>());
+        pointTexelSizeBuffer = new ComputeBuffer(1, UnsafeUtility.SizeOf<Vector4>());
 
         emptyArray = new RenderTexture(1, 1, 0, RenderTextureFormat.Shadowmap)
         {
@@ -49,26 +53,19 @@ public class LightingSetup
         directionalMatrixBuffer.Release();
         emptyArray.Release();
         emptyCubemapArray.Release();
+        directionalTexelSizeBuffer.Release();
+        pointTexelSizeBuffer.Release();
     }
 
-    Matrix4x4 ConvertToAtlasMatrix(Matrix4x4 m)
-    {
-        if (SystemInfo.usesReversedZBuffer)
-            m.SetRow(2, -m.GetRow(2));
-
-        m.SetRow(0, 0.5f * (m.GetRow(0) + m.GetRow(3)));
-        m.SetRow(1, 0.5f * (m.GetRow(1) + m.GetRow(3)));
-        m.SetRow(2, 0.5f * (m.GetRow(2) + m.GetRow(3)));
-        return m;
-    }
-
-    public void Render(CommandBuffer commandBuffer, CullingResults cullingResults, ScriptableRenderContext context)
+    public void Render(CommandBuffer commandBuffer, CullingResults cullingResults, ScriptableRenderContext context, Camera camera)
     {
         var directionalLightList = ListPool<DirectionalLightData>.Get();
         var directionalShadowRequests = ListPool<ShadowRequest>.Get();
         var directionalShadowMatrices = ListPool<Matrix4x4>.Get();
+        var directionalShadowTexelSizes = ListPool<Vector4>.Get();
         var pointLightList = ListPool<PointLightData>.Get();
         var pointShadowRequests = ListPool<ShadowRequest>.Get();
+        var pointShadowTexelSizes = ListPool<Vector4>.Get();
 
         // Setup lights/shadows
         for (var i = 0; i < cullingResults.visibleLights.Length; i++)
@@ -80,27 +77,123 @@ public class LightingSetup
 
             if (visibleLight.lightType == LightType.Directional)
             {
+                var lightRotation = visibleLight.localToWorldMatrix.rotation;
+                var lightToWorld = Matrix4x4.Rotate(lightRotation);
+                var worldToLight = lightToWorld.inverse;
+
+                {
+                    Vector3 minValue = Vector3.positiveInfinity, maxValue = Vector3.negativeInfinity;
+                    for (var z = 0; z < 2; z++)
+                    {
+                        for (var y = 0; y < 2; y++)
+                        {
+                            for (var x = 0; x < 2; x++)
+                            {
+                                var worldPoint = camera.ViewportToWorldPoint(new(x, y, z == 0 ? camera.nearClipPlane : camera.farClipPlane));
+                                var localPoint = worldToLight.MultiplyPoint3x4(worldPoint);
+                                minValue = Vector3.Min(minValue, localPoint);
+                                maxValue = Vector3.Max(maxValue, localPoint);
+                            }
+                        }
+                    }
+
+                    var viewCenter = 0.5f * (maxValue + minValue);
+                    var viewExtents = 0.5f * (maxValue - minValue);
+                    var worldCenter = lightToWorld * viewCenter;
+                   // lightToWorld = Matrix4x4.TRS(worldCenter, lightRotation, Vector3.one);
+                   // worldToLight = lightToWorld.inverse;
+                }
+
                 if (light.shadows != LightShadows.None && cullingResults.GetShadowCasterBounds(i, out var bounds))
                 {
+                    Matrix4x4 viewMatrix, projectionMatrix;
+                    ShadowSplitData shadowSplitData;
                     for (var j = 0; j < settings.ShadowCascades; j++)
                     {
-                        if (!cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(i, j, settings.ShadowCascades, settings.ShadowCascadeSplits, settings.DirectionalShadowResolution, light.shadowNearPlane, out var viewMatrix, out var projectionMatrix, out var shadowSplitData))
-                            continue;
+                        if (settings.CloseFit)
+                        {
+                            var cascadeStart = j == 0 ? camera.nearClipPlane : (settings.ShadowDistance - camera.nearClipPlane) * settings.ShadowCascadeSplits[j - 1];
+                            var cascadeEnd = (j == settings.ShadowCascades - 1) ? settings.ShadowDistance : (settings.ShadowDistance - camera.nearClipPlane) * settings.ShadowCascadeSplits[j];
+
+                            // Transform camera bounds to light space
+                            viewMatrix = lightToWorld.inverse;
+
+                            Vector3 minValue = Vector3.positiveInfinity, maxValue = Vector3.negativeInfinity;
+                            for (var z = 0; z < 2; z++)
+                            {
+                                for (var y = 0; y < 2; y++)
+                                {
+                                    for (var x = 0; x < 2; x++)
+                                    {
+                                        var worldPoint = camera.ViewportToWorldPoint(new(x, y, z == 0 ? cascadeStart : cascadeEnd));
+                                        var localPoint = viewMatrix.MultiplyPoint3x4(worldPoint);
+                                        minValue = Vector3.Min(minValue, localPoint);
+                                        maxValue = Vector3.Max(maxValue, localPoint);
+                                    }
+                                }
+                            }
+
+                            projectionMatrix = Matrix4x4.Ortho(minValue.x, maxValue.x, minValue.y, maxValue.y, minValue.z, maxValue.z);
+                            viewMatrix.SetRow(2, -viewMatrix.GetRow(2));
+
+                            // Calculate culling planes
+                            var cullingPlanes = ListPool<Plane>.Get();
+
+                            // First get the planes from the view projection matrix
+                            var viewProjectionMatrix = projectionMatrix * viewMatrix;
+                            GeometryUtility.CalculateFrustumPlanes(viewProjectionMatrix, frustumPlanes);
+                            for (var k = 0; k < 6; k++)
+                            {
+                                // Skip near plane
+                                if (k != 4)
+                                    cullingPlanes.Add(frustumPlanes[k]);
+                            }
+
+                            // Now also add any main camera-frustum planes that are not facing away from the light
+                            var lightDirection = -visibleLight.localToWorldMatrix.Forward();
+                            GeometryUtility.CalculateFrustumPlanes(camera, frustumPlanes);
+                            for (var k = 0; k < 6; k++)
+                            {
+                                var plane = frustumPlanes[k];
+                                if (Vector3.Dot(plane.normal, lightDirection) > 0.0f)
+                                    cullingPlanes.Add(plane);
+                            }
+
+                            shadowSplitData = new ShadowSplitData()
+                            {
+                                cullingPlaneCount = cullingPlanes.Count,
+                                shadowCascadeBlendCullingFactor = 1
+                            };
+
+                            for (var k = 0; k < cullingPlanes.Count; k++)
+                            {
+                                shadowSplitData.SetCullingPlane(k, cullingPlanes[k]);
+                            }
+
+                            ListPool<Plane>.Release(cullingPlanes);
+                        }
+                        else if (!cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(i, j, settings.ShadowCascades, settings.ShadowCascadeSplits, settings.DirectionalShadowResolution, light.shadowNearPlane, out viewMatrix, out projectionMatrix, out shadowSplitData))
+                                continue;
 
                         cascadeCount++;
-
                         var directionalShadowRequest = new ShadowRequest(true, i, viewMatrix, projectionMatrix, shadowSplitData, 0);
                         directionalShadowRequests.Add(directionalShadowRequest);
 
-                        var shadowMatrix = ConvertToAtlasMatrix(projectionMatrix * viewMatrix);
+                        var shadowMatrix = (projectionMatrix * viewMatrix * worldToLight.inverse).ConvertToAtlasMatrix();
                         directionalShadowMatrices.Add(shadowMatrix);
+
+                        var width = projectionMatrix.OrthoWidth();
+                        var height = projectionMatrix.OrthoHeight();
+                        var near = projectionMatrix.OrthoNear();
+                        var far = projectionMatrix.OrthoFar();
+                        directionalShadowTexelSizes.Add(new (width, height, near, far));
                     }
 
                     if (cascadeCount > 0)
                         shadowIndex = directionalShadowRequests.Count - cascadeCount;
                 }
 
-                var directionalLightData = new DirectionalLightData((Vector4)light.color.linear, shadowIndex, -light.transform.forward, cascadeCount);
+                var directionalLightData = new DirectionalLightData((Vector4)light.color.linear * light.intensity, shadowIndex, -light.transform.forward, cascadeCount, worldToLight);
                 directionalLightList.Add(directionalLightData);
             }
             else if (visibleLight.lightType == LightType.Point)
@@ -137,7 +230,7 @@ public class LightingSetup
                         shadowIndex = (pointShadowRequests.Count - visibleFaceCount) / 6;
                 }
 
-                var pointLightData = new PointLightData(light.transform.position, light.range, (Vector4)light.color.linear, shadowIndex, visibleFaceMask, near, far);
+                var pointLightData = new PointLightData(light.transform.position, light.range, (Vector4)light.color.linear * light.intensity, shadowIndex, visibleFaceMask, near, far);
                 pointLightList.Add(pointLightData);
             }
         }
@@ -229,44 +322,43 @@ public class LightingSetup
         commandBuffer.SetGlobalDepthBias(0f, 0f);
 
         // Set directional light data
-        if (directionalLightList.Count > directionalLightBuffer.count)
-        {
-            directionalLightBuffer.Release();
-            directionalLightBuffer = new ComputeBuffer(directionalLightList.Count, UnsafeUtility.SizeOf<DirectionalLightData>());
-        }
-
-        commandBuffer.SetBufferData(directionalLightBuffer, directionalLightList);
+        commandBuffer.ExpandAndSetComputeBufferData(ref directionalLightBuffer, directionalLightList);
         commandBuffer.SetGlobalBuffer("_DirectionalLights", directionalLightBuffer);
         commandBuffer.SetGlobalInt("_DirectionalLightCount", directionalLightList.Count);
-        commandBuffer.SetGlobalTexture(directionalShadowsId, directionalShadowRequests.Count > 0 ? directionalShadowsId : emptyArray);
-
         ListPool<DirectionalLightData>.Release(directionalLightList);
+
+        commandBuffer.SetGlobalTexture(directionalShadowsId, directionalShadowRequests.Count > 0 ? directionalShadowsId : emptyArray);
         ListPool<ShadowRequest>.Release(directionalShadowRequests);
 
         // Update directional shadow matrices
-        if (directionalMatrixBuffer.count < directionalShadowMatrices.Count)
-        {
-            directionalMatrixBuffer.Release();
-            directionalMatrixBuffer = new ComputeBuffer(directionalShadowMatrices.Count, UnsafeUtility.SizeOf<Matrix4x4>());
-        }
-
-        commandBuffer.SetBufferData(directionalMatrixBuffer, directionalShadowMatrices);
+        commandBuffer.ExpandAndSetComputeBufferData(ref directionalMatrixBuffer, directionalShadowMatrices);
         commandBuffer.SetGlobalBuffer("_DirectionalMatrices", directionalMatrixBuffer);
         ListPool<Matrix4x4>.Release(directionalShadowMatrices);
 
-        // Set point light data
-        if (pointLightList.Count >= pointLightBuffer.count)
-        {
-            pointLightBuffer.Release();
-            pointLightBuffer = new ComputeBuffer(pointLightList.Count, UnsafeUtility.SizeOf<PointLightData>());
-        }
+        // Update directional shadow texel sizes
+        commandBuffer.ExpandAndSetComputeBufferData(ref directionalTexelSizeBuffer, directionalShadowTexelSizes);
+        commandBuffer.SetBufferData(directionalTexelSizeBuffer, directionalShadowTexelSizes);
+        commandBuffer.SetGlobalBuffer("_DirectionalShadowTexelSizes", directionalTexelSizeBuffer);
+        ListPool<Vector4>.Release(directionalShadowTexelSizes);
 
-        commandBuffer.SetBufferData(pointLightBuffer, pointLightList);
+        // Set point light data
+        commandBuffer.ExpandAndSetComputeBufferData(ref pointLightBuffer, pointLightList);
         commandBuffer.SetGlobalBuffer("_PointLights", pointLightBuffer);
         commandBuffer.SetGlobalInt("_PointLightCount", pointLightList.Count);
-        commandBuffer.SetGlobalTexture(pointShadowsId, pointShadowRequests.Count > 0 ? pointShadowsId : emptyCubemapArray);
-
-        ListPool<ShadowRequest>.Release(pointShadowRequests);
         ListPool<PointLightData>.Release(pointLightList);
+
+        commandBuffer.SetGlobalTexture(pointShadowsId, pointShadowRequests.Count > 0 ? pointShadowsId : emptyCubemapArray);
+        ListPool<ShadowRequest>.Release(pointShadowRequests);
+
+        commandBuffer.ExpandAndSetComputeBufferData(ref pointTexelSizeBuffer, pointShadowTexelSizes);
+        commandBuffer.SetGlobalBuffer("_PointShadowTexelSizes", pointTexelSizeBuffer);
+
+        ListPool<Vector4>.Release(pointShadowTexelSizes);
+
+        commandBuffer.SetGlobalInt("_PcfSamples", settings.PcfSamples);
+        commandBuffer.SetGlobalFloat("_PcfRadius", settings.PcfRadius);
+        commandBuffer.SetGlobalInt("_BlockerSamples", settings.BlockerSamples);
+        commandBuffer.SetGlobalFloat("_BlockerRadius", settings.BlockerRadius);
+        commandBuffer.SetGlobalFloat("_PcssSoftness", settings.PcssSoftness);
     }
 }

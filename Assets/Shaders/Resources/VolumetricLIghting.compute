@@ -13,7 +13,7 @@ float _BlurSigma;
 [numthreads(8, 8, 8)]
 void Compute(uint3 id : SV_DispatchThreadID)
 {
-	float jitter = _BlueNoise1D[id.xy % 64];
+	float jitter = _BlueNoise1D[id.xy % 128];
 	//jitter = InterleavedGradientNoise(id.xy, 0);
 	
 	float3 positionCS;

@@ -26,14 +26,6 @@ cbuffer UnityPerMaterial
 
 FragmentInput Vertex(VertexInput input)
 {
-	#ifdef INSTANCING_ON
-		float4x4 localToWorld = unity_Builtins0Array[unity_BaseInstanceID + input.instanceID].unity_ObjectToWorldArray;
-		float4x4 worldToObject = unity_Builtins0Array[unity_BaseInstanceID + input.instanceID].unity_WorldToObjectArray;
-	#else
-		float4x4 localToWorld = unity_ObjectToWorld;
-		float4x4 worldToObject = unity_WorldToObject;
-	#endif
-	
 	FragmentInput output;
 	output.worldPosition = ObjectToWorld(input.position, input.instanceID);
 	output.position = WorldToClip(output.worldPosition);
@@ -44,14 +36,15 @@ FragmentInput Vertex(VertexInput input)
 float3 Fragment(FragmentInput input) : SV_Target
 {
 	float depth = _DepthTexture[input.position.xy];
-	float3 backgroundPositionWS = MultiplyPointProj(_InvViewProjectionMatrix, float3(input.position.xy / _ScreenParams.xy * 2.0 - 1.0, depth));
-	
+	float3 positionCS = float3(input.position.xy / _ScreenParams.xy * 2.0 - 1.0, depth);
+	positionCS.y = -positionCS.y;
+	float3 backgroundPositionWS = MultiplyPointProj(_InvViewProjectionMatrix, positionCS).xyz;
 	
 	float difference = max(0.0, distance(backgroundPositionWS, input.worldPosition));
 	
 	float3 transmittance = exp(-difference * _Extinction);
 	
-	float3 color = _MainTex.Sample(_LinearRepeatSampler, input.uv);
+	float3 color = _MainTex.Sample(_LinearRepeatSampler, input.uv).rgb;
 	color = lerp(_Albedo, color, _Alpha); // 
 	float3 lighting = GetLighting(float3(0, 1, 0), input.worldPosition) + _AmbientLightColor;
 	color.rgb *= lighting;

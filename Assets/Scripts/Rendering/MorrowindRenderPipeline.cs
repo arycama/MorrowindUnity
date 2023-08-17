@@ -4,7 +4,8 @@ using UnityEngine.Rendering;
 
 public class MorrowindRenderPipeline : RenderPipeline
 {
-    private static readonly IndexedString noiseIds = new("STBN/Scalar/stbn_scalar_2Dx1Dx1D_128x128x64x1_");
+    private static readonly IndexedString blueNoise1DIds = new("STBN/Scalar/stbn_scalar_2Dx1Dx1D_128x128x64x1_");
+    private static readonly IndexedString blueNoise2DIds = new("STBN/Vec2/stbn_vec2_2Dx1D_128x128x64_");
     private static readonly int cameraTargetId = Shader.PropertyToID("_CameraTarget");
     private static readonly int cameraDepthId = Shader.PropertyToID("_CameraDepth");
     private static readonly int depthTextureId = Shader.PropertyToID("_DepthTexture");
@@ -80,7 +81,7 @@ public class MorrowindRenderPipeline : RenderPipeline
         cullingParameters.cullingOptions = CullingOptions.NeedsLighting | CullingOptions.DisablePerObjectCulling | CullingOptions.ShadowCasters;
         var cullingResults = context.Cull(ref cullingParameters);
 
-        lightingSetup.Render(shadowsCommand, cullingResults, context);
+        lightingSetup.Render(shadowsCommand, cullingResults, context, camera);
         context.ExecuteCommandBuffer(shadowsCommand);
         shadowsCommand.Clear();
 
@@ -114,15 +115,18 @@ public class MorrowindRenderPipeline : RenderPipeline
         }
 
         // More camera setup
-        var blueNoise1D = Resources.Load<Texture2D>(noiseIds.GetString(frameCount % 64));
-        //blueNoise1D = Resources.Load<Texture2D>(noiseIds.GetString(0));
+        var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(frameCount % 64));
+        var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds.GetString(frameCount % 64));
         renderCameraCommand.SetGlobalTexture("_BlueNoise1D", blueNoise1D);
+        renderCameraCommand.SetGlobalTexture("_BlueNoise2D", blueNoise2D);
         renderCameraCommand.SetGlobalMatrix("_PreviousViewProjectionMatrix", previousViewProjectionMatrix);
         renderCameraCommand.SetGlobalMatrix("_InvViewProjectionMatrix", viewProjectionMatrix.inverse);
         renderCameraCommand.SetGlobalInt("_FrameCount", frameCount);
 
         // Clustered light culling
+        renderCameraCommand.BeginSample("Clustered Light Culling");
         clusteredLightCulling.Render(renderCameraCommand, camera);
+        renderCameraCommand.EndSample("Clustered Light Culling");
 
         context.ExecuteCommandBuffer(renderCameraCommand);
         renderCameraCommand.Clear();

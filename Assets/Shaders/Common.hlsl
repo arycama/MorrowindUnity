@@ -4,9 +4,10 @@
 struct DirectionalLight
 {
 	float3 color;
-	int shadowIndex;
+	uint shadowIndex;
 	float3 direction;
-	int cascadeCount;
+	uint cascadeCount;
+	float3x4 worldToLight;
 };
 
 struct PointLight
@@ -21,31 +22,31 @@ struct PointLight
 	float padding;
 };
 
+Buffer<float4> _DirectionalShadowTexelSizes, _PointShadowTexelSizes;
 Buffer<uint> _LightClusterList;
-SamplerComparisonState _LinearClampCompareSampler;
+SamplerComparisonState _PointClampCompareSampler, _LinearClampCompareSampler;
 SamplerState _LinearClampSampler, _LinearRepeatSampler, _PointClampSampler;
 StructuredBuffer<DirectionalLight> _DirectionalLights;
 StructuredBuffer<matrix> _DirectionalMatrices;
 StructuredBuffer<PointLight> _PointLights;
 Texture2D<float> _BlueNoise1D;
+Texture2D<float2> _BlueNoise2D;
 Texture2DArray<float> _DirectionalShadows;
 Texture3D<float4> _VolumetricLighting;
 Texture3D<uint2> _LightClusterIndices;
 TextureCubeArray<float> _PointShadows;
 
-uint _TileSize;
-float _ClusterScale;
-float _ClusterBias;
-
 float4 _Time, _ProjectionParams, _ZBufferParams, _ScreenParams;
 float3 _AmbientLightColor, _WorldSpaceCameraPos, _FogColor;
-float _FogStartDistance, _FogEndDistance, _FogEnabled, _VolumeWidth, _VolumeHeight, _VolumeSlices, _VolumeDepth, _NonLinearDepth;
+float _BlockerRadius, _ClusterBias, _ClusterScale, _FogStartDistance, _FogEndDistance, _FogEnabled, _PcfRadius, _PcssSoftness, _VolumeWidth, _VolumeHeight, _VolumeSlices, _VolumeDepth, _NonLinearDepth;
 matrix _InvViewProjectionMatrix, _PreviousViewProjectionMatrix, unity_MatrixVP;
-uint _DirectionalLightCount, _FrameCount, _PointLightCount, unity_BaseInstanceID;
+uint _BlockerSamples, _DirectionalLightCount, _FrameCount, _PcfSamples, _PointLightCount, _TileSize, unity_BaseInstanceID;
+
+const static float Pi = radians(180.0);
 
 cbuffer UnityPerDraw
 {
-	matrix unity_ObjectToWorld, unity_WorldToObject, unity_MatrixPreviousM, unity_MatrixPreviousMI;
+	float3x4 unity_ObjectToWorld, unity_WorldToObject, unity_MatrixPreviousM, unity_MatrixPreviousMI;
 	float4 unity_MotionVectorsParams;
 };
 
@@ -148,7 +149,7 @@ float3 MultiplyVector(float3x4 mat, float3 v, bool doNormalize) { return Multipl
 float3 ObjectToWorld(float3 position, uint instanceID)
 {
 #ifdef INSTANCING_ON
-	float3x4 objectToWorld = unity_Builtins0Array[unity_BaseInstanceID + instanceID].unity_ObjectToWorldArray;
+	float3x4 objectToWorld = (float3x4)unity_Builtins0Array[unity_BaseInstanceID + instanceID].unity_ObjectToWorldArray;
 #else
 	float3x4 objectToWorld = unity_ObjectToWorld;
 #endif
@@ -169,12 +170,12 @@ float4 ObjectToClip(float3 position, uint instanceID)
 float3 ObjectToWorldNormal(float3 normal, uint instanceID, bool doNormalize = false)
 {
 #ifdef INSTANCING_ON
-	float3x4 worldToObject = unity_Builtins0Array[unity_BaseInstanceID + instanceID].unity_WorldToObjectArray;
+	float3x4 worldToObject = (float3x4)unity_Builtins0Array[unity_BaseInstanceID + instanceID].unity_WorldToObjectArray;
 #else
 	float3x4 worldToObject = unity_WorldToObject;
 #endif
 	
-	return MultiplyVector(normal, worldToObject, doNormalize);
+	return MultiplyVector(normal, (float3x3) worldToObject, doNormalize);
 }
 
 float EyeToDeviceDepth(float eyeDepth)
@@ -232,57 +233,118 @@ float GetDeviceDepth(float normalizedDepth)
 	}
 }
 
-uint _LightDebug;
+uint GetShadowCascade(uint lightIndex, float3 worldPosition, out float3 positionLS)
+{
+	DirectionalLight light = _DirectionalLights[lightIndex];
+	
+	for (uint j = 0; j < light.cascadeCount; j++)
+	{
+		// find the first cascade which is not out of bounds
+		matrix shadowMatrix = _DirectionalMatrices[light.shadowIndex + j];
+		positionLS = MultiplyPoint3x4(shadowMatrix, worldPosition);
+		if (all(saturate(positionLS) == positionLS))
+			return j;
+	}
+	
+	return ~0u;
+}
+
+float GetShadow(float3 worldPosition, uint lightIndex)
+{
+	DirectionalLight light = _DirectionalLights[lightIndex];
+	if (light.shadowIndex == ~0u)
+		return 1.0;
+	
+	float4 positionCS = PerspectiveDivide(WorldToClip(worldPosition));
+	positionCS.xy = (positionCS.xy * 0.5 + 0.5) * _ScreenParams.xy;
+	
+	float2 jitter = _BlueNoise2D[uint2(positionCS.xy) % 128];
+	float3 lightPosition = MultiplyPoint3x4(light.worldToLight, worldPosition);
+	
+	// PCS filtering
+	float occluderDepth = 0.0, occluderWeightSum = 0.0;
+	float goldenAngle = Pi * (3.0 - sqrt(5.0));
+	for (uint k = 0; k < _BlockerSamples; k++)
+	{
+		float r = sqrt(k + 0.5) / sqrt(_BlockerSamples);
+		float theta = k * goldenAngle + (1.0 - jitter.x) * 2.0 * Pi;
+		float3 offset = float3(r * cos(theta), r * sin(theta), 0.0) * _BlockerRadius;
+		
+		float3 shadowPosition;
+		uint cascade = GetShadowCascade(lightIndex, lightPosition + offset, shadowPosition);
+		if (cascade == ~0u)
+			continue;
+		
+		float4 texelAndDepthSizes = _DirectionalShadowTexelSizes[light.shadowIndex + cascade];
+		float shadowZ = _DirectionalShadows.SampleLevel(_LinearClampSampler, float3(shadowPosition.xy, light.shadowIndex + cascade), 0);
+		float occluderZ = Remap(1.0 - shadowZ, 0.0, 1.0, texelAndDepthSizes.z, texelAndDepthSizes.w);
+		if (occluderZ >= lightPosition.z)
+			continue;
+		
+		float weight = 1.0 - r * 0;
+		occluderDepth += occluderZ * weight;
+		occluderWeightSum += weight;
+	}
+
+	// There are no occluders so early out (this saves filtering)
+	if (!occluderWeightSum)
+		return 1.0;
+	
+	occluderDepth /= occluderWeightSum;
+	
+	float radius = max(0.0, lightPosition.z - occluderDepth) / _PcssSoftness;
+	
+	// PCF filtering
+	float shadow = 0.0;
+	float weightSum = 0.0;
+	for (k = 0; k < _PcfSamples; k++)
+	{
+		float r = sqrt(k + 0.5) / sqrt(_PcfSamples);
+		float theta = k * goldenAngle + jitter.y * 2.0 * Pi;
+		float3 offset = float3(r * cos(theta), r * sin(theta), 0.0) * radius;
+		
+		float3 shadowPosition;
+		uint cascade = GetShadowCascade(lightIndex, lightPosition + offset, shadowPosition);
+		if (cascade == ~0u)
+			continue;
+						
+		float weight = 1.0 - r;
+		shadow += _DirectionalShadows.SampleCmpLevelZero(_LinearClampCompareSampler, float3(shadowPosition.xy, light.shadowIndex + cascade), shadowPosition.z) * weight;
+		weightSum += weight;
+	}
+				
+	return shadow / weightSum;
+}
 
 float3 GetLighting(float3 normal, float3 worldPosition, bool isVolumetric = false)
 {
 	// Directional lights
 	float3 lighting = 0.0;
-	
-	for (uint i = 0; i < _DirectionalLightCount; i++)
+	for (uint i = 0; i < min(_DirectionalLightCount, 4); i++)
 	{
+		float shadow = GetShadow(worldPosition, i);
+		if(!shadow)
+			continue;
+		
 		DirectionalLight light = _DirectionalLights[i];
-		
-		float shadow = 1.0;
-		
-		if(light.shadowIndex != ~0u)
-		{
-			for (uint j = 0; j < light.cascadeCount; j++)
-			{
-				// find the first cascade which is not out of bounds
-				matrix shadowMatrix = _DirectionalMatrices[light.shadowIndex + j];
-				float3 positionLS = MultiplyPoint3x4(shadowMatrix, worldPosition);
-				if (any(saturate(positionLS) != positionLS))
-					continue;
-			
-				shadow = _DirectionalShadows.SampleCmpLevelZero(_LinearClampCompareSampler, float3(positionLS.xy, light.shadowIndex + j), positionLS.z);
-				break;
-			}
-		}
-		
-		if(shadow > 0.0)
-			lighting += (isVolumetric ? 1.0 : saturate(dot(normal, light.direction))) * light.color * shadow;
+		lighting += (isVolumetric ? 1.0 : saturate(dot(normal, light.direction))) * light.color * shadow;
 	}
 	
 	float4 positionCS = PerspectiveDivide(WorldToClip(worldPosition));
 	positionCS.xy = (positionCS.xy * 0.5 + 0.5) * _ScreenParams.xy;
 	
 	uint3 clusterIndex;
-	clusterIndex.xy = floor(positionCS.xy) / 16;//_TileSize;
+	clusterIndex.xy = floor(positionCS.xy) / _TileSize;
 	clusterIndex.z = log2(positionCS.w) * _ClusterScale + _ClusterBias;
 	
 	uint2 lightOffsetAndCount = _LightClusterIndices[clusterIndex];
 	uint startOffset = lightOffsetAndCount.x;
 	uint lightCount = lightOffsetAndCount.y;
 	
-	_LightDebug = lightCount;
-	
 	// Point lights
-	for (i = 0; i < lightCount; i++)
-	//for (i = 0; i < _PointLightCount; i++)
+	for (i = 0; i < min(128, lightCount); i++)
 	{
 		int index = _LightClusterList[startOffset + i];
-		//PointLight light = _PointLights[i];
 		PointLight light = _PointLights[index];
 		
 		float3 lightVector = light.position - worldPosition;
@@ -342,50 +404,51 @@ float3 ApplyFog(float3 color, float3 worldPosition, float dither)
 	if (!_FogEnabled)
 		return color;
 	
-	float4 volumetricLighting = SampleVolumetricLighting(worldPosition);
-	return color * volumetricLighting.a + volumetricLighting.rgb;
+	#if 1
+		float4 volumetricLighting = SampleVolumetricLighting(worldPosition);
+		return color * volumetricLighting.a + volumetricLighting.rgb;
+	#else
+		// Todo: compute on CPU
+		float3 sunColor = 0.0;
+		for (uint i = 0; i < _DirectionalLightCount; i++)
+			sunColor += _DirectionalLights[i].color;
 	
-	// Todo: compute on CPU
-
-	float3 sunColor = 0.0;
-	for (uint i = 0; i < _DirectionalLightCount; i++)
-		sunColor += _DirectionalLights[i].color;
+		// Calculate extinction coefficient from color and distance
+		// TODO: Assume fog is white, and fogcolor is actually lighting.. might not work for interiors though? Could do some kind of... dirlight/fog color or something
+		float3 albedo = _FogColor / (sunColor + _AmbientLightColor);
+		float samples = 64;
 	
-	// Calculate extinction coefficient from color and distance
-	// TODO: Assume fog is white, and fogcolor is actually lighting.. might not work for interiors though? Could do some kind of... dirlight/fog color or something
-	float3 albedo = _FogColor / (sunColor + _AmbientLightColor);
-	float samples = 64;
+		float3 rayStart = _WorldSpaceCameraPos;
+		float3 ray = worldPosition - rayStart;
+		float3 rayStep = ray / samples;
+		float ds = length(rayStep);
 	
-	float3 rayStart = _WorldSpaceCameraPos;
-	float3 ray = worldPosition - rayStart;
-	float3 rayStep = ray / samples;
-	float ds = length(rayStep);
+		float4 result = float2(0.0, 1.0).xxxy;
+		for (float i = dither; i < samples; i++)
+		{
+			// Treat the extinction as a spatially varying coefficient, based on linear fog.
+			float rayDist = ds * i;
+		
+			float3 position = rayStep * i + rayStart;
+		
+			// Point lights
+			float3 lighting = _AmbientLightColor + GetLighting(0.0, position, true);
+		
+			float extinction = 0.0;
+			if (rayDist > _FogStartDistance && rayDist < _FogEndDistance)
+				extinction = rcp(_FogEndDistance - rayDist);
+		
+			float3 luminance = albedo * extinction * lighting;
+		
+			float transmittance = exp(-extinction * ds);
+			float3 integScatt = luminance * (1.0 - transmittance) / max(extinction, 1e-7);
+		
+			result.rgb += integScatt * result.a;
+			result.a *= transmittance;
+		}
 	
-	float4 result = float2(0.0, 1.0).xxxy;
-	for (float i = dither; i < samples; i++)
-	{
-		// Treat the extinction as a spatially varying coefficient, based on linear fog.
-		float rayDist = ds * i;
-		
-		float3 position = rayStep * i + rayStart;
-		
-		// Point lights
-		float3 lighting = _AmbientLightColor + GetLighting(0.0, position, true);
-		
-		float extinction = 0.0;
-		if (rayDist > _FogStartDistance && rayDist < _FogEndDistance)
-			extinction = rcp(_FogEndDistance - rayDist);
-		
-		float3 luminance = albedo * extinction * lighting;
-		
-		float transmittance = exp(-extinction * ds);
-		float3 integScatt = luminance * (1.0 - transmittance) / max(extinction, 1e-7);
-		
-		result.rgb += integScatt * result.a;
-		result.a *= transmittance;
-	}
-	
-	return color * result.a + result.rgb;
+		return color * result.a + result.rgb;
+	#endif
 }
 
 #endif

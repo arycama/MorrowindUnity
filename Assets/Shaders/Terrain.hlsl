@@ -22,8 +22,6 @@ Texture2DArray<float3> _MainTex;
 Texture2D<float> _Control;
 float4 _Control_ST, _MainTex_ST, _Control_TexelSize;
 
-const static float Pi = radians(180.0);
-
 FragmentInput Vertex(VertexInput input)
 {
     FragmentInput output;
@@ -204,6 +202,20 @@ float3 Fragment(FragmentInput input) : SV_Target
 	
 	float3 normal = normalize(input.normal);
 	float3 lighting = GetLighting(normal, input.worldPosition);
+	
+	//switch (_LightDebug)
+	//{
+	//	case 1:
+	//		return float4(0, 1, 0, 1);
+	//	case 2:
+	//		return float4(1, 1, 0, 1);
+	//	case 3:
+	//		return float4(1, 0.5, 0, 1);
+	//	case 4:
+	//		return float4(1, 0, 0, 1);
+	//	case 5:
+	//		return float4(1, 1, 1, 1);
+	//}
 	
 	lighting += _AmbientLightColor;
 	color.rgb *= lighting * input.color;
