@@ -7,6 +7,7 @@ public class MorrowindRenderPipelineAsset : RenderPipelineAsset
 {
     [SerializeField] private ShadowSettings shadowSettings;
     [SerializeField] private ClusteredLightingSettings clusteredLightingSettings;
+    [SerializeField] private TemporalAASettings temporalAASettings;
 
     [Header("Volumetric Lighting")]
     [SerializeField] private int tileSize = 8;
@@ -21,6 +22,7 @@ public class MorrowindRenderPipelineAsset : RenderPipelineAsset
 
     public ShadowSettings ShadowSettings => shadowSettings;
     public ClusteredLightingSettings ClusteredLightingSettings => clusteredLightingSettings;
+    public TemporalAASettings TemporalAASettings => temporalAASettings;
 
     protected override RenderPipeline CreatePipeline()
     {

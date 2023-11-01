@@ -18,7 +18,6 @@ Shader "Hidden/Camera Motion Vectors"
             HLSLPROGRAM
             #pragma vertex Vertex
             #pragma fragment Fragment
-            #pragma enable_d3d11_debug_symbols
             #include "CameraMotionVectors.hlsl"
             ENDHLSL
           

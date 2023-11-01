@@ -1,7 +1,6 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.Rendering.PostProcessing;
 
 public class MorrowindRenderPipeline : RenderPipeline
 {
@@ -22,6 +21,7 @@ public class MorrowindRenderPipeline : RenderPipeline
     private readonly EnvironmentSettings environmentSettings;
     private readonly ObjectRenderer opaqueObjectRenderer;
     private readonly ObjectRenderer transparentObjectRenderer;
+    private readonly TemporalAA temporalAA;
 
     private Dictionary<Camera, int> cameraRenderedFrameCount = new();
     private Dictionary<Camera, Matrix4x4> previousMatrices = new();
@@ -44,6 +44,7 @@ public class MorrowindRenderPipeline : RenderPipeline
         volumetricLighting = new();
         opaqueObjectRenderer = new(RenderQueueRange.opaque, SortingCriteria.CommonOpaque);
         transparentObjectRenderer = new(RenderQueueRange.transparent, SortingCriteria.CommonTransparent);
+        temporalAA = new(renderPipelineAsset.TemporalAASettings);
 
         motionVectorsMaterial = new Material(Shader.Find("Hidden/Camera Motion Vectors"));
     }
@@ -59,6 +60,7 @@ public class MorrowindRenderPipeline : RenderPipeline
         volLightingCommand.Release();
         opaqueCommand.Release();
         transparentCommand.Release();
+        temporalAA.Release();
     }
 
     protected override void Render(ScriptableRenderContext context, Camera[] cameras)
@@ -78,35 +80,27 @@ public class MorrowindRenderPipeline : RenderPipeline
 
     private void RenderCamera(ScriptableRenderContext context, Camera camera)
     {
-        // SetUp Post-processing
-        PostProcessLayer postLayer = camera.GetComponent<PostProcessLayer>();
-        bool hasPostProcessing = postLayer != null;
-        bool usePostProcessing = false;
-        bool hasOpaqueOnlyEffects = false;
-        PostProcessRenderContext postContext = null;
-        if (hasPostProcessing)
+        // Use a seperate frame count per camera, which we manually track
+        if (!cameraRenderedFrameCount.TryGetValue(camera, out var frameCount))
+            cameraRenderedFrameCount.Add(camera, 0);
+        else
         {
-            postContext = new PostProcessRenderContext();
-            postContext.camera = camera;
-            usePostProcessing = postLayer.enabled;
-            hasOpaqueOnlyEffects = postLayer.HasOpaqueOnlyEffects(postContext);
+            // Only increase when frame debugger not enabled, or we get flickering
+            if (!FrameDebugger.enabled)
+                cameraRenderedFrameCount[camera] = ++frameCount;
         }
 
         camera.ResetProjectionMatrix();
-
-        var nonJitteredViewProjectionMatrix = GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix;
-
-        if (postLayer.antialiasingMode == PostProcessLayer.Antialiasing.TemporalAntialiasing)
-            postLayer.temporalAntialiasing.ConfigureJitteredProjectionMatrix(postContext);
+        temporalAA.OnPreRender(camera, frameCount);
 
         if (!previousMatrices.TryGetValue(camera, out var previousMatrix))
         {
-            previousMatrix = nonJitteredViewProjectionMatrix;
+            previousMatrix = camera.nonJitteredProjectionMatrix;
             previousMatrices.Add(camera, previousMatrix);
         }
         else
         {
-            previousMatrices[camera] = nonJitteredViewProjectionMatrix;
+            previousMatrices[camera] = camera.nonJitteredProjectionMatrix;
         }
 
         BeginCameraRendering(context, camera);
@@ -129,22 +123,13 @@ public class MorrowindRenderPipeline : RenderPipeline
 
         context.SetupCameraProperties(camera);
 
-        // Use a seperate frame count per camera, which we manually track
-        if (!cameraRenderedFrameCount.TryGetValue(camera, out var frameCount))
-            cameraRenderedFrameCount.Add(camera, 0);
-        else
-        {
-            // Only increase when frame debugger not enabled, or we get flickering
-            if (!FrameDebugger.enabled)
-                cameraRenderedFrameCount[camera] = ++frameCount;
-        }
 
         // More camera setup
         var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(frameCount % 64));
         var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds.GetString(frameCount % 64));
         renderCameraCommand.SetGlobalTexture("_BlueNoise1D", blueNoise1D);
         renderCameraCommand.SetGlobalTexture("_BlueNoise2D", blueNoise2D);
-        renderCameraCommand.SetGlobalMatrix("_NonJitteredVPMatrix", nonJitteredViewProjectionMatrix);
+        renderCameraCommand.SetGlobalMatrix("_NonJitteredVPMatrix", camera.nonJitteredProjectionMatrix);
         renderCameraCommand.SetGlobalMatrix("_PreviousVPMatrix", previousMatrix);
         renderCameraCommand.SetGlobalMatrix("_InvVPMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix).inverse);
 
@@ -192,27 +177,6 @@ public class MorrowindRenderPipeline : RenderPipeline
         context.ExecuteCommandBuffer(renderCameraCommand);
         renderCameraCommand.Clear();
 
-        // Opaque Post-processing
-        // Ambient Occlusion, Screen-spaced reflection are generally not supported for SRP
-        // So this part is only for custom opaque post-processing
-        if (usePostProcessing)
-        {
-            CommandBuffer cmdpp = new CommandBuffer();
-            cmdpp.name = "(" + camera.name + ")" + "Post-processing Opaque";
-
-            postContext.Reset();
-            postContext.camera = camera;
-            postContext.source = cameraTargetId;
-            postContext.sourceFormat = RenderTextureFormat.RGB111110Float;
-            postContext.destination = cameraTargetId;
-            postContext.command = cmdpp;
-            postContext.flip = camera.targetTexture == null;
-            postLayer.RenderOpaqueOnly(postContext);
-
-            context.ExecuteCommandBuffer(cmdpp);
-            cmdpp.Release();
-        }
-
         renderCameraCommand.SetRenderTarget(cameraTargetId, new RenderTargetIdentifier(cameraDepthId));
 
         renderCameraCommand.BeginSample("Render Transparent");
@@ -222,40 +186,10 @@ public class MorrowindRenderPipeline : RenderPipeline
         context.ExecuteCommandBuffer(renderCameraCommand);
         renderCameraCommand.Clear();
 
-        //************************** Transparent Post-processing ************************************
-        //Bloom, Vignette, Grain, ColorGrading, LensDistortion, Chromatic Aberration, Auto Exposure
-        if (usePostProcessing)
-        {
-            CommandBuffer cmdpp = new CommandBuffer();
-            cmdpp.name = "(" + camera.name + ")" + "Post-processing Transparent";
+        var final = temporalAA.Render(camera, renderCameraCommand, frameCount, cameraTargetId);
 
-            cmdpp.SetGlobalTexture("_CameraDepthTexture", cameraDepthId);
-
-            postContext.Reset();
-            postContext.camera = camera;
-            postContext.source = cameraTargetId;
-            postContext.sourceFormat = RenderTextureFormat.RGB111110Float;
-            postContext.destination = BuiltinRenderTextureType.CameraTarget;
-            postContext.command = cmdpp;
-            postContext.flip = camera.targetTexture == null;
-
-            var isSceneCamera = camera.cameraType == CameraType.SceneView;
-            if (isSceneCamera)
-                camera.cameraType = CameraType.Game;
-
-            postLayer.Render(postContext);
-
-            if (isSceneCamera)
-                camera.cameraType = CameraType.SceneView;
-
-            context.ExecuteCommandBuffer(cmdpp);
-            cmdpp.Release();
-        }
-        else
-        {
-            // Copy final result
-            renderCameraCommand.Blit(cameraTargetId, BuiltinRenderTextureType.CameraTarget);
-        }
+        // Copy final result
+        renderCameraCommand.Blit(final, BuiltinRenderTextureType.CameraTarget);
 
         renderCameraCommand.ReleaseTemporaryRT(sceneTextureId);
         renderCameraCommand.ReleaseTemporaryRT(depthTextureId);

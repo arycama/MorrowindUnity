@@ -1,4 +1,4 @@
-#include "Common.hlsl"
+#include "../Common.hlsl"
 
 //Texture2D<float> _UnityFBInput0;
 Texture2D<float> _CameraDepthTexture;
