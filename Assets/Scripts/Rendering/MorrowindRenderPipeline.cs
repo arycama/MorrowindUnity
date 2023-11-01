@@ -11,6 +11,7 @@ public class MorrowindRenderPipeline : RenderPipeline
     private static readonly int cameraDepthId = Shader.PropertyToID("_CameraDepth");
     private static readonly int depthTextureId = Shader.PropertyToID("_DepthTexture");
     private static readonly int sceneTextureId = Shader.PropertyToID("_SceneTexture");
+    private static readonly int motionVectorsId = Shader.PropertyToID("_MotionVectors");
 
     private readonly MorrowindRenderPipelineAsset renderPipelineAsset;
     private readonly CommandBuffer shadowsCommand, renderCameraCommand, envCommand, volLightingCommand, opaqueCommand, transparentCommand;
@@ -23,11 +24,9 @@ public class MorrowindRenderPipeline : RenderPipeline
     private readonly ObjectRenderer transparentObjectRenderer;
 
     private Dictionary<Camera, int> cameraRenderedFrameCount = new();
-    private Dictionary<Camera, Matrix4x4> previousViewProjectionMatrices = new();
+    private Dictionary<Camera, (Matrix4x4, Matrix4x4)> previousViewProjectionMatrices = new();
 
-    //For camera motion vector
-    private Matrix4x4 _NonJitteredVP;
-    private Matrix4x4 _PreviousVP;
+    private Material motionVectorsMaterial;
 
     public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset)
     {
@@ -45,6 +44,8 @@ public class MorrowindRenderPipeline : RenderPipeline
         volumetricLighting = new();
         opaqueObjectRenderer = new(RenderQueueRange.opaque, SortingCriteria.CommonOpaque);
         transparentObjectRenderer = new(RenderQueueRange.transparent, SortingCriteria.CommonTransparent);
+
+        motionVectorsMaterial = new Material(Shader.Find("Hidden/Camera Motion Vectors"));
     }
 
     protected override void Dispose(bool disposing)
@@ -91,11 +92,28 @@ public class MorrowindRenderPipeline : RenderPipeline
             hasOpaqueOnlyEffects = postLayer.HasOpaqueOnlyEffects(postContext);
         }
 
-        if(postLayer.antialiasingMode == PostProcessLayer.Antialiasing.TemporalAntialiasing)
-        {
-            camera.ResetProjectionMatrix();
+
+        camera.ResetProjectionMatrix();
+        camera.nonJitteredProjectionMatrix = camera.projectionMatrix;
+
+        if (postLayer.antialiasingMode == PostProcessLayer.Antialiasing.TemporalAntialiasing)
             postLayer.temporalAntialiasing.ConfigureJitteredProjectionMatrix(postContext);
+
+        var nonJitteredViewProjectionMatrix = GL.GetGPUProjectionMatrix(camera.nonJitteredProjectionMatrix, true) * camera.worldToCameraMatrix;
+        var viewProjectionMatrix = GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix;
+
+        if (!previousViewProjectionMatrices.TryGetValue(camera, out var previousMatrices))
+        {
+            previousMatrices = (viewProjectionMatrix, nonJitteredViewProjectionMatrix);
+            previousViewProjectionMatrices.Add(camera, previousMatrices);
         }
+        else
+        {
+            previousViewProjectionMatrices[camera] = (viewProjectionMatrix, nonJitteredViewProjectionMatrix);
+        }
+
+        var previousViewProjectionMatrix = previousMatrices.Item1;
+        var previousNonJitteredViewProjectionMatrix = previousMatrices.Item2;
 
         BeginCameraRendering(context, camera);
 
@@ -127,18 +145,6 @@ public class MorrowindRenderPipeline : RenderPipeline
                 cameraRenderedFrameCount[camera] = ++frameCount;
         }
 
-        var viewProjectionMatrix = GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix;
-
-        if (!previousViewProjectionMatrices.TryGetValue(camera, out var previousViewProjectionMatrix))
-        {
-            previousViewProjectionMatrix = viewProjectionMatrix;
-            previousViewProjectionMatrices.Add(camera, previousViewProjectionMatrix);
-        }
-        else
-        {
-            previousViewProjectionMatrices[camera] = viewProjectionMatrix;
-        }
-
         // More camera setup
         var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(frameCount % 64));
         var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds.GetString(frameCount % 64));
@@ -146,6 +152,10 @@ public class MorrowindRenderPipeline : RenderPipeline
         renderCameraCommand.SetGlobalTexture("_BlueNoise2D", blueNoise2D);
         renderCameraCommand.SetGlobalMatrix("_PreviousViewProjectionMatrix", previousViewProjectionMatrix);
         renderCameraCommand.SetGlobalMatrix("_InvViewProjectionMatrix", viewProjectionMatrix.inverse);
+
+        renderCameraCommand.SetGlobalMatrix("_NonJitteredVP", nonJitteredViewProjectionMatrix);
+        renderCameraCommand.SetGlobalMatrix("_PreviousVP", previousNonJitteredViewProjectionMatrix);
+
         renderCameraCommand.SetGlobalInt("_FrameCount", frameCount);
 
         // Clustered light culling
@@ -175,9 +185,17 @@ public class MorrowindRenderPipeline : RenderPipeline
         renderCameraCommand.CopyTexture(cameraTargetId, sceneTextureId);
         renderCameraCommand.SetGlobalTexture(sceneTextureId, sceneTextureId);
 
-        renderCameraCommand.GetTemporaryRT(depthTextureId, camera.pixelWidth, camera.pixelHeight, 32, FilterMode.Point, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear);
+        renderCameraCommand.GetTemporaryRT(depthTextureId, camera.pixelWidth, camera.pixelHeight, 32, FilterMode.Point, RenderTextureFormat.Depth);
         renderCameraCommand.CopyTexture(cameraDepthId, depthTextureId);
         renderCameraCommand.SetGlobalTexture(depthTextureId, depthTextureId);
+
+        renderCameraCommand.SetGlobalTexture("_CameraDepthTexture", depthTextureId);
+
+        renderCameraCommand.GetTemporaryRT(motionVectorsId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Point, RenderTextureFormat.RGHalf);
+        renderCameraCommand.SetRenderTarget(motionVectorsId);
+        renderCameraCommand.DrawProcedural(Matrix4x4.identity, motionVectorsMaterial, 0, MeshTopology.Triangles, 3);
+
+        renderCameraCommand.SetGlobalTexture("_CameraMotionVectorsTexture", motionVectorsId);
 
         context.ExecuteCommandBuffer(renderCameraCommand);
         renderCameraCommand.Clear();
@@ -203,6 +221,8 @@ public class MorrowindRenderPipeline : RenderPipeline
             cmdpp.Release();
         }
 
+        renderCameraCommand.SetRenderTarget(cameraTargetId, new RenderTargetIdentifier(cameraDepthId));
+
         renderCameraCommand.BeginSample("Render Transparent");
         transparentObjectRenderer.Render(ref cullingResults, camera, renderCameraCommand, ref context);
         renderCameraCommand.EndSample("Render Transparent");
@@ -226,7 +246,15 @@ public class MorrowindRenderPipeline : RenderPipeline
             postContext.destination = BuiltinRenderTextureType.CameraTarget;
             postContext.command = cmdpp;
             postContext.flip = camera.targetTexture == null;
+
+            var isSceneCamera = camera.cameraType == CameraType.SceneView;
+            if (isSceneCamera)
+                camera.cameraType = CameraType.Game;
+
             postLayer.Render(postContext);
+
+            if (isSceneCamera)
+                camera.cameraType = CameraType.SceneView;
 
             context.ExecuteCommandBuffer(cmdpp);
             cmdpp.Release();

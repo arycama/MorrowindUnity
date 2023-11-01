@@ -5,6 +5,7 @@ Shader "Hidden/Internal-MotionVectors"
     SubShader
     {
         CGINCLUDE
+        #pragma enable_d3d11_debug_symbols
         #include "UnityCG.cginc"
 
         // Object rendering things
