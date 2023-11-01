@@ -12,7 +12,7 @@ public class LightingSetup
     private static readonly IndexedString cascadeStrings = new IndexedString("Cascade ");
     private static readonly IndexedString faceStrings = new IndexedString("Face ");
 
-    private readonly ShadowSettings settings; 
+    private readonly ShadowSettings settings;
 
     private ComputeBuffer directionalLightBuffer; // Can't be readonly as we resize if needed.
     private ComputeBuffer pointLightBuffer; // Can't be readonly as we resize if needed.
@@ -79,30 +79,6 @@ public class LightingSetup
             {
                 var lightRotation = visibleLight.localToWorldMatrix.rotation;
                 var lightToWorld = Matrix4x4.Rotate(lightRotation);
-                var worldToLight = lightToWorld.inverse;
-
-                {
-                    Vector3 minValue = Vector3.positiveInfinity, maxValue = Vector3.negativeInfinity;
-                    for (var z = 0; z < 2; z++)
-                    {
-                        for (var y = 0; y < 2; y++)
-                        {
-                            for (var x = 0; x < 2; x++)
-                            {
-                                var worldPoint = camera.ViewportToWorldPoint(new(x, y, z == 0 ? camera.nearClipPlane : camera.farClipPlane));
-                                var localPoint = worldToLight.MultiplyPoint3x4(worldPoint);
-                                minValue = Vector3.Min(minValue, localPoint);
-                                maxValue = Vector3.Max(maxValue, localPoint);
-                            }
-                        }
-                    }
-
-                    var viewCenter = 0.5f * (maxValue + minValue);
-                    var viewExtents = 0.5f * (maxValue - minValue);
-                    var worldCenter = lightToWorld * viewCenter;
-                   // lightToWorld = Matrix4x4.TRS(worldCenter, lightRotation, Vector3.one);
-                   // worldToLight = lightToWorld.inverse;
-                }
 
                 if (light.shadows != LightShadows.None && cullingResults.GetShadowCasterBounds(i, out var bounds))
                 {
@@ -114,29 +90,27 @@ public class LightingSetup
                         {
                             viewMatrix = lightToWorld.inverse;
 
-                            CalculateShadowBounds(camera, viewMatrix, j, out var currentMin, out var currentMax);
+                            var cascadeStart = j == 0 ? camera.nearClipPlane : (settings.ShadowDistance - camera.nearClipPlane) * settings.ShadowCascadeSplits[j - 1];
+                            var cascadeEnd = (j == settings.ShadowCascades - 1) ? settings.ShadowDistance : (settings.ShadowDistance - camera.nearClipPlane) * settings.ShadowCascadeSplits[j];
 
-                            // LSCSM: To avoid redundant overlap, calculate the start of the previous shadow cascade, and shrink the current cascade to avoid overlap
-                            if (settings.OverlapFix && j > 0)
+                            // Transform camera bounds to light space
+                            var minValue = Vector3.positiveInfinity;
+                            var maxValue = Vector3.negativeInfinity;
+                            for (var z = 0; z < 2; z++)
                             {
-                                CalculateShadowBounds(camera, viewMatrix, j - 1, out var previousMin, out var previousMax);
-
-                                // In degenerate cases, such as the camera looking directly down with the light directly above, the previous frustum may be entirely inside the new frustum
-                                // In this case, it's not possible to remove overlap as it would result in an 0 area cascade.
-                                if (previousMin.x < currentMin.x || previousMax.x > currentMax.x)
+                                for (var y = 0; y < 2; y++)
                                 {
-                                    currentMin.x = Mathf.Max(currentMin.x, previousMax.x);
-                                    currentMax.x = Mathf.Min(currentMax.x, previousMin.x);
-                                }
-
-                                if (previousMin.y < currentMin.y || previousMax.y > currentMax.y)
-                                {
-                                    currentMin.y = Mathf.Max(currentMin.y, previousMax.y);
-                                    currentMax.y = Mathf.Min(currentMax.y, previousMin.y);
+                                    for (var x = 0; x < 2; x++)
+                                    {
+                                        var worldPoint = camera.ViewportToWorldPoint(new(x, y, z == 0 ? cascadeStart : cascadeEnd));
+                                        var localPoint = viewMatrix.MultiplyPoint3x4(worldPoint);
+                                        minValue = Vector3.Min(minValue, localPoint);
+                                        maxValue = Vector3.Max(maxValue, localPoint);
+                                    }
                                 }
                             }
 
-                            projectionMatrix = Matrix4x4.Ortho(currentMin.x, currentMax.x, currentMin.y, currentMax.y, currentMin.z, currentMax.z);
+                            projectionMatrix = Matrix4x4.Ortho(minValue.x, maxValue.x, minValue.y, maxValue.y, minValue.z, maxValue.z);
                             viewMatrix.SetRow(2, -viewMatrix.GetRow(2));
 
                             // Calculate culling planes
@@ -176,27 +150,27 @@ public class LightingSetup
                             ListPool<Plane>.Release(cullingPlanes);
                         }
                         else if (!cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(i, j, settings.ShadowCascades, settings.ShadowCascadeSplits, settings.DirectionalShadowResolution, light.shadowNearPlane, out viewMatrix, out projectionMatrix, out shadowSplitData))
-                                continue;
+                            continue;
 
                         cascadeCount++;
                         var directionalShadowRequest = new ShadowRequest(true, i, viewMatrix, projectionMatrix, shadowSplitData, 0);
                         directionalShadowRequests.Add(directionalShadowRequest);
 
-                        var shadowMatrix = (projectionMatrix * viewMatrix * worldToLight.inverse).ConvertToAtlasMatrix();
+                        var shadowMatrix = (projectionMatrix * viewMatrix * lightToWorld).ConvertToAtlasMatrix();
                         directionalShadowMatrices.Add(shadowMatrix);
 
                         var width = projectionMatrix.OrthoWidth();
                         var height = projectionMatrix.OrthoHeight();
                         var near = projectionMatrix.OrthoNear();
                         var far = projectionMatrix.OrthoFar();
-                        directionalShadowTexelSizes.Add(new (width, height, near, far));
+                        directionalShadowTexelSizes.Add(new(width, height, near, far));
                     }
 
                     if (cascadeCount > 0)
                         shadowIndex = directionalShadowRequests.Count - cascadeCount;
                 }
 
-                var directionalLightData = new DirectionalLightData((Vector4)light.color.linear * light.intensity, shadowIndex, -light.transform.forward, cascadeCount, worldToLight);
+                var directionalLightData = new DirectionalLightData((Vector4)light.color.linear * light.intensity, shadowIndex, -light.transform.forward, cascadeCount, lightToWorld.inverse);
                 directionalLightList.Add(directionalLightData);
             }
             else if (visibleLight.lightType == LightType.Point)
@@ -363,28 +337,5 @@ public class LightingSetup
         commandBuffer.SetGlobalInt("_BlockerSamples", settings.BlockerSamples);
         commandBuffer.SetGlobalFloat("_BlockerRadius", settings.BlockerRadius);
         commandBuffer.SetGlobalFloat("_PcssSoftness", settings.PcssSoftness);
-    }
-
-    private void CalculateShadowBounds(Camera camera, Matrix4x4 viewMatrix, int j, out Vector3 minValue, out Vector3 maxValue)
-    {
-        var cascadeStart = j == 0 ? camera.nearClipPlane : (settings.ShadowDistance - camera.nearClipPlane) * settings.ShadowCascadeSplits[j - 1];
-        var cascadeEnd = (j == settings.ShadowCascades - 1) ? settings.ShadowDistance : (settings.ShadowDistance - camera.nearClipPlane) * settings.ShadowCascadeSplits[j];
-
-        // Transform camera bounds to light space
-        minValue = Vector3.positiveInfinity;
-        maxValue = Vector3.negativeInfinity;
-        for (var z = 0; z < 2; z++)
-        {
-            for (var y = 0; y < 2; y++)
-            {
-                for (var x = 0; x < 2; x++)
-                {
-                    var worldPoint = camera.ViewportToWorldPoint(new(x, y, z == 0 ? cascadeStart : cascadeEnd));
-                    var localPoint = viewMatrix.MultiplyPoint3x4(worldPoint);
-                    minValue = Vector3.Min(minValue, localPoint);
-                    maxValue = Vector3.Max(maxValue, localPoint);
-                }
-            }
-        }
     }
 }

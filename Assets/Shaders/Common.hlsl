@@ -233,7 +233,7 @@ float GetDeviceDepth(float normalizedDepth)
 	}
 }
 
-uint GetShadowCascade(uint lightIndex, float3 worldPosition, out float3 positionLS)
+uint GetShadowCascade(uint lightIndex, float3 lightPosition, out float3 positionLS)
 {
 	DirectionalLight light = _DirectionalLights[lightIndex];
 	
@@ -241,7 +241,7 @@ uint GetShadowCascade(uint lightIndex, float3 worldPosition, out float3 position
 	{
 		// find the first cascade which is not out of bounds
 		matrix shadowMatrix = _DirectionalMatrices[light.shadowIndex + j];
-		positionLS = MultiplyPoint3x4(shadowMatrix, worldPosition);
+		positionLS = MultiplyPoint3x4(shadowMatrix, lightPosition);
 		if (all(saturate(positionLS) == positionLS))
 			return j;
 	}
@@ -260,15 +260,7 @@ float GetShadow(float3 worldPosition, uint lightIndex)
 	
 	float2 jitter = _BlueNoise2D[uint2(positionCS.xy) % 128];
 	float3 lightPosition = MultiplyPoint3x4(light.worldToLight, worldPosition);
-	
-	//float3 shadowPosition;
-	//uint cascade = GetShadowCascade(lightIndex, lightPosition, shadowPosition);
-	//if(cascade == ~0u)
-	//	return 1.0;
-	
-	//return _DirectionalShadows.SampleCmpLevelZero(_PointClampCompareSampler, float3(shadowPosition.xy, light.shadowIndex + cascade), shadowPosition.z);
-	
-	
+
 	// PCS filtering
 	float occluderDepth = 0.0, occluderWeightSum = 0.0;
 	float goldenAngle = Pi * (3.0 - sqrt(5.0));
@@ -315,17 +307,42 @@ float GetShadow(float3 worldPosition, uint lightIndex)
 		uint cascade = GetShadowCascade(lightIndex, lightPosition + offset, shadowPosition);
 		if (cascade == ~0u)
 			continue;
-						
+		
 		float weight = 1.0 - r;
 		shadow += _DirectionalShadows.SampleCmpLevelZero(_LinearClampCompareSampler, float3(shadowPosition.xy, light.shadowIndex + cascade), shadowPosition.z) * weight;
 		weightSum += weight;
 	}
-				
-	return shadow / weightSum;
+	
+	return weightSum ? shadow / weightSum : 1.0;
 }
 
 float3 GetLighting(float3 normal, float3 worldPosition, bool isVolumetric = false)
 {
+	//DirectionalLight light = _DirectionalLights[0];
+	
+	//for (uint j = 0; j < min(4, light.cascadeCount); j++)
+	//{
+	//	// find the first cascade which is not out of bounds
+	//	matrix shadowMatrix = _DirectionalMatrices[light.shadowIndex + j];
+	//	float3 positionLS = MultiplyPoint3x4(shadowMatrix, MultiplyPoint3x4(light.worldToLight, worldPosition));
+	//	if (all(saturate(positionLS) == positionLS))
+	//	{
+	//		switch (j)
+	//		{
+	//			case 0:
+	//				return float3(1.0, 0.0, 0.0);
+	//			case 1:
+	//				return float3(0.0, 1.0, 0.0);
+	//			case 2:
+	//				return float3(0.0, 0.0, 1.0);
+	//			case 3:
+	//				return float3(1.0, 0.0, 1.0);
+	//		}
+	//	}
+	//}
+	
+	//return 1.0;
+	
 	// Directional lights
 	float3 lighting = 0.0;
 	for (uint i = 0; i < min(_DirectionalLightCount, 4); i++)
@@ -357,11 +374,7 @@ float3 GetLighting(float3 normal, float3 worldPosition, bool isVolumetric = fals
 		
 		float3 lightVector = light.position - worldPosition;
 		float sqrLightDist = dot(lightVector, lightVector);
-		float rcpLightDist = rsqrt(sqrLightDist);
-		float lightDist = rcpLightDist * sqrLightDist;
-		float3 L = lightVector * rcpLightDist;
-		
-		if(lightDist > light.range)
+		if (sqrLightDist > Sq(light.range))
 			continue;
 		
 		float shadow = 1.0;
@@ -373,11 +386,13 @@ float3 GetLighting(float3 normal, float3 worldPosition, bool isVolumetric = fals
 			shadow = _PointShadows.SampleCmpLevelZero(_LinearClampCompareSampler, float4(lightVector * float3(-1, 1, -1), light.shadowIndex), depth);
 		}
 		
-		if (shadow > 0.0)
-		{
-			float attenuation = saturate(Remap(light.range * rcp(3.0) * rcpLightDist, rcp(3.0)));
-			lighting += (isVolumetric ? 1.0 : saturate(dot(normal, L))) * light.color * attenuation * shadow;
-		}
+		if (!shadow)
+			continue;
+		
+		float rcpLightDist = rsqrt(sqrLightDist);
+		float attenuation = saturate(Remap(light.range * rcp(3.0) * rcpLightDist, rcp(3.0)));
+		float3 L = lightVector * rcpLightDist;
+		lighting += (isVolumetric ? 1.0 : saturate(dot(normal, L))) * light.color * attenuation * shadow;
 	}
 	
 	return lighting;

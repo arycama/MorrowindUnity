@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.PostProcessing;
 
 public class MorrowindRenderPipeline : RenderPipeline
 {
@@ -23,6 +24,10 @@ public class MorrowindRenderPipeline : RenderPipeline
 
     private Dictionary<Camera, int> cameraRenderedFrameCount = new();
     private Dictionary<Camera, Matrix4x4> previousViewProjectionMatrices = new();
+
+    //For camera motion vector
+    private Matrix4x4 _NonJitteredVP;
+    private Matrix4x4 _PreviousVP;
 
     public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset)
     {
@@ -72,6 +77,26 @@ public class MorrowindRenderPipeline : RenderPipeline
 
     private void RenderCamera(ScriptableRenderContext context, Camera camera)
     {
+        // SetUp Post-processing
+        PostProcessLayer postLayer = camera.GetComponent<PostProcessLayer>();
+        bool hasPostProcessing = postLayer != null;
+        bool usePostProcessing = false;
+        bool hasOpaqueOnlyEffects = false;
+        PostProcessRenderContext postContext = null;
+        if (hasPostProcessing)
+        {
+            postContext = new PostProcessRenderContext();
+            postContext.camera = camera;
+            usePostProcessing = postLayer.enabled;
+            hasOpaqueOnlyEffects = postLayer.HasOpaqueOnlyEffects(postContext);
+        }
+
+        if(postLayer.antialiasingMode == PostProcessLayer.Antialiasing.TemporalAntialiasing)
+        {
+            camera.ResetProjectionMatrix();
+            postLayer.temporalAntialiasing.ConfigureJitteredProjectionMatrix(postContext);
+        }
+
         BeginCameraRendering(context, camera);
 
         if (!camera.TryGetCullingParameters(out var cullingParameters))
@@ -154,15 +179,67 @@ public class MorrowindRenderPipeline : RenderPipeline
         renderCameraCommand.CopyTexture(cameraDepthId, depthTextureId);
         renderCameraCommand.SetGlobalTexture(depthTextureId, depthTextureId);
 
+        context.ExecuteCommandBuffer(renderCameraCommand);
+        renderCameraCommand.Clear();
+
+        // Opaque Post-processing
+        // Ambient Occlusion, Screen-spaced reflection are generally not supported for SRP
+        // So this part is only for custom opaque post-processing
+        if (usePostProcessing)
+        {
+            CommandBuffer cmdpp = new CommandBuffer();
+            cmdpp.name = "(" + camera.name + ")" + "Post-processing Opaque";
+
+            postContext.Reset();
+            postContext.camera = camera;
+            postContext.source = cameraTargetId;
+            postContext.sourceFormat = RenderTextureFormat.RGB111110Float;
+            postContext.destination = cameraTargetId;
+            postContext.command = cmdpp;
+            postContext.flip = camera.targetTexture == null;
+            postLayer.RenderOpaqueOnly(postContext);
+
+            context.ExecuteCommandBuffer(cmdpp);
+            cmdpp.Release();
+        }
+
         renderCameraCommand.BeginSample("Render Transparent");
         transparentObjectRenderer.Render(ref cullingResults, camera, renderCameraCommand, ref context);
         renderCameraCommand.EndSample("Render Transparent");
 
+        context.ExecuteCommandBuffer(renderCameraCommand);
+        renderCameraCommand.Clear();
+
+        //************************** Transparent Post-processing ************************************
+        //Bloom, Vignette, Grain, ColorGrading, LensDistortion, Chromatic Aberration, Auto Exposure
+        if (usePostProcessing)
+        {
+            CommandBuffer cmdpp = new CommandBuffer();
+            cmdpp.name = "(" + camera.name + ")" + "Post-processing Transparent";
+
+            cmdpp.SetGlobalTexture("_CameraDepthTexture", cameraDepthId);
+
+            postContext.Reset();
+            postContext.camera = camera;
+            postContext.source = cameraTargetId;
+            postContext.sourceFormat = RenderTextureFormat.RGB111110Float;
+            postContext.destination = BuiltinRenderTextureType.CameraTarget;
+            postContext.command = cmdpp;
+            postContext.flip = camera.targetTexture == null;
+            postLayer.Render(postContext);
+
+            context.ExecuteCommandBuffer(cmdpp);
+            cmdpp.Release();
+        }
+        else
+        {
+            // Copy final result
+            renderCameraCommand.Blit(cameraTargetId, BuiltinRenderTextureType.CameraTarget);
+        }
+
         renderCameraCommand.ReleaseTemporaryRT(sceneTextureId);
         renderCameraCommand.ReleaseTemporaryRT(depthTextureId);
-
-        // Copy final result
-        renderCameraCommand.Blit(cameraTargetId, BuiltinRenderTextureType.CameraTarget);
+       
         renderCameraCommand.ReleaseTemporaryRT(cameraTargetId);
         renderCameraCommand.ReleaseTemporaryRT(cameraDepthId);
 
@@ -180,21 +257,5 @@ public class MorrowindRenderPipeline : RenderPipeline
 
         if (camera.cameraType == CameraType.SceneView)
             ScriptableRenderContext.EmitWorldGeometryForSceneView(camera);
-    }
-}
-
-public static class GraphicsUtilities
-{
-    public static void SafeExpand(ref ComputeBuffer computeBuffer, int size = 1, int stride = sizeof(int), ComputeBufferType type = ComputeBufferType.Default)
-    {
-        size = Mathf.Max(size, 1);
-
-        if (computeBuffer == null || computeBuffer.count < size)
-        {
-            if (computeBuffer != null)
-                computeBuffer.Release();
-
-            computeBuffer = new ComputeBuffer(size, stride, type);
-        }
     }
 }

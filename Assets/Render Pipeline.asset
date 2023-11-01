@@ -13,12 +13,16 @@ MonoBehaviour:
   m_Name: Render Pipeline
   m_EditorClassIdentifier: 
   shadowSettings:
+    customShadowRendering: 1
+    includeCameraPlanes: 0
+    maxSpaceWasteTolerance: 0.291
+    resolutionTolerance: 0
     closeFit: 1
-    texelSnap: 1
-    shadowCascades: 4
-    shadowCascadeSplits: {x: 0.015625, y: 0.0625, z: 0.25}
-    shadowDistance: 8192
-    directionalShadowResolution: 1024
+    overlapFix: 1
+    shadowCascades: 1
+    shadowCascadeSplits: {x: 0.125, y: 0.25, z: 0.5}
+    shadowDistance: 4096
+    directionalShadowResolution: 4096
     shadowBias: 128
     shadowSlopeBias: 1
     pointShadowResolution: 256
@@ -26,7 +30,7 @@ MonoBehaviour:
     pcfRadius: 8
     blockerSamples: 8
     blockerRadius: 32
-    pcssSoftness: 16
+    pcssSoftness: 32
   clusteredLightingSettings:
     tileSize: 32
     clusterDepth: 64
@@ -34,4 +38,4 @@ MonoBehaviour:
   tileSize: 8
   depthSlices: 64
   blurSigma: 1
-  nonLinearDepth: 1
+  nonLinearDepth: 0
