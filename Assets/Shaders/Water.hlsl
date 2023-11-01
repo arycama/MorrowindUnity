@@ -38,7 +38,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 	float depth = _DepthTexture[input.position.xy];
 	float3 positionCS = float3(input.position.xy / _ScreenParams.xy * 2.0 - 1.0, depth);
 	positionCS.y = -positionCS.y;
-	float3 backgroundPositionWS = MultiplyPointProj(_InvViewProjectionMatrixFlipped, positionCS).xyz;
+	float3 backgroundPositionWS = MultiplyPointProj(_InvVPMatrix, positionCS).xyz;
 	
 	float difference = max(0.0, distance(backgroundPositionWS, input.worldPosition));
 	

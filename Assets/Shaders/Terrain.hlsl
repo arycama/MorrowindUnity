@@ -200,12 +200,7 @@ void hex2colTex(out float4 color, out float3 weights, Texture2D tex, SamplerStat
 void Fragment() { }
 #else
 float3 Fragment(FragmentInput input) : SV_Target
-{
-	float z = EyeToDeviceDepth(input.position.w);
-	float3 positionWS = PixelToWorld(float3(input.position.xy, z), false);
-	
-	//return frac(positionWS / 100);
-	
+{	
 	float4 terrainData = _Control.Gather(_PointClampSampler, input.uv.xy) * 255.0;
 	float4 weights = BilinearWeights(input.uv.xy, _Control_TexelSize.zw);
 	

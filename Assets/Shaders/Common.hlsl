@@ -39,7 +39,7 @@ TextureCubeArray<float> _PointShadows;
 float4 _Time, _ProjectionParams, _ZBufferParams, _ScreenParams;
 float3 _AmbientLightColor, _WorldSpaceCameraPos, _FogColor;
 float _BlockerRadius, _ClusterBias, _ClusterScale, _FogStartDistance, _FogEndDistance, _FogEnabled, _PcfRadius, _PcssSoftness, _VolumeWidth, _VolumeHeight, _VolumeSlices, _VolumeDepth, _NonLinearDepth;
-matrix _InvViewProjectionMatrix, _InvViewProjectionMatrixFlipped, _PreviousViewProjectionMatrix, _PreviousViewProjectionMatrixFlipped, unity_MatrixVP, _NonJitteredVP, _NonJitteredVPFlipped;
+matrix _InvVPMatrix, _PreviousVPMatrix, unity_MatrixVP, _NonJitteredVPMatrix;
 uint _BlockerSamples, _DirectionalLightCount, _FrameCount, _PcfSamples, _PointLightCount, _TileSize, unity_BaseInstanceID;
 
 const static float Pi = radians(180.0);
@@ -183,10 +183,10 @@ float EyeToDeviceDepth(float eyeDepth)
 	return (1.0 - eyeDepth * _ZBufferParams.w) * rcp(eyeDepth * _ZBufferParams.z);
 }
 
-float3 PixelToWorld(float3 position, bool flip)
+float3 PixelToWorld(float3 position)
 {
 	float3 positionNDC = float3(position.xy / _ScreenParams.xy * 2 - 1, position.z);
-	return MultiplyPointProj(flip ? _InvViewProjectionMatrixFlipped : _InvViewProjectionMatrix, positionNDC).xyz;
+	return MultiplyPointProj(_InvVPMatrix, positionNDC).xyz;
 }
 
 float Remap01ToHalfTexelCoord(float coord, float size)
