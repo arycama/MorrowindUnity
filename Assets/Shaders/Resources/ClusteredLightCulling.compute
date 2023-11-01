@@ -40,7 +40,7 @@ void ClusteredLighting(uint3 id : SV_DispatchThreadId, uint groupIndex : SV_Grou
 				positionSS.y = (id.y + y) * _TileSize;
 				positionSS.z = (1.0 - eyeDepth * _ZBufferParams.w) / (eyeDepth * _ZBufferParams.z);
                 
-				float3 positionWS = PixelToWorld(positionSS);
+				float3 positionWS = PixelToWorld(positionSS, true);
                 
 				if (x == 0 && y == 0 && z == 0)
 				{

@@ -25,7 +25,7 @@ struct PointLight
 Buffer<float4> _DirectionalShadowTexelSizes, _PointShadowTexelSizes;
 Buffer<uint> _LightClusterList;
 SamplerComparisonState _PointClampCompareSampler, _LinearClampCompareSampler;
-SamplerState _LinearClampSampler, _LinearRepeatSampler, _PointClampSampler;
+SamplerState _LinearClampSampler, _LinearRepeatSampler, _PointClampSampler, _TrilinearRepeatAniso16Sampler;
 StructuredBuffer<DirectionalLight> _DirectionalLights;
 StructuredBuffer<matrix> _DirectionalMatrices;
 StructuredBuffer<PointLight> _PointLights;
@@ -39,7 +39,7 @@ TextureCubeArray<float> _PointShadows;
 float4 _Time, _ProjectionParams, _ZBufferParams, _ScreenParams;
 float3 _AmbientLightColor, _WorldSpaceCameraPos, _FogColor;
 float _BlockerRadius, _ClusterBias, _ClusterScale, _FogStartDistance, _FogEndDistance, _FogEnabled, _PcfRadius, _PcssSoftness, _VolumeWidth, _VolumeHeight, _VolumeSlices, _VolumeDepth, _NonLinearDepth;
-matrix _InvViewProjectionMatrix, _PreviousViewProjectionMatrix, unity_MatrixVP;
+matrix _InvViewProjectionMatrix, _InvViewProjectionMatrixFlipped, _PreviousViewProjectionMatrix, _PreviousViewProjectionMatrixFlipped, unity_MatrixVP, _NonJitteredVP, _NonJitteredVPFlipped;
 uint _BlockerSamples, _DirectionalLightCount, _FrameCount, _PcfSamples, _PointLightCount, _TileSize, unity_BaseInstanceID;
 
 const static float Pi = radians(180.0);
@@ -183,10 +183,10 @@ float EyeToDeviceDepth(float eyeDepth)
 	return (1.0 - eyeDepth * _ZBufferParams.w) * rcp(eyeDepth * _ZBufferParams.z);
 }
 
-float3 PixelToWorld(float3 position)
+float3 PixelToWorld(float3 position, bool flip)
 {
 	float3 positionNDC = float3(position.xy / _ScreenParams.xy * 2 - 1, position.z);
-	return MultiplyPointProj(_InvViewProjectionMatrix, positionNDC).xyz;
+	return MultiplyPointProj(flip ? _InvViewProjectionMatrixFlipped : _InvViewProjectionMatrix, positionNDC).xyz;
 }
 
 float Remap01ToHalfTexelCoord(float coord, float size)

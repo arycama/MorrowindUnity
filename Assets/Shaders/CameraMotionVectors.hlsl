@@ -3,8 +3,6 @@
 //Texture2D<float> _UnityFBInput0;
 Texture2D<float> _CameraDepthTexture;
 
-matrix _NonJitteredVP, _PreviousVP;
-
 float4 GetFullScreenTriangleVertexPosition(uint vertexID)
 {
     // note: the triangle vertex position coordinates are x2 so the returned UV coordinates are in range -1, 1 on the screen.
@@ -26,8 +24,8 @@ float2 Fragment(float4 positionCS : SV_Position) : SV_Target
 {
 	//float depth = _UnityFBInput0[positionCS.xy];
 	float depth = _CameraDepthTexture[positionCS.xy];
-	float3 positionWS = PixelToWorld(float3(positionCS.xy, depth));
+	float3 positionWS = PixelToWorld(float3(positionCS.xy, depth), false);
 	float4 nonJitteredPositionCS = MultiplyPoint(_NonJitteredVP, positionWS);
-	float4 previousPositionCS = MultiplyPoint(_PreviousVP, positionWS);
+	float4 previousPositionCS = MultiplyPoint(_PreviousViewProjectionMatrix, positionWS);
 	return MotionVectorFragment(nonJitteredPositionCS, previousPositionCS);
 }

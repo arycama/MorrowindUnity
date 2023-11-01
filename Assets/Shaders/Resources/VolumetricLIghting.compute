@@ -20,7 +20,7 @@ void Compute(uint3 id : SV_DispatchThreadID)
 	positionCS.xy = (id.xy + 0.5) / float2(_VolumeWidth, _VolumeHeight) * 2.0 - 1.0;
 	positionCS.z = GetDeviceDepth((id.z + jitter) / _VolumeSlices);
 	
-	float3 positionWS = MultiplyPointProj(_InvViewProjectionMatrix, positionCS).xyz;
+	float3 positionWS = MultiplyPointProj(_InvViewProjectionMatrixFlipped, positionCS).xyz;
 	float3 lighting = _AmbientLightColor;
 	
 	float viewDistance = distance(positionWS, _WorldSpaceCameraPos);
@@ -40,9 +40,9 @@ void Compute(uint3 id : SV_DispatchThreadID)
 	float3 unjitteredPositionCS;
 	unjitteredPositionCS.xy = (id.xy + 0.5) / float2(_VolumeWidth, _VolumeHeight) * 2.0 - 1.0;
 	unjitteredPositionCS.z = GetDeviceDepth((id.z + 0.5) / _VolumeSlices);
-	float3 unjitteredPositionWS = MultiplyPointProj(_InvViewProjectionMatrix, unjitteredPositionCS).xyz;
+	float3 unjitteredPositionWS = MultiplyPointProj(_InvViewProjectionMatrixFlipped, unjitteredPositionCS).xyz;
 	
-	float4 prevPositionCS = MultiplyPointProj(_PreviousViewProjectionMatrix, unjitteredPositionWS);
+	float4 prevPositionCS = MultiplyPointProj(_PreviousViewProjectionMatrixFlipped, unjitteredPositionWS);
 	prevPositionCS.xy = 0.5 * prevPositionCS.xy + 0.5;
 	
 	float normalizedDepth = GetVolumetricUv(prevPositionCS.w);
@@ -96,13 +96,13 @@ void Accumulate(uint2 id : SV_DispatchThreadID)
 	float3 positionCS;
 	positionCS.xy = (id + 0.5) / float2(_VolumeWidth, _VolumeHeight) * 2.0 - 1.0;
 	positionCS.z = GetDeviceDepth(0.0);
-	float3 positionWS = MultiplyPointProj(_InvViewProjectionMatrix, positionCS).xyz;
+	float3 positionWS = MultiplyPointProj(_InvViewProjectionMatrixFlipped, positionCS).xyz;
 	
 	float4 result = float2(0.0, 1.0).xxxy;
 	for (uint i = 0; i < uint(_VolumeSlices); i++)
 	{
 		positionCS.z = GetDeviceDepth((i + 1.0) / _VolumeSlices);
-		float3 nextPositionWS = MultiplyPointProj(_InvViewProjectionMatrix, positionCS).xyz;
+		float3 nextPositionWS = MultiplyPointProj(_InvViewProjectionMatrixFlipped, positionCS).xyz;
 		float ds = distance(nextPositionWS, positionWS);
 		positionWS = nextPositionWS;
 		

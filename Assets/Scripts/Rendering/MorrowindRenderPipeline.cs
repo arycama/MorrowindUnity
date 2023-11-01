@@ -92,28 +92,26 @@ public class MorrowindRenderPipeline : RenderPipeline
             hasOpaqueOnlyEffects = postLayer.HasOpaqueOnlyEffects(postContext);
         }
 
-
         camera.ResetProjectionMatrix();
         camera.nonJitteredProjectionMatrix = camera.projectionMatrix;
 
         if (postLayer.antialiasingMode == PostProcessLayer.Antialiasing.TemporalAntialiasing)
             postLayer.temporalAntialiasing.ConfigureJitteredProjectionMatrix(postContext);
 
-        var nonJitteredViewProjectionMatrix = GL.GetGPUProjectionMatrix(camera.nonJitteredProjectionMatrix, true) * camera.worldToCameraMatrix;
-        var viewProjectionMatrix = GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix;
-
+        var nonJitteredViewProjectionMatrix = GL.GetGPUProjectionMatrix(camera.nonJitteredProjectionMatrix, false) * camera.worldToCameraMatrix;
+        var flippedNonJitteredViewProjectionMatrix = GL.GetGPUProjectionMatrix(camera.nonJitteredProjectionMatrix, true) * camera.worldToCameraMatrix;
         if (!previousViewProjectionMatrices.TryGetValue(camera, out var previousMatrices))
         {
-            previousMatrices = (viewProjectionMatrix, nonJitteredViewProjectionMatrix);
+            previousMatrices = (nonJitteredViewProjectionMatrix, flippedNonJitteredViewProjectionMatrix);
             previousViewProjectionMatrices.Add(camera, previousMatrices);
         }
         else
         {
-            previousViewProjectionMatrices[camera] = (viewProjectionMatrix, nonJitteredViewProjectionMatrix);
+            previousViewProjectionMatrices[camera] = (nonJitteredViewProjectionMatrix, flippedNonJitteredViewProjectionMatrix);
         }
 
-        var previousViewProjectionMatrix = previousMatrices.Item1;
-        var previousNonJitteredViewProjectionMatrix = previousMatrices.Item2;
+        var previousVpMatrix = previousMatrices.Item1;
+        var previousVpMatrixFlipped = previousMatrices.Item2;
 
         BeginCameraRendering(context, camera);
 
@@ -150,11 +148,12 @@ public class MorrowindRenderPipeline : RenderPipeline
         var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds.GetString(frameCount % 64));
         renderCameraCommand.SetGlobalTexture("_BlueNoise1D", blueNoise1D);
         renderCameraCommand.SetGlobalTexture("_BlueNoise2D", blueNoise2D);
-        renderCameraCommand.SetGlobalMatrix("_PreviousViewProjectionMatrix", previousViewProjectionMatrix);
-        renderCameraCommand.SetGlobalMatrix("_InvViewProjectionMatrix", viewProjectionMatrix.inverse);
-
         renderCameraCommand.SetGlobalMatrix("_NonJitteredVP", nonJitteredViewProjectionMatrix);
-        renderCameraCommand.SetGlobalMatrix("_PreviousVP", previousNonJitteredViewProjectionMatrix);
+        renderCameraCommand.SetGlobalMatrix("_NonJitteredVPFlipped", flippedNonJitteredViewProjectionMatrix);
+        renderCameraCommand.SetGlobalMatrix("_PreviousViewProjectionMatrix", previousVpMatrix);
+        renderCameraCommand.SetGlobalMatrix("_PreviousViewProjectionMatrixFlipped", previousVpMatrixFlipped);
+        renderCameraCommand.SetGlobalMatrix("_InvViewProjectionMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse);
+        renderCameraCommand.SetGlobalMatrix("_InvViewProjectionMatrixFlipped", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix).inverse);
 
         renderCameraCommand.SetGlobalInt("_FrameCount", frameCount);
 

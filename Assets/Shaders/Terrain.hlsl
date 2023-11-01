@@ -202,17 +202,17 @@ void Fragment() { }
 float3 Fragment(FragmentInput input) : SV_Target
 {
 	float z = EyeToDeviceDepth(input.position.w);
-	float3 positionWS = PixelToWorld(float3(input.position.xy, z));
+	float3 positionWS = PixelToWorld(float3(input.position.xy, z), false);
 	
 	//return frac(positionWS / 100);
 	
 	float4 terrainData = _Control.Gather(_PointClampSampler, input.uv.xy) * 255.0;
 	float4 weights = BilinearWeights(input.uv.xy, _Control_TexelSize.zw);
 	
-	float3 color = _MainTex.Sample(_LinearRepeatSampler, float3(input.uv.zw, terrainData.x)) * weights.x;
-	color += _MainTex.Sample(_LinearRepeatSampler, float3(input.uv.zw, terrainData.y)) * weights.y;
-	color += _MainTex.Sample(_LinearRepeatSampler, float3(input.uv.zw, terrainData.z)) * weights.z;
-	color += _MainTex.Sample(_LinearRepeatSampler, float3(input.uv.zw, terrainData.w)) * weights.w;
+	float3 color = _MainTex.Sample(_TrilinearRepeatAniso16Sampler, float3(input.uv.zw, terrainData.x)) * weights.x;
+	color += _MainTex.Sample(_TrilinearRepeatAniso16Sampler, float3(input.uv.zw, terrainData.y)) * weights.y;
+	color += _MainTex.Sample(_TrilinearRepeatAniso16Sampler, float3(input.uv.zw, terrainData.z)) * weights.z;
+	color += _MainTex.Sample(_TrilinearRepeatAniso16Sampler, float3(input.uv.zw, terrainData.w)) * weights.w;
 	
 	float3 normal = normalize(input.normal);
 	float3 lighting = GetLighting(normal, input.worldPosition);

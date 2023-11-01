@@ -70,7 +70,7 @@ FragmentInput Vertex(VertexInput input)
 #endif
 {
 	#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHABLEND_ON)
-		float4 color = _MainTex.Sample(_LinearRepeatSampler, input.uv);
+		float4 color = _MainTex.Sample(_TrilinearRepeatAniso16Sampler, input.uv);
 	#endif
 	
 	#if defined(UNITY_PASS_SHADOWCASTER) 
