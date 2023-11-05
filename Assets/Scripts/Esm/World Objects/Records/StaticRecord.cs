@@ -30,7 +30,8 @@ public class StaticRecord : CreatableRecord
         gameObject.GetComponentsInChildren(meshRenderers);
         foreach (var meshRenderer in meshRenderers)
         {
-           // meshRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
+            meshRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
+            meshRenderer.staticShadowCaster = true;
             //childGameObjects[i].gameObject.isStatic = true;
             //CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
         }

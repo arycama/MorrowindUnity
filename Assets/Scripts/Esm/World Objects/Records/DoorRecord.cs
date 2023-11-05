@@ -56,6 +56,7 @@ public class DoorRecord : CreatableRecord
             foreach (var meshRenderer in meshRenderers)
             {
                 meshRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
+				meshRenderer.staticShadowCaster = true;
                 //childGameObjects[i].gameObject.isStatic = true;
                 //CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
             }

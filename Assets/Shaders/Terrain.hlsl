@@ -25,7 +25,11 @@ struct FragmentInput
 
 Texture2DArray<float3> _MainTex;
 Texture2D<float> _Control;
-float4 _Control_ST, _MainTex_ST, _Control_TexelSize;
+
+cbuffer UnityPerMaterial
+{
+	float4 _Control_ST, _MainTex_ST, _Control_TexelSize;
+};
 
 FragmentInput Vertex(VertexInput input)
 {

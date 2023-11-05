@@ -42,11 +42,20 @@ float _BlockerRadius, _ClusterBias, _ClusterScale, _FogStartDistance, _FogEndDis
 matrix _InvVPMatrix, _PreviousVPMatrix, unity_MatrixVP, _NonJitteredVPMatrix;
 uint _BlockerSamples, _DirectionalLightCount, _FrameCount, _PcfSamples, _PointLightCount, _TileSize, unity_BaseInstanceID;
 
+bool _HasLastPositionData;
+bool _ForceNoMotion;
+float _MotionVectorDepthBias;
+
 const static float Pi = radians(180.0);
 
 cbuffer UnityPerDraw
 {
-	float4x4 unity_ObjectToWorld, unity_WorldToObject, unity_MatrixPreviousM, unity_MatrixPreviousMI;
+	float3x4 unity_ObjectToWorld, unity_WorldToObject;
+	float4 unity_LODFade; // x is the fade value ranging within [0,1]. y is x quantized into 16 levels
+	float4 unity_WorldTransformParams; // w is usually 1.0, or -1.0 for odd-negative scale transforms
+	
+	// Velocity
+	float3x4 unity_MatrixPreviousM, unity_MatrixPreviousMI;
 	
 	//X : Use last frame positions (right now skinned meshes are the only objects that use this
 	//Y : Force No Motion

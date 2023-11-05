@@ -39,9 +39,13 @@
 			};
 
 			sampler2D _MainTex, _FadeTexture;
-			float4 _MainTex_ST;
-			float4 _Color;
-			float _CloudSpeed, _TimeOfDay, _LerpFactor;
+
+			cbuffer UnityPerMaterial
+			{
+				float4 _MainTex_ST;
+				float4 _Color;
+				float _CloudSpeed, _TimeOfDay, _LerpFactor;
+			};
 			
 			v2f vert (appdata v)
 			{

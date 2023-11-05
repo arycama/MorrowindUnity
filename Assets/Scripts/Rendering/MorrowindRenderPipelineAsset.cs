@@ -5,6 +5,7 @@ using UnityEngine.Rendering;
 [CreateAssetMenu(menuName = "Morrowind Render Pipeline Asset")]
 public class MorrowindRenderPipelineAsset : RenderPipelineAsset
 {
+    [SerializeField] private bool enableSrpBatcher;
     [SerializeField] private ShadowSettings shadowSettings;
     [SerializeField] private ClusteredLightingSettings clusteredLightingSettings;
     [SerializeField] private TemporalAASettings temporalAASettings;
@@ -20,6 +21,7 @@ public class MorrowindRenderPipelineAsset : RenderPipelineAsset
     public float BlurSigma => blurSigma;
     public bool NonLinearDepth => nonLinearDepth;
 
+    public bool EnableSrpBatcher => enableSrpBatcher;
     public ShadowSettings ShadowSettings => shadowSettings;
     public ClusteredLightingSettings ClusteredLightingSettings => clusteredLightingSettings;
     public TemporalAASettings TemporalAASettings => temporalAASettings;

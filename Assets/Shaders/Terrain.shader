@@ -1,4 +1,4 @@
-Shader "Terrain"
+Shader"Terrain"
 {
 	Properties
 	{
@@ -8,6 +8,11 @@ Shader "Terrain"
 
 	SubShader
 	{
+		Tags
+		{
+			"Queue"="Geometry-100"
+		}
+
 		Pass
 		{
 			HLSLPROGRAM

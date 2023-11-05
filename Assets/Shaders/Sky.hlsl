@@ -14,9 +14,13 @@ struct FragmentInput
 };
 
 sampler2D _MainTex, _FadeTexture;
-float4 _MainTex_ST;
 float4 _SkyColor, unity_FogColor;
-float _CloudSpeed, _TimeOfDay, _LerpFactor, _Alpha;
+
+cbuffer UnityPerMaterial
+{
+	float4 _MainTex_ST;
+	float _CloudSpeed, _TimeOfDay, _LerpFactor, _Alpha;
+}
 
 FragmentInput Vertex(VertexInput input)
 {

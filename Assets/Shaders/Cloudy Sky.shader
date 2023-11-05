@@ -25,8 +25,12 @@
 			#pragma fragment frag
 
 			sampler2D _MainTex, _FadeTexture;
-			float4 _MainTex_ST, _Color;
-			float _HeightFactor, _CloudSpeed, _LerpFactor;
+
+			cbuffer UnityPerMaterial
+			{
+				float4 _MainTex_ST, _Color;
+				float _HeightFactor, _CloudSpeed, _LerpFactor;
+			};
 
 			#include "UnityCG.cginc"
 

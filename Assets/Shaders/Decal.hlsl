@@ -15,7 +15,11 @@ struct FragmentInput
 };
 
 Texture2D _MainTex;
-float4 _Color;
+
+cbuffer UnityPerMaterial
+{
+	float4 _Color;
+};
 
 FragmentInput Vertex(VertexInput input)
 {

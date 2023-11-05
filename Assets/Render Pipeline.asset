@@ -12,6 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fb3b5037eb3a80a459c23f054a097a1d, type: 3}
   m_Name: Render Pipeline
   m_EditorClassIdentifier: 
+  enableSrpBatcher: 1
   shadowSettings:
     customShadowRendering: 1
     includeCameraPlanes: 0
