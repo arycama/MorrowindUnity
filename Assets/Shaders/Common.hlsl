@@ -38,8 +38,9 @@ TextureCubeArray<float> _PointShadows;
 
 float4 _Time, _ProjectionParams, _ZBufferParams, _ScreenParams;
 float3 _AmbientLightColor, _WorldSpaceCameraPos, _FogColor;
+float2 _Jitter;
 float _BlockerRadius, _ClusterBias, _ClusterScale, _FogStartDistance, _FogEndDistance, _FogEnabled, _PcfRadius, _PcssSoftness, _VolumeWidth, _VolumeHeight, _VolumeSlices, _VolumeDepth, _NonLinearDepth;
-matrix _InvVPMatrix, _PreviousVPMatrix, unity_MatrixVP, _NonJitteredVPMatrix;
+matrix _InvVPMatrix, _PreviousVPMatrix, unity_MatrixVP, _NonJitteredVPMatrix, unity_MatrixV;
 uint _BlockerSamples, _DirectionalLightCount, _FrameCount, _PcfSamples, _PointLightCount, _TileSize, unity_BaseInstanceID;
 
 bool _HasLastPositionData;
@@ -507,6 +508,11 @@ float3 ApplyFog(float3 color, float3 worldPosition, float dither)
 	
 		return color * result.a + result.rgb;
 	#endif
+}
+
+float2 UnjitterTextureUV(float2 uv)
+{
+	return uv - ddx_fine(uv) * _Jitter.x - ddy_fine(uv) * _Jitter.y;
 }
 
 #endif

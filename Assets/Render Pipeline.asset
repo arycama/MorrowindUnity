@@ -15,22 +15,22 @@ MonoBehaviour:
   enableSrpBatcher: 1
   shadowSettings:
     customShadowRendering: 1
-    includeCameraPlanes: 0
+    includeCameraPlanes: 1
     maxSpaceWasteTolerance: 0.291
     resolutionTolerance: 0
     closeFit: 1
     overlapFix: 1
-    shadowCascades: 1
-    shadowCascadeSplits: {x: 0.125, y: 0.25, z: 0.5}
-    shadowDistance: 4096
-    directionalShadowResolution: 4096
+    shadowCascades: 4
+    shadowCascadeSplits: {x: 0.037037034, y: 0.1111111, z: 0.33333334}
+    shadowDistance: 8192
+    directionalShadowResolution: 2048
     shadowBias: 128
     shadowSlopeBias: 1
     pointShadowResolution: 256
-    pcfSamples: 8
-    pcfRadius: 8
+    pcfSamples: 4
+    pcfRadius: 1
     blockerSamples: 8
-    blockerRadius: 32
+    blockerRadius: 8
     pcssSoftness: 32
   clusteredLightingSettings:
     tileSize: 32

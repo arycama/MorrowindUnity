@@ -120,7 +120,7 @@ public class MorrowindRenderPipeline : RenderPipeline
         }
 
         camera.ResetProjectionMatrix();
-        temporalAA.OnPreRender(camera, frameCount);
+        temporalAA.OnPreRender(camera, frameCount, command);
 
         if (!previousMatrices.TryGetValue(camera, out var previousMatrix))
         {
@@ -171,12 +171,12 @@ public class MorrowindRenderPipeline : RenderPipeline
         context.ExecuteCommandBuffer(command);
         command.Clear();
 
-        var attachmentDescriptors = new NativeArray<AttachmentDescriptor>(3, Allocator.Temp);
-        attachmentDescriptors[0] = new AttachmentDescriptor(RenderTextureFormat.Depth) { loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraDepthId }; 
-        attachmentDescriptors[1] = new AttachmentDescriptor(RenderTextureFormat.RGB111110Float) { clearColor = RenderSettings.fogColor.linear, loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraTargetId };
-        attachmentDescriptors[2] = new AttachmentDescriptor(RenderTextureFormat.RGHalf) { clearColor = Color.clear, loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = motionVectorsId };
+        var opaqueAttachmentDescriptors = new NativeArray<AttachmentDescriptor>(3, Allocator.Temp);
+        opaqueAttachmentDescriptors[0] = new AttachmentDescriptor(RenderTextureFormat.Depth) { loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraDepthId }; 
+        opaqueAttachmentDescriptors[1] = new AttachmentDescriptor(RenderTextureFormat.RGB111110Float) { clearColor = RenderSettings.fogColor.linear, loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraTargetId };
+        opaqueAttachmentDescriptors[2] = new AttachmentDescriptor(RenderTextureFormat.RGHalf) { clearColor = Color.clear, loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = motionVectorsId };
 
-        context.BeginRenderPass(camera.pixelWidth, camera.pixelHeight, 1, attachmentDescriptors, 0);
+        context.BeginRenderPass(camera.pixelWidth, camera.pixelHeight, 1, opaqueAttachmentDescriptors, 0);
 
         // Base pass
         var opauqePassColors = new NativeArray<int>(1, Allocator.Temp);
@@ -211,19 +211,27 @@ public class MorrowindRenderPipeline : RenderPipeline
         context.ExecuteCommandBuffer(command);
         command.Clear();
         context.EndSubPass();
+        context.EndRenderPass();
 
         // Copy scene texture
         command.GetTemporaryRT(sceneTextureId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Bilinear, RenderTextureFormat.RGB111110Float);
         command.CopyTexture(cameraTargetId, sceneTextureId);
         command.SetGlobalTexture(sceneTextureId, sceneTextureId);
 
+        command.SetGlobalTexture(cameraDepthId, cameraDepthId);
+        context.ExecuteCommandBuffer(command);
+        command.Clear();
+
+        var transparentAttachmentDescriptors = new NativeArray<AttachmentDescriptor>(2, Allocator.Temp);
+        transparentAttachmentDescriptors[0] = new AttachmentDescriptor(RenderTextureFormat.Depth) { loadAction = RenderBufferLoadAction.Load, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraDepthId };
+        transparentAttachmentDescriptors[1] = new AttachmentDescriptor(RenderTextureFormat.RGB111110Float) { loadAction = RenderBufferLoadAction.Load, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraTargetId };
+
+        context.BeginRenderPass(camera.pixelWidth, camera.pixelHeight, 1, transparentAttachmentDescriptors, 0);
+
         var transparentPassColors = new NativeArray<int>(1, Allocator.Temp);
         transparentPassColors[0] = 1;
 
-        var transparentPassInputs = new NativeArray<int>(1, Allocator.Temp);
-        transparentPassInputs[0] = 0;
-
-        context.BeginSubPass(transparentPassColors, transparentPassInputs, true);
+        context.BeginSubPass(transparentPassColors, true);
         transparentObjectRenderer.Render(ref cullingResults, camera, command, ref context);
         context.EndSubPass();
 

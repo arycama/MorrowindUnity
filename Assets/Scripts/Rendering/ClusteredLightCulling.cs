@@ -21,6 +21,7 @@ public class ClusteredLightCulling
 
     public void Release()
     {
+        lightList.Release();
         counterBuffer.Release();
     }
 

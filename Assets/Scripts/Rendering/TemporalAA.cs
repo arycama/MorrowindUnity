@@ -20,35 +20,23 @@ public class TemporalAA
         textureCache.Dispose();
     }
 
-    private Vector2 jitter;
+    private Vector4 jitter;
 
-    public void OnPreRender(Camera camera, int frameCount)
+    public void OnPreRender(Camera camera, int frameCount, CommandBuffer command)
     {
         camera.nonJitteredProjectionMatrix = GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix;
 
         var sampleIndex = frameCount % settings.SampleCount;
-
-        // The variance between 0 and the actual halton sequence values reveals noticeable instability
-        // in Unity's shadow maps, so we avoid index 0.
-        jitter = new Vector2(Halton((sampleIndex & 1023) + 1, 2) - 0.5f, Halton((sampleIndex & 1023) + 1, 3) - 0.5f);
+        jitter.x = Halton(sampleIndex, 2) - 0.5f;
+        jitter.y = Halton(sampleIndex, 3) - 0.5f;
         jitter *= settings.JitterSpread;
 
-        float near = camera.nearClipPlane;
-        float far = camera.farClipPlane;
-
-        float vertical = Mathf.Tan(0.5f * Mathf.Deg2Rad * camera.fieldOfView) * near;
-        float horizontal = vertical * camera.aspect;
-
-        var offset = jitter;
-        offset.x *= horizontal / (0.5f * camera.pixelWidth);
-        offset.y *= vertical / (0.5f * camera.pixelHeight);
-
         var matrix = camera.projectionMatrix;
-        matrix[0, 2] += offset.x / horizontal;
-        matrix[1, 2] += offset.y / vertical;
+        matrix[0, 2] = 2.0f * jitter.x / camera.pixelWidth;
+        matrix[1, 2] = 2.0f * jitter.y / camera.pixelHeight;
         camera.projectionMatrix = matrix;
 
-        jitter = new Vector2(jitter.x / camera.pixelWidth, jitter.y / camera.pixelHeight);
+        command.SetGlobalVector("_Jitter", jitter);
     }
 
     public RenderTargetIdentifier Render(Camera camera, CommandBuffer command, int frameCount, RenderTargetIdentifier input, RenderTargetIdentifier motion, RenderTargetIdentifier depth)
@@ -56,7 +44,6 @@ public class TemporalAA
         var descriptor = new RenderTextureDescriptor(camera.pixelWidth, camera.pixelHeight, RenderTextureFormat.RGB111110Float);
         textureCache.GetTexture(camera, descriptor, out var current, out var previous, frameCount);
 
-        propertyBlock.SetVector("_Jitter", jitter);
         propertyBlock.SetFloat("_Sharpness", settings.Sharpness);
 
         const float kMotionAmplification = 100f * 60f;

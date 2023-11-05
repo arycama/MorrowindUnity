@@ -42,7 +42,11 @@ struct FragmentInput
 struct FragmentOutput
 {
 	#ifndef UNITY_PASS_SHADOWCASTER
-		float4 color : SV_Target0;
+		#ifdef _ALPHABLEND_ON
+			float4 color : SV_Target0;
+		#else
+			float3 color : SV_Target0;
+		#endif
 	#endif
 	
 	#ifdef MOTION_VECTORS_ON
@@ -88,6 +92,10 @@ FragmentOutput Fragment(FragmentInput input)
 {
 	FragmentOutput output;
 	
+	#if !defined(UNITY_PASS_SHADOWCASTER)
+		input.uv = UnjitterTextureUV(input.uv);
+	#endif
+	
 	#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHATEST_ON) || defined(_ALPHABLEND_ON)
 	float4 color = _MainTex.Sample(_TrilinearRepeatAniso16Sampler, input.uv);
 	#endif
@@ -98,9 +106,9 @@ FragmentOutput Fragment(FragmentInput input)
 	
 	#if defined(UNITY_PASS_SHADOWCASTER) 
 		#ifdef _ALPHABLEND_ON
-			clip(color.a - 0.5);
+			//clip(color.a - 0.5);
 			//clip(color.a - InterleavedGradientNoise(input.position.xy, 0));
-			//clip(color.a - _BlueNoise1D[uint2(input.position.xy) % 128]);
+			clip(color.a - _BlueNoise1D[uint2(input.position.xy) % 128]);
 		#endif
 	#else
 		float3 normal = normalize(input.normal);
