@@ -26,6 +26,8 @@
 	{
 		Pass
 		{
+			Name "Base Pass"
+
 			Blend [_SrcBlend] [_DstBlend]
 			ZTest [_ZTest]
 			ZWrite [_ZWrite]
@@ -45,6 +47,34 @@
 
 		Pass
 		{
+			Name "Motion Vectors"
+            Tags { "LightMode" = "MotionVectors" }
+
+			Stencil
+            {
+                Ref 1
+                Pass Replace
+            }
+
+			HLSLPROGRAM
+			#pragma vertex Vertex
+			#pragma fragment Fragment
+			#pragma target 5.0
+
+			#pragma enable_d3d11_debug_symbols
+			#pragma multi_compile_instancing
+			#pragma multi_compile _ _ALPHATEST_ON
+
+			#define MOTION_VECTORS_ON
+
+			#include "Surface.hlsl"
+			ENDHLSL
+		}
+
+		Pass
+		{
+			Name "Shadow Caster"
+
 			Colormask 0
 			ZClip[_ZClip]
 

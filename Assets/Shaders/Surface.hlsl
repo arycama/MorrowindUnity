@@ -9,6 +9,10 @@ struct VertexInput
 		float2 uv : TEXCOORD;
 	#endif
 	
+	#ifdef MOTION_VECTORS_ON
+		float3 previousPosition : TEXCOORD4;
+	#endif
+	
 	#ifndef UNITY_PASS_SHADOWCASTER
 		float3 normal : NORMAL;
 		float3 color : COLOR;
@@ -19,7 +23,7 @@ struct FragmentInput
 {
 	float4 position : SV_Position;
 	
-	#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHABLEND_ON)
+#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHABLEND_ON)
 		float2 uv : TEXCOORD;
 	#endif
 	
@@ -27,6 +31,22 @@ struct FragmentInput
 		float3 worldPosition : POSITION1;
 		float3 normal : NORMAL;
 		float3 color : COLOR;
+	#endif
+	
+	#ifdef MOTION_VECTORS_ON
+		float4 nonJitteredPositionCS : POSITION2;
+		float4 previousPositionCS : POSITION3;
+	#endif
+};
+
+struct FragmentOutput
+{
+	#ifndef UNITY_PASS_SHADOWCASTER
+		float4 color : SV_Target0;
+	#endif
+	
+	#ifdef MOTION_VECTORS_ON
+		float2 velocity : SV_Target1;
 	#endif
 };
 
@@ -56,19 +76,18 @@ FragmentInput Vertex(VertexInput input)
 		output.color = _AmbientLightColor * input.color + _EmissionColor;
 	#endif
 	
+	#ifdef MOTION_VECTORS_ON
+		output.nonJitteredPositionCS = WorldToClipNonJittered(worldPosition);
+		output.previousPositionCS = WorldToClipPrevious(unity_MotionVectorsParams.x ? input.previousPosition : input.position);
+	#endif
+	
 	return output;
 }
 
-#ifdef UNITY_PASS_SHADOWCASTER
-	#ifdef _ALPHABLEND_ON
-		void Fragment(FragmentInput input)
-	#else
-		void Fragment()
-	#endif
-#else
-	float4 Fragment(FragmentInput input) : SV_Target
-#endif
+FragmentOutput Fragment(FragmentInput input)
 {
+	FragmentOutput output;
+	
 	#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHABLEND_ON)
 		float4 color = _MainTex.Sample(_TrilinearRepeatAniso16Sampler, input.uv);
 	#endif
@@ -86,7 +105,12 @@ FragmentInput Vertex(VertexInput input)
 		lighting += input.color;
 		color.rgb *= lighting;
 		color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
+		output.color = color;
 	
-		return color;
+		#ifdef MOTION_VECTORS_ON
+			output.velocity = unity_MotionVectorsParams.y ? MotionVectorFragment(input.nonJitteredPositionCS, input.previousPositionCS) : 0.0;
+		#endif
 	#endif
+	
+	return output;
 }

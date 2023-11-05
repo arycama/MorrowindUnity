@@ -20,16 +20,13 @@ float2 Fragment(float4 positionCS : SV_Position) : SV_Target
 	//float depth = _UnityFBInput0[positionCS.xy];
 	float depth = _CameraDepthTexture[positionCS.xy];
 	
+	// Flip due to matrix stupidity
 	float3 positionNDC = float3(positionCS.xy / _ScreenParams.xy * 2 - 1, depth);
 	positionNDC.y = -positionNDC.y;
 	
 	float3 positionWS = MultiplyPointProj(_InvVPMatrix, positionNDC).xyz;
 	
 	float4 nonJitteredPositionCS = MultiplyPoint(_NonJitteredVPMatrix, positionWS);
-	nonJitteredPositionCS.y = -nonJitteredPositionCS.y;
-	
 	float4 previousPositionCS = MultiplyPoint(_PreviousVPMatrix, positionWS);
-	previousPositionCS.y = -previousPositionCS.y;
-	
-	return (PerspectiveDivide(nonJitteredPositionCS).xy * 0.5 + 0.5) - (PerspectiveDivide(previousPositionCS).xy * 0.5 + 0.5);
+	return MotionVectorFragment(nonJitteredPositionCS, previousPositionCS);
 }

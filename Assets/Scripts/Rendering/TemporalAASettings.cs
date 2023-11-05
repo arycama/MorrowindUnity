@@ -4,19 +4,19 @@ using UnityEngine;
 [Serializable]
 public class TemporalAASettings
 {
-    [Range(1, 32)]
+    [SerializeField, Range(1, 32)]
     private int sampleCount = 8;
 
-    [Range(0.1f, 1f), Tooltip("The diameter (in texels) inside which jitter samples are spread. Smaller values result in crisper but more aliased output, while larger values result in more stable, but blurrier, output.")]
+    [SerializeField, Range(0.0f, 1f), Tooltip("The diameter (in texels) inside which jitter samples are spread. Smaller values result in crisper but more aliased output, while larger values result in more stable, but blurrier, output.")]
     private float jitterSpread = 0.75f;
 
-    [Range(0f, 3f), Tooltip("Controls the amount of sharpening applied to the color buffer. High values may introduce dark-border artifacts.")]
+    [SerializeField, Range(0f, 3f), Tooltip("Controls the amount of sharpening applied to the color buffer. High values may introduce dark-border artifacts.")]
     private float sharpness = 0.25f;
 
-    [Range(0f, 0.99f), Tooltip("The blend coefficient for a stationary fragment. Controls the percentage of history sample blended into the final color.")]
+    [SerializeField, Range(0f, 0.99f), Tooltip("The blend coefficient for a stationary fragment. Controls the percentage of history sample blended into the final color.")]
     private float stationaryBlending = 0.95f;
 
-    [Range(0f, 0.99f), Tooltip("The blend coefficient for a fragment with significant motion. Controls the percentage of history sample blended into the final color.")]
+    [SerializeField, Range(0f, 0.99f), Tooltip("The blend coefficient for a fragment with significant motion. Controls the percentage of history sample blended into the final color.")]
     private float motionBlending = 0.85f;
 
     public int SampleCount => sampleCount;

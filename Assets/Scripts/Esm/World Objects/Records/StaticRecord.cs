@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.Pool;
 
 public class StaticRecord : CreatableRecord
 {
@@ -25,14 +26,16 @@ public class StaticRecord : CreatableRecord
 	{
 		var gameObject = base.CreateGameObject(referenceData, parent);
 
-		//var childGameObjects = gameObject.GetComponentsInChildren<MeshFilter>();
-		//var length = childGameObjects.Length;
-		//for(var i = 0; i < length; i++)
-		//{
-			//childGameObjects[i].gameObject.isStatic = true;
-			//CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
-		//}
+        var meshRenderers = ListPool<MeshRenderer>.Get();
+        gameObject.GetComponentsInChildren(meshRenderers);
+        foreach (var meshRenderer in meshRenderers)
+        {
+           // meshRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
+            //childGameObjects[i].gameObject.isStatic = true;
+            //CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
+        }
+        ListPool<MeshRenderer>.Release(meshRenderers);
 
-		return gameObject;
+        return gameObject;
 	}
 }

@@ -46,7 +46,12 @@ const static float Pi = radians(180.0);
 
 cbuffer UnityPerDraw
 {
-	float3x4 unity_ObjectToWorld, unity_WorldToObject, unity_MatrixPreviousM, unity_MatrixPreviousMI;
+	float4x4 unity_ObjectToWorld, unity_WorldToObject, unity_MatrixPreviousM, unity_MatrixPreviousMI;
+	
+	//X : Use last frame positions (right now skinned meshes are the only objects that use this
+	//Y : Force No Motion
+	//Z : Z bias value
+	//W : Camera only
 	float4 unity_MotionVectorsParams;
 };
 
@@ -187,6 +192,18 @@ float3 PixelToWorld(float3 position)
 {
 	float3 positionNDC = float3(position.xy / _ScreenParams.xy * 2 - 1, position.z);
 	return MultiplyPointProj(_InvVPMatrix, positionNDC).xyz;
+}
+
+float4 WorldToClipNonJittered(float3 position) { return MultiplyPoint(_NonJitteredVPMatrix, position); }
+float4 WorldToClipPrevious(float3 position) { return MultiplyPoint(_PreviousVPMatrix, position); }
+
+float2 MotionVectorFragment(float4 nonJitteredPositionCS, float4 previousPositionCS)
+{
+	// Flip due to matrix stupidity
+	nonJitteredPositionCS.y = -nonJitteredPositionCS.y;
+	previousPositionCS.y = -previousPositionCS.y;
+	
+	return (PerspectiveDivide(nonJitteredPositionCS).xy * 0.5 + 0.5) - (PerspectiveDivide(previousPositionCS).xy * 0.5 + 0.5);
 }
 
 float Remap01ToHalfTexelCoord(float coord, float size)
@@ -389,8 +406,17 @@ float3 GetLighting(float3 normal, float3 worldPosition, bool isVolumetric = fals
 		if (!shadow)
 			continue;
 		
+		//sqrLightDist = max(Sq(0.01), sqrLightDist);
 		float rcpLightDist = rsqrt(sqrLightDist);
-		float attenuation = saturate(Remap(light.range * rcp(3.0) * rcpLightDist, rcp(3.0)));
+		
+		#if 0
+			// Realistic soft inverse square falloff
+			float attenuation = rcpLightDist * Sq(saturate(1.0 - Sq(sqrLightDist / Sq(light.range))));
+		#else
+			// Legacy falloff, matches original game better
+			float attenuation = Remap(light.range * rcp(3.0) * rcpLightDist, rcp(3.0));
+		#endif
+		
 		float3 L = lightVector * rcpLightDist;
 		lighting += (isVolumetric ? 1.0 : saturate(dot(normal, L))) * light.color * attenuation * shadow;
 	}

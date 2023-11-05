@@ -35,6 +35,12 @@ MonoBehaviour:
     tileSize: 32
     clusterDepth: 64
     maxLightsPerTile: 32
+  temporalAASettings:
+    sampleCount: 16
+    jitterSpread: 1
+    sharpness: 0.25
+    stationaryBlending: 0.95
+    motionBlending: 0.85
   tileSize: 8
   depthSlices: 64
   blurSigma: 1

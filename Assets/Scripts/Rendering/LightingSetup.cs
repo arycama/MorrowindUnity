@@ -67,6 +67,9 @@ public class LightingSetup
         var pointShadowRequests = ListPool<ShadowRequest>.Get();
         var pointShadowTexelSizes = ListPool<Vector4>.Get();
 
+        var cameraProjectionMatrix = camera.projectionMatrix;
+        camera.ResetProjectionMatrix();
+
         // Setup lights/shadows
         for (var i = 0; i < cullingResults.visibleLights.Length; i++)
         {
@@ -211,6 +214,8 @@ public class LightingSetup
                 pointLightList.Add(pointLightData);
             }
         }
+
+        camera.projectionMatrix = cameraProjectionMatrix;
 
         // Render Shadows
         commandBuffer.SetGlobalDepthBias(settings.ShadowBias, settings.ShadowSlopeBias);

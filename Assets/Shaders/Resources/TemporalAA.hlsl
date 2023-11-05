@@ -102,5 +102,6 @@ float3 Fragment(float4 positionCS : SV_Position) : SV_Target
     color = lerp(color, history, weight);
     color = clamp(color, 0.0, HALF_MAX_MINUS1);
 
+	//return _Input[positionCS.xy];
 	return color;
 }

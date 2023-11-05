@@ -20,6 +20,7 @@ public class MorrowindRenderPipeline : RenderPipeline
     private readonly VolumetricLighting volumetricLighting;
     private readonly EnvironmentSettings environmentSettings;
     private readonly ObjectRenderer opaqueObjectRenderer;
+    private readonly ObjectRenderer motionVectorsRenderer;
     private readonly ObjectRenderer transparentObjectRenderer;
     private readonly TemporalAA temporalAA;
 
@@ -42,11 +43,43 @@ public class MorrowindRenderPipeline : RenderPipeline
         clusteredLightCulling = new(renderPipelineAsset.ClusteredLightingSettings);
         environmentSettings = new();
         volumetricLighting = new();
-        opaqueObjectRenderer = new(RenderQueueRange.opaque, SortingCriteria.CommonOpaque);
-        transparentObjectRenderer = new(RenderQueueRange.transparent, SortingCriteria.CommonTransparent);
+        opaqueObjectRenderer = new(RenderQueueRange.opaque, SortingCriteria.CommonOpaque, true, PerObjectData.None, "SRPDefaultUnlit");
+        motionVectorsRenderer = new(RenderQueueRange.opaque, SortingCriteria.CommonOpaque, false, PerObjectData.MotionVectors, "MotionVectors");
+        transparentObjectRenderer = new(RenderQueueRange.transparent, SortingCriteria.CommonTransparent, false, PerObjectData.None, "SRPDefaultUnlit");
         temporalAA = new(renderPipelineAsset.TemporalAASettings);
 
         motionVectorsMaterial = new Material(Shader.Find("Hidden/Camera Motion Vectors"));
+
+        SupportedRenderingFeatures.active = new SupportedRenderingFeatures()
+        {
+            defaultMixedLightingModes = SupportedRenderingFeatures.LightmapMixedBakeModes.None,
+            editableMaterialRenderQueue = false,
+            enlighten = false,
+            lightmapBakeTypes = LightmapBakeType.Realtime,
+            lightmapsModes = LightmapsMode.NonDirectional,
+            lightProbeProxyVolumes = false,
+            mixedLightingModes = SupportedRenderingFeatures.LightmapMixedBakeModes.None,
+            motionVectors = true,
+            overridesEnvironmentLighting = false,
+            overridesFog = false,
+            overrideShadowmaskMessage = null,
+            overridesLODBias = false,
+            overridesMaximumLODLevel = false,
+            overridesOtherLightingSettings = true,
+            overridesRealtimeReflectionProbes = true,
+            overridesShadowmask = true,
+            particleSystemInstancing = true,
+            receiveShadows = true,
+            reflectionProbeModes = SupportedRenderingFeatures.ReflectionProbeModes.None,
+            reflectionProbes = false,
+            rendererPriority = false,
+            rendererProbes = false,
+            rendersUIOverlay = false,
+            autoAmbientProbeBaking = false,
+            autoDefaultReflectionProbeBaking = false,
+            enlightenLightmapper = false,
+            reflectionProbesBlendDistance = false,
+        };
     }
 
     protected override void Dispose(bool disposing)
@@ -80,6 +113,8 @@ public class MorrowindRenderPipeline : RenderPipeline
 
     private void RenderCamera(ScriptableRenderContext context, Camera camera)
     {
+        camera.depthTextureMode = DepthTextureMode.MotionVectors;
+
         // Use a seperate frame count per camera, which we manually track
         if (!cameraRenderedFrameCount.TryGetValue(camera, out var frameCount))
             cameraRenderedFrameCount.Add(camera, 0);
@@ -149,13 +184,29 @@ public class MorrowindRenderPipeline : RenderPipeline
         volLightingCommand.Clear();
 
         renderCameraCommand.GetTemporaryRT(cameraTargetId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Bilinear, RenderTextureFormat.RGB111110Float);
-        renderCameraCommand.GetTemporaryRT(cameraDepthId, camera.pixelWidth, camera.pixelHeight, 24, FilterMode.Point, RenderTextureFormat.Depth);
+        renderCameraCommand.GetTemporaryRT(cameraDepthId, camera.pixelWidth, camera.pixelHeight, 32, FilterMode.Point, RenderTextureFormat.Depth);
         renderCameraCommand.SetRenderTarget(cameraTargetId, new RenderTargetIdentifier(cameraDepthId));
         renderCameraCommand.ClearRenderTarget(true, true, RenderSettings.fogColor.linear);
 
         renderCameraCommand.BeginSample("Render Opaque");
         opaqueObjectRenderer.Render(ref cullingResults, camera, renderCameraCommand, ref context);
         renderCameraCommand.EndSample("Render Opaque");
+
+        renderCameraCommand.GetTemporaryRT(motionVectorsId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Point, RenderTextureFormat.RGHalf);
+
+        var motionRenderTargets = new RenderTargetIdentifier[2] { cameraTargetId, motionVectorsId };
+        renderCameraCommand.SetRenderTarget(motionRenderTargets, new RenderTargetIdentifier(cameraDepthId));
+
+        renderCameraCommand.BeginSample("Render Motion Vectors");
+        motionVectorsRenderer.Render(ref cullingResults, camera, renderCameraCommand, ref context);
+        renderCameraCommand.EndSample("Render Motion Vectors");
+
+        renderCameraCommand.SetGlobalTexture("_CameraDepthTexture", depthTextureId);
+
+        renderCameraCommand.SetRenderTarget(motionVectorsId, new RenderTargetIdentifier(cameraDepthId));
+        renderCameraCommand.DrawProcedural(Matrix4x4.identity, motionVectorsMaterial, 0, MeshTopology.Triangles, 3);
+
+        renderCameraCommand.SetGlobalTexture("_CameraMotionVectorsTexture", motionVectorsId);
 
         // Copy depth/scene textures
         renderCameraCommand.GetTemporaryRT(sceneTextureId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Bilinear, RenderTextureFormat.RGB111110Float);
@@ -167,12 +218,6 @@ public class MorrowindRenderPipeline : RenderPipeline
         renderCameraCommand.SetGlobalTexture(depthTextureId, depthTextureId);
 
         renderCameraCommand.SetGlobalTexture("_CameraDepthTexture", depthTextureId);
-
-        renderCameraCommand.GetTemporaryRT(motionVectorsId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Point, RenderTextureFormat.RGHalf);
-        renderCameraCommand.SetRenderTarget(motionVectorsId);
-        renderCameraCommand.DrawProcedural(Matrix4x4.identity, motionVectorsMaterial, 0, MeshTopology.Triangles, 3);
-
-        renderCameraCommand.SetGlobalTexture("_CameraMotionVectorsTexture", motionVectorsId);
 
         context.ExecuteCommandBuffer(renderCameraCommand);
         renderCameraCommand.Clear();

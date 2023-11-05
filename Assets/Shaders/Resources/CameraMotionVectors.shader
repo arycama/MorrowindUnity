@@ -8,12 +8,11 @@ Shader "Hidden/Camera Motion Vectors"
             ZWrite Off
             ZTest Always
 
-            //Stencil
-            //{
-            //    Ref 0
-            //    Comp Equal
-            //    ReadMask 6
-            //}
+            Stencil
+            {
+                Ref 1
+                Comp NotEqual
+            }
 
             HLSLPROGRAM
             #pragma vertex Vertex

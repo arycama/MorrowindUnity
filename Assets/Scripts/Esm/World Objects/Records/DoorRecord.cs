@@ -1,5 +1,6 @@
 ﻿using Esm;
 using UnityEngine;
+using UnityEngine.Pool;
 
 public class DoorRecord : CreatableRecord
 {
@@ -48,16 +49,18 @@ public class DoorRecord : CreatableRecord
 		var gameObject = base.CreateGameObject(referenceData, parent);
 
 		// Doors that actually lead somewhere won't move, so it's safe to static batch them
-		//if(referenceData.DoorExitData != null)
-		//{
-			//var childGameObjects = gameObject.GetComponentsInChildren<MeshFilter>();
-			//var length = childGameObjects.Length;
-			//for (var i = 0; i < length; i++)
-			//{
-				//childGameObjects[i].gameObject.isStatic = true;
-				//CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
-			//}
-		//}
+		if(referenceData.DoorExitData != null)
+		{
+            var meshRenderers = ListPool<MeshRenderer>.Get();
+            gameObject.GetComponentsInChildren(meshRenderers);
+            foreach (var meshRenderer in meshRenderers)
+            {
+                meshRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
+                //childGameObjects[i].gameObject.isStatic = true;
+                //CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
+            }
+            ListPool<MeshRenderer>.Release(meshRenderers);
+        }
 
 		Door.Create(gameObject, this, referenceData);
 
