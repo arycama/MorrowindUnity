@@ -5,7 +5,7 @@ struct VertexInput
 	uint instanceID : SV_InstanceID;
 	float3 position : POSITION;
 	
-	#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHABLEND_ON)
+	#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHATEST_ON) || defined(_ALPHABLEND_ON)
 		float2 uv : TEXCOORD;
 	#endif
 	
@@ -23,7 +23,7 @@ struct FragmentInput
 {
 	float4 position : SV_Position;
 	
-#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHABLEND_ON)
+#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHATEST_ON) || defined(_ALPHABLEND_ON)
 		float2 uv : TEXCOORD;
 	#endif
 	
@@ -66,7 +66,7 @@ FragmentInput Vertex(VertexInput input)
 	FragmentInput output;
 	output.position = WorldToClip(worldPosition);
 	
-	#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHABLEND_ON)
+	#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHATEST_ON) || defined(_ALPHABLEND_ON)
 		output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
 	#endif
 	
@@ -88,8 +88,12 @@ FragmentOutput Fragment(FragmentInput input)
 {
 	FragmentOutput output;
 	
-	#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHABLEND_ON)
-		float4 color = _MainTex.Sample(_TrilinearRepeatAniso16Sampler, input.uv);
+	#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHATEST_ON) || defined(_ALPHABLEND_ON)
+	float4 color = _MainTex.Sample(_TrilinearRepeatAniso16Sampler, input.uv);
+	#endif
+	
+	#ifdef _ALPHATEST_ON
+		clip(color.a - _Cutoff);
 	#endif
 	
 	#if defined(UNITY_PASS_SHADOWCASTER) 

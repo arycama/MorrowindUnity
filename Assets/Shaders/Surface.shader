@@ -1,4 +1,4 @@
-﻿Shader "Surface"
+﻿Shader"Surface"
 {
 	Properties
 	{
@@ -10,14 +10,17 @@
 		_EmissionColor("Emission Color", Color) = (0,0,0)
 		_EmissionMap("Emission", 2D) = "white" {}
 
-		_AmbientColor("Ambient Color", Color) = (1, 1, 1, 1)
+		_Ambient("Ambient", Color) = (1, 1, 1, 1)
+		_Specular("Specular", Color) = (1, 1, 1, 1)
+		_Glossiness("Glossiness", Float) = 0.0
 
 		// Blending state
-		[Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("__src", Float) = 1.0
-		[Enum(UnityEngine.Rendering.BlendMode)] _DstBlend ("__dst", Float) = 0.0
+		[Toggle] _AlphaTest("Alpha Test", Float) = 0
+		[Enum(UnityEngine.Rendering.BlendMode)] _SrcBlend ("Src Blend", Float) = 1.0
+		[Enum(UnityEngine.Rendering.BlendMode)] _DstBlend ("Dst Blend", Float) = 0.0
 
-		[Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("__zt", Float) = 4.0
-		_ZWrite ("__zw", Float) = 1.0
+		[Enum(UnityEngine.Rendering.CompareFunction)] _ZTest ("Z Test", Float) = 4.0
+		_ZWrite ("Z Write", Float) = 1.0
 
 		_InvFade ("Soft Particles Factor", Range(0.01,3.0)) = 1.0
 	}
@@ -27,6 +30,12 @@
 		Pass
 		{
 			Name "Base Pass"
+
+			Stencil
+            {
+                Ref 1
+                Pass Replace
+            }
 
 			Blend [_SrcBlend] [_DstBlend]
 			ZTest [_ZTest]
@@ -51,7 +60,7 @@
 
 			Stencil
             {
-                Ref 1
+                Ref 3
                 Pass Replace
             }
 

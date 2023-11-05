@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.Rendering;
@@ -9,7 +10,6 @@ public class MorrowindRenderPipeline : RenderPipeline
     private static readonly IndexedString blueNoise2DIds = new("STBN/Vec2/stbn_vec2_2Dx1D_128x128x64_");
     private static readonly int cameraTargetId = Shader.PropertyToID("_CameraTarget");
     private static readonly int cameraDepthId = Shader.PropertyToID("_CameraDepth");
-    private static readonly int depthTextureId = Shader.PropertyToID("_DepthTexture");
     private static readonly int sceneTextureId = Shader.PropertyToID("_SceneTexture");
     private static readonly int motionVectorsId = Shader.PropertyToID("_MotionVectors");
 
@@ -91,6 +91,7 @@ public class MorrowindRenderPipeline : RenderPipeline
     protected override void Render(ScriptableRenderContext context, Camera[] cameras)
     {
         var command = GenericPool<CommandBuffer>.Get();
+        command.name = "Render Camera";
         command.Clear();
 
         foreach (var camera in cameras)
@@ -106,7 +107,7 @@ public class MorrowindRenderPipeline : RenderPipeline
 
     private void RenderCamera(ScriptableRenderContext context, Camera camera, CommandBuffer command)
     {
-        camera.depthTextureMode = DepthTextureMode.MotionVectors;
+        camera.depthTextureMode = DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
 
         // Use a seperate frame count per camera, which we manually track
         if (!cameraRenderedFrameCount.TryGetValue(camera, out var frameCount))
@@ -131,10 +132,10 @@ public class MorrowindRenderPipeline : RenderPipeline
             previousMatrices[camera] = camera.nonJitteredProjectionMatrix;
         }
 
-        BeginCameraRendering(context, camera);
-
         if (!camera.TryGetCullingParameters(out var cullingParameters))
             return;
+
+        BeginCameraRendering(context, camera);
 
         cullingParameters.shadowDistance = renderPipelineAsset.ShadowSettings.ShadowDistance;
         cullingParameters.cullingOptions = CullingOptions.NeedsLighting | CullingOptions.DisablePerObjectCulling | CullingOptions.ShadowCasters;
@@ -164,52 +165,78 @@ public class MorrowindRenderPipeline : RenderPipeline
         clusteredLightCulling.Render(command, camera);
         volumetricLighting.Render(camera, command, renderPipelineAsset.TileSize, renderPipelineAsset.DepthSlices, frameCount, renderPipelineAsset.BlurSigma, renderPipelineAsset.NonLinearDepth);
 
-        command.GetTemporaryRT(cameraTargetId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Bilinear, RenderTextureFormat.RGB111110Float);
         command.GetTemporaryRT(cameraDepthId, camera.pixelWidth, camera.pixelHeight, 32, FilterMode.Point, RenderTextureFormat.Depth);
-        command.SetRenderTarget(cameraTargetId, new RenderTargetIdentifier(cameraDepthId));
-        command.ClearRenderTarget(true, true, RenderSettings.fogColor.linear);
-
-        opaqueObjectRenderer.Render(ref cullingResults, camera, command, ref context);
-
+        command.GetTemporaryRT(cameraTargetId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Bilinear, RenderTextureFormat.RGB111110Float);
         command.GetTemporaryRT(motionVectorsId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Point, RenderTextureFormat.RGHalf);
+        context.ExecuteCommandBuffer(command);
+        command.Clear();
 
-        var motionRenderTargets = new RenderTargetIdentifier[2] { cameraTargetId, motionVectorsId };
-        command.SetRenderTarget(motionRenderTargets, new RenderTargetIdentifier(cameraDepthId));
+        var attachmentDescriptors = new NativeArray<AttachmentDescriptor>(3, Allocator.Temp);
+        attachmentDescriptors[0] = new AttachmentDescriptor(RenderTextureFormat.Depth) { loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraDepthId }; 
+        attachmentDescriptors[1] = new AttachmentDescriptor(RenderTextureFormat.RGB111110Float) { clearColor = RenderSettings.fogColor.linear, loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraTargetId };
+        attachmentDescriptors[2] = new AttachmentDescriptor(RenderTextureFormat.RGHalf) { clearColor = Color.clear, loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = motionVectorsId };
 
+        context.BeginRenderPass(camera.pixelWidth, camera.pixelHeight, 1, attachmentDescriptors, 0);
+
+        // Base pass
+        var opauqePassColors = new NativeArray<int>(1, Allocator.Temp);
+        opauqePassColors[0] = 1;
+
+        context.BeginSubPass(opauqePassColors);
+        opaqueObjectRenderer.Render(ref cullingResults, camera, command, ref context);
+        context.ExecuteCommandBuffer(command);
+        command.Clear();
+        context.EndSubPass();
+
+        // Motion Vectors
+        var motionVectorsPassColors = new NativeArray<int>(2, Allocator.Temp);
+        motionVectorsPassColors[0] = 1;
+        motionVectorsPassColors[1] = 2;
+
+        context.BeginSubPass(motionVectorsPassColors);
         motionVectorsRenderer.Render(ref cullingResults, camera, command, ref context);
+        context.ExecuteCommandBuffer(command);
+        command.Clear();
+        context.EndSubPass();
 
-        command.SetGlobalTexture("_CameraDepthTexture", depthTextureId);
+        // Camera motion Vectors
+        var cameraMotionVectorPassColors = new NativeArray<int>(1, Allocator.Temp);
+        cameraMotionVectorPassColors[0] = 2;
 
-        command.SetRenderTarget(motionVectorsId, new RenderTargetIdentifier(cameraDepthId));
+        var cameraMotionVectorPassInputs = new NativeArray<int>(1, Allocator.Temp);
+        cameraMotionVectorPassInputs[0] = 0;
+
+        context.BeginSubPass(cameraMotionVectorPassColors, cameraMotionVectorPassInputs, true);
         command.DrawProcedural(Matrix4x4.identity, motionVectorsMaterial, 0, MeshTopology.Triangles, 3);
+        context.ExecuteCommandBuffer(command);
+        command.Clear();
+        context.EndSubPass();
 
-        command.SetGlobalTexture("_CameraMotionVectorsTexture", motionVectorsId);
-
-        // Copy depth/scene textures
+        // Copy scene texture
         command.GetTemporaryRT(sceneTextureId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Bilinear, RenderTextureFormat.RGB111110Float);
         command.CopyTexture(cameraTargetId, sceneTextureId);
         command.SetGlobalTexture(sceneTextureId, sceneTextureId);
 
-        command.GetTemporaryRT(depthTextureId, camera.pixelWidth, camera.pixelHeight, 32, FilterMode.Point, RenderTextureFormat.Depth);
-        command.CopyTexture(cameraDepthId, depthTextureId);
-        command.SetGlobalTexture(depthTextureId, depthTextureId);
+        var transparentPassColors = new NativeArray<int>(1, Allocator.Temp);
+        transparentPassColors[0] = 1;
 
-        command.SetGlobalTexture("_CameraDepthTexture", depthTextureId);
+        var transparentPassInputs = new NativeArray<int>(1, Allocator.Temp);
+        transparentPassInputs[0] = 0;
 
-        command.SetRenderTarget(cameraTargetId, new RenderTargetIdentifier(cameraDepthId));
-
+        context.BeginSubPass(transparentPassColors, transparentPassInputs, true);
         transparentObjectRenderer.Render(ref cullingResults, camera, command, ref context);
+        context.EndSubPass();
 
-        var final = temporalAA.Render(camera, command, frameCount, cameraTargetId);
+        context.EndRenderPass();
+
+        var final = temporalAA.Render(camera, command, frameCount, cameraTargetId, motionVectorsId, cameraDepthId);
+
+        command.ReleaseTemporaryRT(sceneTextureId);
+        command.ReleaseTemporaryRT(cameraTargetId);
+        command.ReleaseTemporaryRT(cameraDepthId);
 
         // Copy final result
         command.Blit(final, BuiltinRenderTextureType.CameraTarget);
-
-        command.ReleaseTemporaryRT(sceneTextureId);
-        command.ReleaseTemporaryRT(depthTextureId);
-
-        command.ReleaseTemporaryRT(cameraTargetId);
-        command.ReleaseTemporaryRT(cameraDepthId);
 
         // Should release these sooner.. ideally track where they are used and release once done
         clusteredLightCulling.CameraRenderingComplete(command);

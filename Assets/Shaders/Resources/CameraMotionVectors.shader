@@ -11,7 +11,7 @@ Shader "Hidden/Camera Motion Vectors"
             Stencil
             {
                 Ref 1
-                Comp NotEqual
+                Comp Equal
             }
 
             HLSLPROGRAM

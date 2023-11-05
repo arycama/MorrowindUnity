@@ -16,6 +16,7 @@ struct FragmentInput
 Texture2D<float3> _SceneTexture;
 Texture2D<float> _DepthTexture;
 Texture2D _MainTex, _EmissionMap;
+Texture2D<float> _UnityFBInput0;
 
 cbuffer UnityPerMaterial
 {
@@ -35,7 +36,9 @@ FragmentInput Vertex(VertexInput input)
 
 float3 Fragment(FragmentInput input) : SV_Target
 {
-	float depth = _DepthTexture[input.position.xy];
+	float depth = _UnityFBInput0[input.position.xy];
+	//float depth = _DepthTexture[input.position.xy];
+	
 	float3 positionCS = float3(input.position.xy / _ScreenParams.xy * 2.0 - 1.0, depth);
 	positionCS.y = -positionCS.y;
 	float3 backgroundPositionWS = MultiplyPointProj(_InvVPMatrix, positionCS).xyz;

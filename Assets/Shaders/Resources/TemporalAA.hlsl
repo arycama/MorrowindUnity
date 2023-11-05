@@ -1,8 +1,8 @@
 #include "../Common.hlsl"
 
 Texture2D<float3> _Input, _History;
-Texture2D<float2> _CameraMotionVectorsTexture;
-Texture2D<float> _CameraDepthTexture;
+Texture2D<float2> _Motion;
+Texture2D<float> _Depth;
 
 float2 _Jitter;
 float4 _FinalBlendParameters; // x: static, y: dynamic, z: motion amplification
@@ -21,14 +21,14 @@ float2 GetClosestFragment(float2 uv)
 	const float2 k = 1.0 / _ScreenParams.xy;
 
 	const float4 neighborhood = float4(
-                _CameraDepthTexture.Sample(_PointClampSampler, uv - k),
-                _CameraDepthTexture.Sample(_PointClampSampler, uv + float2(k.x, -k.y)),
-                _CameraDepthTexture.Sample(_PointClampSampler, uv + float2(-k.x, k.y)),
-                _CameraDepthTexture.Sample(_PointClampSampler, uv + k));
+                _Depth.Sample(_PointClampSampler, uv - k),
+                _Depth.Sample(_PointClampSampler, uv + float2(k.x, -k.y)),
+                _Depth.Sample(_PointClampSampler, uv + float2(-k.x, k.y)),
+                _Depth.Sample(_PointClampSampler, uv + k));
 
 #define COMPARE_DEPTH(a, b) step(b, a)
 
-	float3 result = float3(0.0, 0.0, _CameraDepthTexture.Sample(_PointClampSampler, uv));
+	float3 result = float3(0.0, 0.0, _Depth.Sample(_PointClampSampler, uv));
 	result = lerp(result, float3(-1.0, -1.0, neighborhood.x), COMPARE_DEPTH(neighborhood.x, result.z));
 	result = lerp(result, float3(1.0, -1.0, neighborhood.y), COMPARE_DEPTH(neighborhood.y, result.z));
 	result = lerp(result, float3(-1.0, 1.0, neighborhood.z), COMPARE_DEPTH(neighborhood.z, result.z));
@@ -61,7 +61,7 @@ float3 Fragment(float4 positionCS : SV_Position) : SV_Target
 	float2 texcoord = positionCS.xy / _ScreenParams.xy;
     
 	float2 closest = GetClosestFragment(texcoord);
-	float2 motion = _CameraMotionVectorsTexture.Sample(_LinearClampSampler, closest);
+	float2 motion = _Motion.Sample(_LinearClampSampler, closest);
     
 	const float2 k = 1.0 / _ScreenParams.xy;
     float2 uv = texcoord - _Jitter;

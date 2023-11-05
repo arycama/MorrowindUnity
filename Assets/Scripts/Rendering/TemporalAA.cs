@@ -51,7 +51,7 @@ public class TemporalAA
         jitter = new Vector2(jitter.x / camera.pixelWidth, jitter.y / camera.pixelHeight);
     }
 
-    public RenderTargetIdentifier Render(Camera camera, CommandBuffer command, int frameCount, RenderTargetIdentifier input)
+    public RenderTargetIdentifier Render(Camera camera, CommandBuffer command, int frameCount, RenderTargetIdentifier input, RenderTargetIdentifier motion, RenderTargetIdentifier depth)
     {
         var descriptor = new RenderTextureDescriptor(camera.pixelWidth, camera.pixelHeight, RenderTextureFormat.RGB111110Float);
         textureCache.GetTexture(camera, descriptor, out var current, out var previous, frameCount);
@@ -64,6 +64,8 @@ public class TemporalAA
         propertyBlock.SetTexture("_History", previous);
 
         command.SetGlobalTexture("_Input", input);
+        command.SetGlobalTexture("_Motion", motion);
+        command.SetGlobalTexture("_Depth", depth);
 
         command.SetRenderTarget(current);
         command.DrawProcedural(Matrix4x4.identity, material, 0, MeshTopology.Triangles, 3, 1, propertyBlock);

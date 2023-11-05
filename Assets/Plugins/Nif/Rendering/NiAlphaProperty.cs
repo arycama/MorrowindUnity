@@ -63,7 +63,8 @@ namespace Nif
 
 			if (alphaTest)
 			{
-				material.EnableKeyword("_ALPHATEST_ON");
+				material.SetFloat("_AlphaTest", 1.0f);
+                material.EnableKeyword("_ALPHATEST_ON");
 			}
 		}
 
