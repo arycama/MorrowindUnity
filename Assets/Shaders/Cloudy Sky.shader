@@ -3,7 +3,7 @@
 	Properties 
 	{
 		_MainTex("Cloud Texture", 2D) = "clear" {}
-		_Color("Sky Color", Color) = (0.5, 0.5, 0.75, 1)
+		[HDR] _Color("Sky Color", Color) = (0.5, 0.5, 0.75, 1)
 
 		_FadeTexture ("Fade Texture", 2D) = "white" {}
 		_CloudSpeed ("Cloud Speed", Float) = 1

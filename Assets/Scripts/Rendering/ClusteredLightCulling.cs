@@ -1,11 +1,24 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.Rendering;
 
 public class ClusteredLightCulling
 {
+    [Serializable]
+    public class Settings
+    {
+        [SerializeField] private int tileSize = 16;
+        [SerializeField] private int clusterDepth = 32;
+        [SerializeField] private int maxLightsPerTile = 32;
+
+        public int TileSize => tileSize;
+        public int ClusterDepth => clusterDepth;
+        public int MaxLightsPerTile => maxLightsPerTile;
+    }
+
     private static readonly int lightClusterIndicesId = Shader.PropertyToID("_LightClusterIndices");
 
-    private ClusteredLightingSettings settings;
+    private Settings settings;
     private ComputeBuffer counterBuffer;
     private ComputeBuffer lightList;
 
@@ -13,7 +26,7 @@ public class ClusteredLightCulling
 
     private int DivRoundUp(int x, int y) => (x + y - 1) / y;
 
-    public ClusteredLightCulling(ClusteredLightingSettings settings)
+    public ClusteredLightCulling(Settings settings)
     {
         this.settings = settings;
         counterBuffer = new ComputeBuffer(1, sizeof(uint)) { name = nameof(counterBuffer) };
@@ -21,7 +34,7 @@ public class ClusteredLightCulling
 
     public void Release()
     {
-        lightList.Release();
+        lightList?.Release();
         counterBuffer.Release();
     }
 

@@ -22,6 +22,7 @@ public class MorrowindRenderPipeline : RenderPipeline
     private readonly ObjectRenderer motionVectorsRenderer;
     private readonly ObjectRenderer transparentObjectRenderer;
     private readonly TemporalAA temporalAA;
+    private readonly ConvolutionBloom convolutionBloom;
 
     private Dictionary<Camera, int> cameraRenderedFrameCount = new();
     private Dictionary<Camera, Matrix4x4> previousMatrices = new();
@@ -45,6 +46,7 @@ public class MorrowindRenderPipeline : RenderPipeline
         motionVectorsRenderer = new(RenderQueueRange.opaque, SortingCriteria.CommonOpaque, false, PerObjectData.MotionVectors, "MotionVectors");
         transparentObjectRenderer = new(RenderQueueRange.transparent, SortingCriteria.CommonTransparent, false, PerObjectData.None, "SRPDefaultUnlit");
         temporalAA = new(renderPipelineAsset.TemporalAASettings);
+        convolutionBloom = new(renderPipelineAsset.ConvolutionBloomSettings);
 
         motionVectorsMaterial = new Material(Shader.Find("Hidden/Camera Motion Vectors"));
 
@@ -237,14 +239,16 @@ public class MorrowindRenderPipeline : RenderPipeline
 
         context.EndRenderPass();
 
-        var final = temporalAA.Render(camera, command, frameCount, cameraTargetId, motionVectorsId, cameraDepthId);
+        var taa = temporalAA.Render(camera, command, frameCount, cameraTargetId, motionVectorsId, cameraDepthId);
+
+        convolutionBloom.Render(command, taa, cameraTargetId);
+
+        // Copy final result
+        command.Blit(cameraTargetId, BuiltinRenderTextureType.CameraTarget);
 
         command.ReleaseTemporaryRT(sceneTextureId);
         command.ReleaseTemporaryRT(cameraTargetId);
         command.ReleaseTemporaryRT(cameraDepthId);
-
-        // Copy final result
-        command.Blit(final, BuiltinRenderTextureType.CameraTarget);
 
         // Should release these sooner.. ideally track where they are used and release once done
         clusteredLightCulling.CameraRenderingComplete(command);

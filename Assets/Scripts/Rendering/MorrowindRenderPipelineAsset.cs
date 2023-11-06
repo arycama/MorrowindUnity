@@ -7,8 +7,9 @@ public class MorrowindRenderPipelineAsset : RenderPipelineAsset
 {
     [SerializeField] private bool enableSrpBatcher;
     [SerializeField] private ShadowSettings shadowSettings;
-    [SerializeField] private ClusteredLightingSettings clusteredLightingSettings;
-    [SerializeField] private TemporalAASettings temporalAASettings;
+    [SerializeField] private ClusteredLightCulling.Settings clusteredLightingSettings;
+    [SerializeField] private TemporalAA.Settings temporalAASettings;
+    [SerializeField] private ConvolutionBloom.Settings convolutionBloomSettings;
 
     [Header("Volumetric Lighting")]
     [SerializeField] private int tileSize = 8;
@@ -23,8 +24,9 @@ public class MorrowindRenderPipelineAsset : RenderPipelineAsset
 
     public bool EnableSrpBatcher => enableSrpBatcher;
     public ShadowSettings ShadowSettings => shadowSettings;
-    public ClusteredLightingSettings ClusteredLightingSettings => clusteredLightingSettings;
-    public TemporalAASettings TemporalAASettings => temporalAASettings;
+    public ClusteredLightCulling.Settings ClusteredLightingSettings => clusteredLightingSettings;
+    public TemporalAA.Settings TemporalAASettings => temporalAASettings;
+    public ConvolutionBloom.Settings ConvolutionBloomSettings => convolutionBloomSettings;
 
     protected override RenderPipeline CreatePipeline()
     {

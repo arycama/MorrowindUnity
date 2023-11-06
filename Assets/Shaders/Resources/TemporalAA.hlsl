@@ -2,12 +2,9 @@
 
 Texture2D<float3> _Input, _History;
 Texture2D<float2> _Motion;
-Texture2D<float> _Depth;
 
 float4 _FinalBlendParameters; // x: static, y: dynamic, z: motion amplification
 float _Sharpness;
-
-#define HALF_MAX_MINUS1 65472.0 // (2 - 2^-9) * 2^15
 
 float4 Vertex(uint id : SV_VertexID) : SV_Position
 {

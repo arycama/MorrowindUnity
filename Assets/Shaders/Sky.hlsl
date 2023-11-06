@@ -53,7 +53,7 @@ float4 Fragment(FragmentInput i) : SV_Target
 
 	
 
-	color.rgb = lerp(fogColor.rgb, color.rgb * fog, color.a * fogColor.a);
+	color.rgb = lerp(fogColor.rgb, color.rgb * fog, color.a * fogColor.a) * 2;
 	
 	
 	

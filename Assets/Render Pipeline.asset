@@ -42,6 +42,16 @@ MonoBehaviour:
     sharpness: 0.25
     stationaryBlending: 0.95
     motionBlending: 0.85
+  convolutionBloomSettings:
+    KernelTexture: {fileID: 2800000, guid: 58011f629aa7a7b4ba6cce073990592c, type: 3}
+    Intensity: 1
+    Threshold: 0.78
+    KernelPositionOffset: {x: 0, y: 0}
+    KernelSizeScale: {x: 1, y: 1}
+    KernelDistanceExp: 0
+    KernelDistanceExpClampMin: 1
+    KernelDistanceExpScale: 1
+    KernelImageUseLuminanceAsRGB: 0
   tileSize: 8
   depthSlices: 64
   blurSigma: 1
