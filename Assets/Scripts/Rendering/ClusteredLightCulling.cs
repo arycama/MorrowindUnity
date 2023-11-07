@@ -40,6 +40,8 @@ public class ClusteredLightCulling
 
     public void Render(CommandBuffer command, Camera camera)
     {
+        command.BeginSample("Clustered Light Culling");
+
         var clusterWidth = DivRoundUp(camera.pixelWidth, settings.TileSize);
         var clusterHeight = DivRoundUp(camera.pixelHeight, settings.TileSize);
         var clusterCount = clusterWidth * clusterHeight * settings.ClusterDepth;
@@ -74,6 +76,8 @@ public class ClusteredLightCulling
         command.SetGlobalFloat("_ClusterScale", clusterScale);
         command.SetGlobalFloat("_ClusterBias", clusterBias);
         command.SetGlobalInt("_TileSize", settings.TileSize);
+
+        command.EndSample("Clustered Light Culling");
     }
 
     public void CameraRenderingComplete(CommandBuffer command)

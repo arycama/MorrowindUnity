@@ -33,6 +33,8 @@ public class ConvolutionBloom
 
     public void Render(CommandBuffer command, RenderTargetIdentifier input, RenderTargetIdentifier result)
     {
+        command.BeginSample("Convolution Bloom");
+
         command.SetGlobalFloat("FFTBloomIntensity", settings.Intensity);
         command.SetGlobalFloat("FFTBloomThreshold", settings.Threshold);
         Vector4 kernelGenParam = new Vector4(settings.KernelPositionOffset.x, settings.KernelPositionOffset.y, settings.KernelSizeScale.x, settings.KernelSizeScale.y);
@@ -105,5 +107,7 @@ public class ConvolutionBloom
         command.SetGlobalTexture("_MainTex", m_sourceFrequencyTextureID);
         command.SetGlobalVector("_Resolution", new Vector2(512, 512));
         command.DrawProcedural(Matrix4x4.identity, finalBlitMaterial, 0, MeshTopology.Triangles, 3);
+
+        command.EndSample("Convolution Bloom");
     }
 }

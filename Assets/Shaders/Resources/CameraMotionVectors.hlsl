@@ -1,6 +1,6 @@
 #include "../Common.hlsl"
 
-Texture2D<float> _UnityFBInput0;
+Texture2D<float> _Depth;
 
 float4 GetFullScreenTriangleVertexPosition(uint vertexID)
 {
@@ -16,7 +16,7 @@ float4 Vertex(uint id : SV_VertexID) : SV_Position
 
 float2 Fragment(float4 positionCS : SV_Position) : SV_Target
 {
-	float depth = _UnityFBInput0[positionCS.xy];
+	float depth = _Depth[positionCS.xy];
 	
 	// Flip due to matrix stupidity
 	float3 positionNDC = float3(positionCS.xy / _ScreenParams.xy * 2 - 1, depth);

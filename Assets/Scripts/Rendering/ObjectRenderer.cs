@@ -8,7 +8,7 @@ public class ObjectRenderer
     private SortingCriteria sortingCriteria;
     private bool excludeObjectMotionVectors;
     private PerObjectData perObjectData;
-    private string passName;
+    private string passName, profilerTag;
 
     public ObjectRenderer(RenderQueueRange renderQueueRange, SortingCriteria sortingCriteria, bool excludeObjectMotionVectors, PerObjectData perObjectData, string passName)
     {
@@ -17,10 +17,14 @@ public class ObjectRenderer
         this.excludeObjectMotionVectors = excludeObjectMotionVectors;
         this.passName = passName;
         this.perObjectData = perObjectData;
+
+        profilerTag = $"Render Objects ({passName})";
     }
 
-    public void Render(ref CullingResults cullingResults, Camera camera, CommandBuffer commandBuffer, ref ScriptableRenderContext context)
+    public void Render(ref CullingResults cullingResults, Camera camera, CommandBuffer command, ref ScriptableRenderContext context)
     {
+        command.BeginSample(profilerTag);
+
         var srpDefaultUnlitShaderPassName = new ShaderTagId(passName);
         var rendererListDesc = new RendererListDesc(srpDefaultUnlitShaderPassName, cullingResults, camera)
         {
@@ -31,6 +35,8 @@ public class ObjectRenderer
         };
 
         var rendererList = context.CreateRendererList(rendererListDesc);
-        commandBuffer.DrawRendererList(rendererList);
+        command.DrawRendererList(rendererList);
+
+        command.EndSample(profilerTag);
     }
 }

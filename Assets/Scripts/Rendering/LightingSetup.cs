@@ -57,7 +57,7 @@ public class LightingSetup
         pointTexelSizeBuffer.Release();
     }
 
-    public void Render(CommandBuffer commandBuffer, CullingResults cullingResults, ScriptableRenderContext context, Camera camera)
+    public void Render(CommandBuffer command, CullingResults cullingResults, ScriptableRenderContext context, Camera camera)
     {
         var directionalLightList = ListPool<DirectionalLightData>.Get();
         var directionalShadowRequests = ListPool<ShadowRequest>.Get();
@@ -218,13 +218,14 @@ public class LightingSetup
         camera.projectionMatrix = cameraProjectionMatrix;
 
         // Render Shadows
-        commandBuffer.SetGlobalDepthBias(settings.ShadowBias, settings.ShadowSlopeBias);
+        command.BeginSample("Render Shadows");
+        command.SetGlobalDepthBias(settings.ShadowBias, settings.ShadowSlopeBias);
 
         if (directionalShadowRequests.Count > 0)
         {
             // Process directional shadows
-            commandBuffer.BeginSample("Directional Shadows");
-            commandBuffer.SetGlobalFloat("_ZClip", 0);
+            command.BeginSample("Directional Shadows");
+            command.SetGlobalFloat("_ZClip", 0);
 
             // Setup shadow map for directional shadows
             var directionalShadowsDescriptor = new RenderTextureDescriptor(settings.DirectionalShadowResolution, settings.DirectionalShadowResolution, RenderTextureFormat.Shadowmap, 16)
@@ -233,30 +234,30 @@ public class LightingSetup
                 volumeDepth = directionalShadowRequests.Count,
             };
 
-            commandBuffer.GetTemporaryRT(directionalShadowsId, directionalShadowsDescriptor);
-            commandBuffer.SetRenderTarget(directionalShadowsId, 0, CubemapFace.Unknown, -1);
-            commandBuffer.ClearRenderTarget(true, false, Color.clear);
+            command.GetTemporaryRT(directionalShadowsId, directionalShadowsDescriptor);
+            command.SetRenderTarget(directionalShadowsId, 0, CubemapFace.Unknown, -1);
+            command.ClearRenderTarget(true, false, Color.clear);
 
             for (var i = 0; i < directionalShadowRequests.Count; i++)
             {
                 var shadowRequest = directionalShadowRequests[i];
-                commandBuffer.BeginSample(cascadeStrings.GetString(i % 4));
-                commandBuffer.SetRenderTarget(directionalShadowsId, 0, CubemapFace.Unknown, i);
+                command.BeginSample(cascadeStrings.GetString(i % 4));
+                command.SetRenderTarget(directionalShadowsId, 0, CubemapFace.Unknown, i);
 
-                commandBuffer.SetViewProjectionMatrices(shadowRequest.ViewMatrix, shadowRequest.ProjectionMatrix);
-                commandBuffer.BeginSample("Render Shadows");
-                context.ExecuteCommandBuffer(commandBuffer);
-                commandBuffer.Clear();
+                command.SetViewProjectionMatrices(shadowRequest.ViewMatrix, shadowRequest.ProjectionMatrix);
+                command.BeginSample("Render Shadows");
+                context.ExecuteCommandBuffer(command);
+                command.Clear();
 
                 var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, shadowRequest.VisibleLightIndex) { splitData = shadowRequest.ShadowSplitData };
                 context.DrawShadows(ref shadowDrawingSettings);
 
-                commandBuffer.EndSample("Render Shadows");
-                commandBuffer.EndSample(cascadeStrings.GetString(i % 4));
+                command.EndSample("Render Shadows");
+                command.EndSample(cascadeStrings.GetString(i % 4));
             }
 
-            commandBuffer.SetGlobalFloat("_ZClip", 1);
-            commandBuffer.EndSample("Directional Shadows");
+            command.SetGlobalFloat("_ZClip", 1);
+            command.EndSample("Directional Shadows");
         }
 
         // Process point shadows 
@@ -269,78 +270,79 @@ public class LightingSetup
                 volumeDepth = pointShadowRequests.Count * 6,
             };
 
-            commandBuffer.BeginSample("Point Shadows");
-            commandBuffer.GetTemporaryRT(pointShadowsId, pointShadowsDescriptor);
-            commandBuffer.SetRenderTarget(pointShadowsId, 0, CubemapFace.Unknown, -1);
-            commandBuffer.ClearRenderTarget(true, false, Color.clear);
+            command.BeginSample("Point Shadows");
+            command.GetTemporaryRT(pointShadowsId, pointShadowsDescriptor);
+            command.SetRenderTarget(pointShadowsId, 0, CubemapFace.Unknown, -1);
+            command.ClearRenderTarget(true, false, Color.clear);
 
             for (var i = 0; i < pointShadowRequests.Count; i++)
             {
-                commandBuffer.BeginSample($"Light {i / 6}");
-                commandBuffer.BeginSample($"Face {i % 6}");
+                command.BeginSample($"Light {i / 6}");
+                command.BeginSample($"Face {i % 6}");
 
                 var shadowRequest = pointShadowRequests[i];
                 if (!shadowRequest.IsValid)
                     continue;
 
-                commandBuffer.SetRenderTarget(pointShadowsId, 0, CubemapFace.Unknown, i);
+                command.SetRenderTarget(pointShadowsId, 0, CubemapFace.Unknown, i);
 
-                commandBuffer.SetViewProjectionMatrices(shadowRequest.ViewMatrix, shadowRequest.ProjectionMatrix);
-                commandBuffer.BeginSample("Render Shadows");
-                context.ExecuteCommandBuffer(commandBuffer);
-                commandBuffer.Clear();
+                command.SetViewProjectionMatrices(shadowRequest.ViewMatrix, shadowRequest.ProjectionMatrix);
+                command.BeginSample("Render Shadows");
+                context.ExecuteCommandBuffer(command);
+                command.Clear();
 
                 var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, shadowRequest.VisibleLightIndex) { splitData = shadowRequest.ShadowSplitData };
                 context.DrawShadows(ref shadowDrawingSettings);
 
-                commandBuffer.EndSample("Render Shadows");
-                commandBuffer.EndSample($"Light {i % 6}");
-                commandBuffer.EndSample($"Light {i / 6}");
+                command.EndSample("Render Shadows");
+                command.EndSample($"Light {i % 6}");
+                command.EndSample($"Light {i / 6}");
             }
 
-            commandBuffer.EndSample("Point Shadows");
+            command.EndSample("Point Shadows");
         }
 
-        commandBuffer.SetGlobalDepthBias(0f, 0f);
+        command.SetGlobalDepthBias(0f, 0f);
 
         // Set directional light data
-        commandBuffer.ExpandAndSetComputeBufferData(ref directionalLightBuffer, directionalLightList);
-        commandBuffer.SetGlobalBuffer("_DirectionalLights", directionalLightBuffer);
-        commandBuffer.SetGlobalInt("_DirectionalLightCount", directionalLightList.Count);
+        command.ExpandAndSetComputeBufferData(ref directionalLightBuffer, directionalLightList);
+        command.SetGlobalBuffer("_DirectionalLights", directionalLightBuffer);
+        command.SetGlobalInt("_DirectionalLightCount", directionalLightList.Count);
         ListPool<DirectionalLightData>.Release(directionalLightList);
 
-        commandBuffer.SetGlobalTexture(directionalShadowsId, directionalShadowRequests.Count > 0 ? directionalShadowsId : emptyArray);
+        command.SetGlobalTexture(directionalShadowsId, directionalShadowRequests.Count > 0 ? directionalShadowsId : emptyArray);
         ListPool<ShadowRequest>.Release(directionalShadowRequests);
 
         // Update directional shadow matrices
-        commandBuffer.ExpandAndSetComputeBufferData(ref directionalMatrixBuffer, directionalShadowMatrices);
-        commandBuffer.SetGlobalBuffer("_DirectionalMatrices", directionalMatrixBuffer);
+        command.ExpandAndSetComputeBufferData(ref directionalMatrixBuffer, directionalShadowMatrices);
+        command.SetGlobalBuffer("_DirectionalMatrices", directionalMatrixBuffer);
         ListPool<Matrix4x4>.Release(directionalShadowMatrices);
 
         // Update directional shadow texel sizes
-        commandBuffer.ExpandAndSetComputeBufferData(ref directionalTexelSizeBuffer, directionalShadowTexelSizes);
-        commandBuffer.SetBufferData(directionalTexelSizeBuffer, directionalShadowTexelSizes);
-        commandBuffer.SetGlobalBuffer("_DirectionalShadowTexelSizes", directionalTexelSizeBuffer);
+        command.ExpandAndSetComputeBufferData(ref directionalTexelSizeBuffer, directionalShadowTexelSizes);
+        command.SetBufferData(directionalTexelSizeBuffer, directionalShadowTexelSizes);
+        command.SetGlobalBuffer("_DirectionalShadowTexelSizes", directionalTexelSizeBuffer);
         ListPool<Vector4>.Release(directionalShadowTexelSizes);
 
         // Set point light data
-        commandBuffer.ExpandAndSetComputeBufferData(ref pointLightBuffer, pointLightList);
-        commandBuffer.SetGlobalBuffer("_PointLights", pointLightBuffer);
-        commandBuffer.SetGlobalInt("_PointLightCount", pointLightList.Count);
+        command.ExpandAndSetComputeBufferData(ref pointLightBuffer, pointLightList);
+        command.SetGlobalBuffer("_PointLights", pointLightBuffer);
+        command.SetGlobalInt("_PointLightCount", pointLightList.Count);
         ListPool<PointLightData>.Release(pointLightList);
 
-        commandBuffer.SetGlobalTexture(pointShadowsId, pointShadowRequests.Count > 0 ? pointShadowsId : emptyCubemapArray);
+        command.SetGlobalTexture(pointShadowsId, pointShadowRequests.Count > 0 ? pointShadowsId : emptyCubemapArray);
         ListPool<ShadowRequest>.Release(pointShadowRequests);
 
-        commandBuffer.ExpandAndSetComputeBufferData(ref pointTexelSizeBuffer, pointShadowTexelSizes);
-        commandBuffer.SetGlobalBuffer("_PointShadowTexelSizes", pointTexelSizeBuffer);
+        command.ExpandAndSetComputeBufferData(ref pointTexelSizeBuffer, pointShadowTexelSizes);
+        command.SetGlobalBuffer("_PointShadowTexelSizes", pointTexelSizeBuffer);
 
         ListPool<Vector4>.Release(pointShadowTexelSizes);
 
-        commandBuffer.SetGlobalInt("_PcfSamples", settings.PcfSamples);
-        commandBuffer.SetGlobalFloat("_PcfRadius", settings.PcfRadius);
-        commandBuffer.SetGlobalInt("_BlockerSamples", settings.BlockerSamples);
-        commandBuffer.SetGlobalFloat("_BlockerRadius", settings.BlockerRadius);
-        commandBuffer.SetGlobalFloat("_PcssSoftness", settings.PcssSoftness);
+        command.SetGlobalInt("_PcfSamples", settings.PcfSamples);
+        command.SetGlobalFloat("_PcfRadius", settings.PcfRadius);
+        command.SetGlobalInt("_BlockerSamples", settings.BlockerSamples);
+        command.SetGlobalFloat("_BlockerRadius", settings.BlockerRadius);
+        command.SetGlobalFloat("_PcssSoftness", settings.PcssSoftness);
+        command.EndSample("Render Shadows");
     }
 }

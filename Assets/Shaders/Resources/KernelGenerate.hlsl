@@ -53,7 +53,7 @@ float4 Fragment(float4 position : SV_Position) : SV_Target
     uv1.x = WrapUV(uv1.x);
     uv1.y = WrapUV(uv1.y);
 
-    //return float4(_MainTex.Sample(sampler_LinearRepeat, position.xy / _Resolution - 0.5).rgb, 0.0);
+	//return float4(_MainTex.Sample(_LinearRepeatSampler, uv - 0.5).rgb, 0.0);
     if(bUseLuminance)
     {
         float lum = Luma(_MainTex.Sample(_LinearClampSampler, xy).rgb);

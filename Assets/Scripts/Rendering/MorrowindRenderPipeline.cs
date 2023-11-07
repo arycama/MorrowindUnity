@@ -167,77 +167,43 @@ public class MorrowindRenderPipeline : RenderPipeline
         clusteredLightCulling.Render(command, camera);
         volumetricLighting.Render(camera, command, renderPipelineAsset.TileSize, renderPipelineAsset.DepthSlices, frameCount, renderPipelineAsset.BlurSigma, renderPipelineAsset.NonLinearDepth);
 
-        command.GetTemporaryRT(cameraDepthId, camera.pixelWidth, camera.pixelHeight, 32, FilterMode.Point, RenderTextureFormat.Depth);
         command.GetTemporaryRT(cameraTargetId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Bilinear, RenderTextureFormat.RGB111110Float);
-        command.GetTemporaryRT(motionVectorsId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Point, RenderTextureFormat.RGHalf);
-        context.ExecuteCommandBuffer(command);
-        command.Clear();
-
-        var opaqueAttachmentDescriptors = new NativeArray<AttachmentDescriptor>(3, Allocator.Temp);
-        opaqueAttachmentDescriptors[0] = new AttachmentDescriptor(RenderTextureFormat.Depth) { loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraDepthId }; 
-        opaqueAttachmentDescriptors[1] = new AttachmentDescriptor(RenderTextureFormat.RGB111110Float) { clearColor = RenderSettings.fogColor.linear, loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraTargetId };
-        opaqueAttachmentDescriptors[2] = new AttachmentDescriptor(RenderTextureFormat.RGHalf) { clearColor = Color.clear, loadAction = RenderBufferLoadAction.Clear, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = motionVectorsId };
-
-        context.BeginRenderPass(camera.pixelWidth, camera.pixelHeight, 1, opaqueAttachmentDescriptors, 0);
+        command.GetTemporaryRT(cameraDepthId, camera.pixelWidth, camera.pixelHeight, 32, FilterMode.Point, RenderTextureFormat.Depth);
 
         // Base pass
-        var opauqePassColors = new NativeArray<int>(1, Allocator.Temp);
-        opauqePassColors[0] = 1;
-
-        context.BeginSubPass(opauqePassColors);
+        command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, cameraDepthId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store));
+        command.ClearRenderTarget(true, true, camera.backgroundColor.linear);
         opaqueObjectRenderer.Render(ref cullingResults, camera, command, ref context);
-        context.ExecuteCommandBuffer(command);
-        command.Clear();
-        context.EndSubPass();
 
         // Motion Vectors
-        var motionVectorsPassColors = new NativeArray<int>(2, Allocator.Temp);
-        motionVectorsPassColors[0] = 1;
-        motionVectorsPassColors[1] = 2;
+        command.GetTemporaryRT(motionVectorsId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Point, RenderTextureFormat.RGHalf);
+        command.SetRenderTarget(motionVectorsId);
+        command.ClearRenderTarget(false, true, Color.clear);
 
-        context.BeginSubPass(motionVectorsPassColors);
+        command.SetRenderTarget(
+            new RenderTargetBinding(new RenderTargetIdentifier[] { cameraTargetId, motionVectorsId },  
+            new RenderBufferLoadAction[] { RenderBufferLoadAction.Load, RenderBufferLoadAction.DontCare },
+            new RenderBufferStoreAction[] { RenderBufferStoreAction.Store, RenderBufferStoreAction.Store },
+            cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store));;
+
         motionVectorsRenderer.Render(ref cullingResults, camera, command, ref context);
-        context.ExecuteCommandBuffer(command);
-        command.Clear();
-        context.EndSubPass();
 
-        // Camera motion Vectors
-        var cameraMotionVectorPassColors = new NativeArray<int>(1, Allocator.Temp);
-        cameraMotionVectorPassColors[0] = 2;
-
-        var cameraMotionVectorPassInputs = new NativeArray<int>(1, Allocator.Temp);
-        cameraMotionVectorPassInputs[0] = 0;
-
-        context.BeginSubPass(cameraMotionVectorPassColors, cameraMotionVectorPassInputs, true);
+        // Camera motion vectors
+        command.SetRenderTarget(new RenderTargetBinding(motionVectorsId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store) { flags = RenderTargetFlags.ReadOnlyDepthStencil });
+        command.SetGlobalTexture("_Depth", cameraDepthId);
+        command.BeginSample("Camrea Motion Vectors");
         command.DrawProcedural(Matrix4x4.identity, motionVectorsMaterial, 0, MeshTopology.Triangles, 3);
-        context.ExecuteCommandBuffer(command);
-        command.Clear();
-        context.EndSubPass();
-        context.EndRenderPass();
+        command.EndSample("Camera Motion Vectors");
 
         // Copy scene texture
         command.GetTemporaryRT(sceneTextureId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Bilinear, RenderTextureFormat.RGB111110Float);
         command.CopyTexture(cameraTargetId, sceneTextureId);
         command.SetGlobalTexture(sceneTextureId, sceneTextureId);
-
         command.SetGlobalTexture(cameraDepthId, cameraDepthId);
-        context.ExecuteCommandBuffer(command);
-        command.Clear();
 
-        var transparentAttachmentDescriptors = new NativeArray<AttachmentDescriptor>(2, Allocator.Temp);
-        transparentAttachmentDescriptors[0] = new AttachmentDescriptor(RenderTextureFormat.Depth) { loadAction = RenderBufferLoadAction.Load, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraDepthId };
-        transparentAttachmentDescriptors[1] = new AttachmentDescriptor(RenderTextureFormat.RGB111110Float) { loadAction = RenderBufferLoadAction.Load, storeAction = RenderBufferStoreAction.Store, loadStoreTarget = cameraTargetId };
-
-        context.BeginRenderPass(camera.pixelWidth, camera.pixelHeight, 1, transparentAttachmentDescriptors, 0);
-
-        var transparentPassColors = new NativeArray<int>(1, Allocator.Temp);
-        transparentPassColors[0] = 1;
-
-        context.BeginSubPass(transparentPassColors, true);
+        // Transparent
+        command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepthStencil });
         transparentObjectRenderer.Render(ref cullingResults, camera, command, ref context);
-        context.EndSubPass();
-
-        context.EndRenderPass();
 
         var taa = temporalAA.Render(camera, command, frameCount, cameraTargetId, motionVectorsId, cameraDepthId);
 

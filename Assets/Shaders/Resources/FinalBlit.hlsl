@@ -17,5 +17,5 @@ float3 Fragment(float4 position : SV_Position) : SV_Target
 	uv.y *= 0.5;
     uv.x *= 0.5;
     uv.y *= 1 / aspect;
-	return _Input[position.xy] + _MainTex.Sample(_LinearClampSampler, uv) * FFTBloomIntensity;
+	return _Input[position.xy];//	+_MainTex.Sample(_LinearClampSampler, uv) * FFTBloomIntensity;
 }

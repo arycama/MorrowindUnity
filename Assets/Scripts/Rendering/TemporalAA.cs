@@ -67,6 +67,8 @@ public class TemporalAA
 
     public RenderTargetIdentifier Render(Camera camera, CommandBuffer command, int frameCount, RenderTargetIdentifier input, RenderTargetIdentifier motion, RenderTargetIdentifier depth)
     {
+        command.BeginSample("Temporal AA");
+
         var descriptor = new RenderTextureDescriptor(camera.pixelWidth, camera.pixelHeight, RenderTextureFormat.RGB111110Float);
         textureCache.GetTexture(camera, descriptor, out var current, out var previous, frameCount);
 
@@ -82,6 +84,8 @@ public class TemporalAA
 
         command.SetRenderTarget(current);
         command.DrawProcedural(Matrix4x4.identity, material, 0, MeshTopology.Triangles, 3, 1, propertyBlock);
+        command.EndSample("Temporal AA");
+
         return current;
     }
 

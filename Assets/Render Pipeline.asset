@@ -43,7 +43,7 @@ MonoBehaviour:
     stationaryBlending: 0.95
     motionBlending: 0.85
   convolutionBloomSettings:
-    KernelTexture: {fileID: 2800000, guid: 58011f629aa7a7b4ba6cce073990592c, type: 3}
+    KernelTexture: {fileID: 2800000, guid: ba159027bff5c8845ac4916bfd145294, type: 3}
     Intensity: 1
     Threshold: 0.78
     KernelPositionOffset: {x: 0, y: 0}
