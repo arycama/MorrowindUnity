@@ -14,3 +14,4 @@
 /Logs
 /UserSettings
 *.vsconfig
+/Assembly-CSharp.csproj.user
