@@ -4,7 +4,7 @@ Texture2D<float3> _Input, _History;
 Texture2D<float2> _Motion;
 
 float4 _FinalBlendParameters; // x: static, y: dynamic, z: motion amplification
-float _Sharpness;
+float _Sharpness, _HasHistory;
 
 float4 Vertex(uint id : SV_VertexID) : SV_Position
 {
@@ -12,40 +12,51 @@ float4 Vertex(uint id : SV_VertexID) : SV_Position
 	return float4(uv * 2.0 - 1.0, 1.0, 1.0);
 }
 
-float3 BicubicSampling5(float2 uv)
+// From Filmic SMAA presentation[Jimenez 2016]
+// A bit more verbose that it needs to be, but makes it a bit better at latency hiding
+float3 HistoryBicubic5Tap(float2 UV)
 {
-	float2 fractional = frac(uv);
+    float2 samplePos = UV;
+    float2 tc1 = floor(samplePos - 0.5) + 0.5;
+    float2 f = samplePos - tc1;
+    float2 f2 = f * f;
+    float2 f3 = f * f2;
 
-    // 5-tap bicubic sampling (for Hermite/Carmull-Rom filter) -- (approximate from original 16->9-tap bilinear fetching) 
-	float2 t = fractional;
-	float2 t2 = fractional * fractional;
-	float2 t3 = fractional * fractional * fractional;
-	float s = 0.5;
-	float2 w0 = -s * t3 + 2.0 * s * t2 - s * t;
-	float2 w1 = (2.0 - s) * t3 + (s - 3.0) * t2 + 1.0;
-	float2 w2 = (s - 2.0) * t3 + (3 - 2.0 * s) * t2 + s * t;
-	float2 w3 = s * t3 - s * t2;
-	float2 s0 = w1 + w2;
-	float2 f0 = w2 / (w1 + w2);
+    const float c = 0.125;
 
-	#if 1
-	float3 result = _History[uv + float2(f0.x, -1.0)] * (0.5 * w0.x * w0.y + s0.x * w0.y + 0.5 * w3.x * w0.y);
-	result += _History[uv + float2(-1.0, f0.y)] * (0.5 * w3.x * w0.y + 0.5 * w0.x * w0.y + w0.x * s0.y + 0.5 * w0.x * w3.y);
-	result += _History[uv + float2(f0.x, f0.y)] * s0.x * s0.y;
-	result += _History[uv + float2(2.0, f0.y)] * (w3.x * s0.y + 0.5 * w3.x * w3.y);
-	return result + _History[uv + float2(f0.x, 2.0)] * (0.5 * w0.x * w3.y + s0.x * w3.y + 0.5 * w3.x * w3.y);
-	#else
-	float3 A = _History[uv + float2(f0.x, -1.0)];
-	float3 B = _History[uv + float2(-1.0, f0.y)];
-	float3 C = _History[uv + float2(f0.x, f0.y)];
-	float3 D = _History[uv + float2(2.0, f0.y)];
-	float3 E = _History[uv + float2(f0.x, 2.0)];
-	
-	return
-	(0.5 * (A + B) * w0.x + A * s0.x + 0.5 * (A + B) * w3.x) * w0.y +
-	(B * w0.x + C * s0.x + D * w3.x) * s0.y +
-	(0.5 * (B + E) * w0.x + E * s0.x + 0.5 * (D + E) * w3.x) * w3.y;
-	#endif
+    float2 w0 = -c         * f3 +  2.0 * c         * f2 - c * f;
+    float2 w1 =  (2.0 - c) * f3 - (3.0 - c)        * f2          + 1.0;
+    float2 w2 = -(2.0 - c) * f3 + (3.0 - 2.0 * c)  * f2 + c * f;
+    float2 w3 = c          * f3 - c                * f2;
+
+    float2 w12 = w1 + w2;
+	float2 tc0 = rcp(_ScreenParams.xy) * (tc1 - 1.0);
+	float2 tc3 = rcp(_ScreenParams.xy) * (tc1 + 2.0);
+	float2 tc12 = rcp(_ScreenParams.xy) * (tc1 + w2 / w12);
+
+    float3 s0 = _History.Sample(_LinearClampSampler, float2(tc12.x, tc0.y));
+    float3 s1 = _History.Sample(_LinearClampSampler, float2(tc0.x, tc12.y));
+    float3 s2 = _History.Sample(_LinearClampSampler, float2(tc12.x, tc12.y));
+    float3 s3 = _History.Sample(_LinearClampSampler, float2(tc3.x, tc0.y));
+    float3 s4 = _History.Sample(_LinearClampSampler, float2(tc12.x, tc3.y));
+
+    float cw0 = (w12.x * w0.y);
+    float cw1 = (w0.x * w12.y);
+    float cw2 = (w12.x * w12.y);
+    float cw3 = (w3.x * w12.y);
+    float cw4 = (w12.x *  w3.y);
+
+    s0 *= cw0;
+    s1 *= cw1;
+    s2 *= cw2;
+    s3 *= cw3;
+    s4 *= cw4;
+
+    float3 historyFiltered = s0 + s1 + s2 + s3 + s4;
+    float weightSum = cw0 + cw1 + cw2 + cw3 + cw4;
+
+    float3 filteredVal = historyFiltered * rcp(weightSum);
+    return filteredVal;
 }
 
 float3 Fragment(float4 positionCS : SV_Position) : SV_Target
@@ -85,7 +96,11 @@ float3 Fragment(float4 positionCS : SV_Position) : SV_Target
 	mean /= 9.0;
 	stdDev = sqrt(stdDev / 9.0 - mean * mean);
 	
-	float3 history = BicubicSampling5(positionCS.xy - 0.5 - longestMotion * _ScreenParams.xy);
+	//if (!_HasHistory)
+	//	return result;
+	
+	float3 history = HistoryBicubic5Tap(positionCS.xy - longestMotion * _ScreenParams.xy);
+	//history = _History.Sample(_LinearClampSampler, positionCS.xy / _ScreenParams.xy - longestMotion);
 	
 	float3 invDir = rcp(result - history);
 	float3 t0 = (mean - stdDev - history) * invDir;

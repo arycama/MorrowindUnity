@@ -28,6 +28,7 @@ public class MorrowindRenderPipeline : RenderPipeline
     private Dictionary<Camera, Matrix4x4> previousMatrices = new();
 
     private Material motionVectorsMaterial;
+    private Material tonemappingMaterial;
 
     public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset)
     {
@@ -48,8 +49,9 @@ public class MorrowindRenderPipeline : RenderPipeline
         temporalAA = new(renderPipelineAsset.TemporalAASettings);
         convolutionBloom = new(renderPipelineAsset.ConvolutionBloomSettings);
 
-        motionVectorsMaterial = new Material(Shader.Find("Hidden/Camera Motion Vectors"));
-
+        motionVectorsMaterial = new Material(Shader.Find("Hidden/Camera Motion Vectors")) { hideFlags = HideFlags.HideAndDontSave };
+        tonemappingMaterial = new Material(Shader.Find("Hidden/Tonemapping")) { hideFlags = HideFlags.HideAndDontSave };
+        
         SupportedRenderingFeatures.active = new SupportedRenderingFeatures()
         {
             defaultMixedLightingModes = SupportedRenderingFeatures.LightmapMixedBakeModes.None,
@@ -181,10 +183,10 @@ public class MorrowindRenderPipeline : RenderPipeline
         command.ClearRenderTarget(false, true, Color.clear);
 
         command.SetRenderTarget(
-            new RenderTargetBinding(new RenderTargetIdentifier[] { cameraTargetId, motionVectorsId },  
+            new RenderTargetBinding(new RenderTargetIdentifier[] { cameraTargetId, motionVectorsId },
             new RenderBufferLoadAction[] { RenderBufferLoadAction.Load, RenderBufferLoadAction.DontCare },
             new RenderBufferStoreAction[] { RenderBufferStoreAction.Store, RenderBufferStoreAction.Store },
-            cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store));;
+            cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store));
 
         motionVectorsRenderer.Render(ref cullingResults, camera, command, ref context);
 
@@ -205,12 +207,19 @@ public class MorrowindRenderPipeline : RenderPipeline
         command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepthStencil });
         transparentObjectRenderer.Render(ref cullingResults, camera, command, ref context);
 
-        var taa = temporalAA.Render(camera, command, frameCount, cameraTargetId, motionVectorsId, cameraDepthId);
+        var taa = temporalAA.Render(camera, command, frameCount, cameraTargetId, motionVectorsId);
 
         convolutionBloom.Render(command, taa, cameraTargetId);
 
+        command.BeginSample("Tonemapping");
+        command.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+        command.SetGlobalTexture("_MainTex", cameraTargetId);
+        command.SetGlobalFloat("_IsSceneView", camera.cameraType == CameraType.SceneView ? 1f : 0f);
+        command.DrawProcedural(Matrix4x4.identity, tonemappingMaterial, 0, MeshTopology.Triangles, 3);
+        command.EndSample("Tonemapping");
+
         // Copy final result
-        command.Blit(cameraTargetId, BuiltinRenderTextureType.CameraTarget);
+        //command.Blit(cameraTargetId, BuiltinRenderTextureType.CameraTarget);
 
         command.ReleaseTemporaryRT(sceneTextureId);
         command.ReleaseTemporaryRT(cameraTargetId);
@@ -220,13 +229,13 @@ public class MorrowindRenderPipeline : RenderPipeline
         clusteredLightCulling.CameraRenderingComplete(command);
         volumetricLighting.CameraRenderComplete(command);
 
-        if (UnityEditor.Handles.ShouldRenderGizmos())
-        {
-            context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
-            context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
-        }
+        //if (UnityEditor.Handles.ShouldRenderGizmos())
+        //{
+        //    context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
+        //    context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
+        //}
 
-        if (camera.cameraType == CameraType.SceneView)
-            ScriptableRenderContext.EmitWorldGeometryForSceneView(camera);
+        //if (camera.cameraType == CameraType.SceneView)
+           // ScriptableRenderContext.EmitGeometryForCamera(camera);
     }
 }

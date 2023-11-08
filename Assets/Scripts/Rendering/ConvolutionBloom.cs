@@ -8,8 +8,8 @@ public class ConvolutionBloom
     public class Settings
     {
         [SerializeField] public Texture2D KernelTexture = null;
-        [SerializeField] public float Intensity = 1.0f;
-        [SerializeField] public float Threshold = 0.0f;
+        [SerializeField, Min(0f)] public float Intensity = 1.0f;
+        [SerializeField, Min(0f)] public float Threshold = 0.0f;
         [SerializeField] public Vector2 KernelPositionOffset = new Vector2(0, 0);
         [SerializeField] public Vector2 KernelSizeScale = new Vector2(1, 1);
         [SerializeField] public float KernelDistanceExp = 0.0f;

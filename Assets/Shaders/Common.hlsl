@@ -515,4 +515,9 @@ float2 UnjitterTextureUV(float2 uv)
 	return uv - ddx_fine(uv) * _Jitter.x - ddy_fine(uv) * _Jitter.y;
 }
 
+float Luminance(float3 color)
+{
+	return dot(color, float3(0.2126729, 0.7151522, 0.0721750));
+}
+
 #endif

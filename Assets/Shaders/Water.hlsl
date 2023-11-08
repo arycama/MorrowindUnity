@@ -138,8 +138,8 @@ float3 Fragment(FragmentInput input) : SV_Target
 		float3 backgroundPositionWS = MultiplyPointProj(_InvVPMatrix, backgroundPositionCS).xyz;
 		
 		float4 backgroundFog = SampleVolumetricLighting(backgroundPositionWS);
-		if (backgroundFog.a)
-			scene = max(0.0, scene - backgroundFog.rgb) * rcp(backgroundFog.a);
+		//if (backgroundFog.a)
+			//scene = max(0.0, scene - backgroundFog.rgb) * rcp(backgroundFog.a);
 	}
 	
 	luminance += scene * exp(-_Extinction * underwaterDistance);
