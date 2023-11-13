@@ -14,8 +14,10 @@ float3 Fragment(float4 position : SV_Position) : SV_Target
 {
     float aspect = _ScreenParams.x / _ScreenParams.y;
 	float2 uv = position.xy / _ScreenParams.xy;
-	uv.y *= 0.5;
-    uv.x *= 0.5;
-    uv.y *= 1 / aspect;
-	return _Input[position.xy] + _MainTex.Sample(_LinearClampSampler, uv) * FFTBloomIntensity;
+	
+	//if(uv.x < 0.5)
+		return _Input[position.xy];
+	
+   // uv.x *= 0.5;
+	//return _MainTex.Sample(_LinearClampSampler, uv) * FFTBloomIntensity;
 }

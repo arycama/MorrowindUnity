@@ -42,7 +42,7 @@ void Compute(uint3 id : SV_DispatchThreadID)
 	unjitteredPositionCS.z = GetDeviceDepth((id.z + 0.5) / _VolumeSlices);
 	float3 unjitteredPositionWS = MultiplyPointProj(_InvVPMatrix, unjitteredPositionCS).xyz;
 	
-	float4 prevPositionCS = MultiplyPointProj(_PreviousVPMatrix, unjitteredPositionWS);
+	float4 prevPositionCS = WorldToClipPrevious(unjitteredPositionWS);
 	prevPositionCS.xy = 0.5 * prevPositionCS.xy + 0.5;
 	
 	float normalizedDepth = GetVolumetricUv(prevPositionCS.w);

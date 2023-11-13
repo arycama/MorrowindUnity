@@ -2,16 +2,10 @@
 
 Texture2D<float> _Depth;
 
-float4 GetFullScreenTriangleVertexPosition(uint vertexID)
-{
-    // note: the triangle vertex position coordinates are x2 so the returned UV coordinates are in range -1, 1 on the screen.
-	float2 uv = float2((vertexID << 1) & 2, vertexID & 2);
-	return float4(uv * 2.0 - 1.0, 1.0, 1.0);
-}
-
 float4 Vertex(uint id : SV_VertexID) : SV_Position
 {
-	return GetFullScreenTriangleVertexPosition(id);
+	float2 uv = float2((id << 1) & 2, id & 2);
+	return float4(uv * 2.0 - 1.0, 1.0, 1.0);
 }
 
 float2 Fragment(float4 positionCS : SV_Position) : SV_Target
@@ -24,7 +18,7 @@ float2 Fragment(float4 positionCS : SV_Position) : SV_Target
 	
 	float3 positionWS = MultiplyPointProj(_InvVPMatrix, positionNDC).xyz;
 	
-	float4 nonJitteredPositionCS = MultiplyPoint(_NonJitteredVPMatrix, positionWS);
-	float4 previousPositionCS = MultiplyPoint(_PreviousVPMatrix, positionWS);
+	float4 nonJitteredPositionCS = WorldToClipNonJittered(positionWS);
+	float4 previousPositionCS = WorldToClipPrevious(positionWS);
 	return MotionVectorFragment(nonJitteredPositionCS, previousPositionCS);
 }

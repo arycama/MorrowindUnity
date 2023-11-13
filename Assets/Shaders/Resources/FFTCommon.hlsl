@@ -3,7 +3,7 @@
 
 #define PI 3.14159265
 #define Complex float2
-#define SourceTextureSize 512
+#define SourceTextureSize 1024
 
 groupshared Complex groupSharedBuffer[SourceTextureSize];
 
@@ -35,7 +35,7 @@ uint ReverseBits32(uint bits)
 
 uint ReversLowerNBits(uint bits, uint N)
 {
-	return ReverseBits32(bits) >> (32 - N);
+	return reversebits(bits) >> (32 - N);
 }
 
 // 3bit 一组反转

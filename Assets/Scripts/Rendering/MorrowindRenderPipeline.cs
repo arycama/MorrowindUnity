@@ -99,9 +99,7 @@ public class MorrowindRenderPipeline : RenderPipeline
         command.Clear();
 
         foreach (var camera in cameras)
-        {
             RenderCamera(context, camera, command);
-        }
 
         context.ExecuteCommandBuffer(command);
         GenericPool<CommandBuffer>.Release(command);
@@ -123,7 +121,6 @@ public class MorrowindRenderPipeline : RenderPipeline
                 cameraRenderedFrameCount[camera] = ++frameCount;
         }
 
-        camera.ResetProjectionMatrix();
         temporalAA.OnPreRender(camera, frameCount, command);
 
         if (!previousMatrices.TryGetValue(camera, out var previousMatrix))
@@ -153,7 +150,6 @@ public class MorrowindRenderPipeline : RenderPipeline
         command.SetGlobalFloat("_FogEndDistance", RenderSettings.fogEndDistance);
         command.SetGlobalFloat("_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
 
-        context.SetupCameraProperties(camera);
 
         // More camera setup
         var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(frameCount % 64));
@@ -163,8 +159,9 @@ public class MorrowindRenderPipeline : RenderPipeline
         command.SetGlobalMatrix("_NonJitteredVPMatrix", camera.nonJitteredProjectionMatrix);
         command.SetGlobalMatrix("_PreviousVPMatrix", previousMatrix);
         command.SetGlobalMatrix("_InvVPMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix).inverse);
-
         command.SetGlobalInt("_FrameCount", frameCount);
+
+        context.SetupCameraProperties(camera);
 
         clusteredLightCulling.Render(command, camera);
         volumetricLighting.Render(camera, command, renderPipelineAsset.TileSize, renderPipelineAsset.DepthSlices, frameCount, renderPipelineAsset.BlurSigma, renderPipelineAsset.NonLinearDepth);

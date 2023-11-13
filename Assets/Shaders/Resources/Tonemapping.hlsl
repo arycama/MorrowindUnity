@@ -102,9 +102,9 @@ float3 Fragment(float4 position : SV_Position) : SV_Target
 	// Reinhard
 	//input *= rcp(1.0 + Luminance(input));
 	
-	//input = Uncharted2ToneMapping(input);
+	input = Uncharted2ToneMapping(input);
 	
-	input = SRGBToLinear(ACESFitted(LinearToSRGB(input)));
+	//input = SRGBToLinear(ACESFitted(LinearToSRGB(input)));
 	
 	return input;
 }
