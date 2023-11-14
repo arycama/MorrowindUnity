@@ -34,8 +34,6 @@ FragmentInput Vertex(VertexInput input)
 	return output;
 }
 
-bool3 IsInfOrNaN(float3 x) { return (asuint(x) & 0x7FFFFFFF) >= 0x7F800000; }
-
 float3 Fragment(FragmentInput input) : SV_Target
 {
 	float3 positionWS = input.worldPosition;

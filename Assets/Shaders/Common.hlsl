@@ -37,7 +37,7 @@ Texture3D<uint2> _LightClusterIndices;
 TextureCubeArray<float> _PointShadows;
 
 float4 _Time, _ProjectionParams, _ZBufferParams, _ScreenParams;
-float3 _AmbientLightColor, _WorldSpaceCameraPos, _FogColor;
+float3 _AmbientLightColor, _WorldSpaceCameraPos, _FogColor, _WaterAlbedo, _WaterExtinction;
 float2 _Jitter;
 float _BlockerRadius, _ClusterBias, _ClusterScale, _FogStartDistance, _FogEndDistance, _FogEnabled, _PcfRadius, _PcssSoftness, _VolumeWidth, _VolumeHeight, _VolumeSlices, _VolumeDepth, _NonLinearDepth;
 matrix _InvVPMatrix, _PreviousVPMatrix, unity_MatrixVP, _NonJitteredVPMatrix, unity_MatrixV;
@@ -458,9 +458,75 @@ float4 SampleVolumetricLighting(float3 worldPosition)
 	return _VolumetricLighting.SampleLevel(_LinearClampSampler, volumeUv, 0.0);
 }
 
+bool3 IsInfOrNaN(float3 x) { return (asuint(x) & 0x7FFFFFFF) >= 0x7F800000; }
+
 float3 ApplyFog(float3 color, float3 worldPosition, float dither)
 {
-	if (!_FogEnabled)
+	// Water
+	float3 rayDir = normalize(worldPosition - _WorldSpaceCameraPos);
+	float dist = distance(worldPosition, _WorldSpaceCameraPos);
+	float4 clip = PerspectiveDivide(WorldToClip(worldPosition));
+	
+	if (worldPosition.y < 0.0)
+	{
+		float t;
+		bool isUnderwater = false;
+		float underwaterDistance = 0.0;
+		float3 hitPos = 0.0;
+		if (_WorldSpaceCameraPos.y < 0.0)
+		{
+			hitPos = _WorldSpaceCameraPos;
+			isUnderwater = true;
+			underwaterDistance = dist;
+		}
+		else if (IntersectRayPlane(_WorldSpaceCameraPos, rayDir, 0.0, float3(0, 1, 0), t) && t < dist)
+		{
+			hitPos = _WorldSpaceCameraPos + rayDir * t;
+			underwaterDistance = distance(hitPos, worldPosition);
+			isUnderwater = true;
+		}
+	
+		if (isUnderwater)
+		{
+			float2 noise = _BlueNoise2D[(clip.xy * 0.5 + 0.5) * _ScreenParams.xy % 128];
+			float3 channelMask = floor(noise.y * 3.0) == float3(0.0, 1.0, 2.0);
+			float xi = noise.x;
+		
+			float3 _Extinction = _WaterExtinction;
+	
+			float t = -log(1.0 - xi * (1.0 - exp(-dot(_Extinction, channelMask) * underwaterDistance))) / dot(_Extinction, channelMask);
+			float3 tr = exp(_Extinction * t) / _Extinction - rcp(_Extinction * exp(_Extinction * (underwaterDistance - t)));
+			float weight = rcp(dot(rcp(tr), 1.0 / 3.0));
+			float3 P = hitPos + rayDir * t;
+	
+			float3 luminance = 0.0;
+	
+			for (uint i = 0; i < min(_DirectionalLightCount, 4); i++)
+			{
+				float shadow = GetShadow(P, i);
+				if (!shadow)
+					continue;
+		
+				DirectionalLight light = _DirectionalLights[i];
+		
+				float shadowDistance = max(0.0, hitPos.y - P.y) / max(1e-6, saturate(light.direction.y));
+				luminance += light.color * shadow * exp(-_Extinction * (shadowDistance + t)) * weight;
+			}
+		
+			luminance *= _Extinction;
+		
+		// Ambient 
+			float3 finalTransmittance = exp(-underwaterDistance * _Extinction);
+			luminance += _AmbientLightColor * (1.0 - finalTransmittance);
+			luminance *= _WaterAlbedo;
+			luminance = IsInfOrNaN(luminance) ? 0.0 : luminance;
+		
+			luminance += color * exp(-_Extinction * underwaterDistance);
+			color = luminance;
+		}
+	}
+
+	//if (!_FogEnabled)
 		return color;
 	
 	#if 1

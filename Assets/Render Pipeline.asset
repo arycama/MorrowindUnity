@@ -61,3 +61,10 @@ MonoBehaviour:
   depthSlices: 64
   blurSigma: 1
   nonLinearDepth: 0
+  waterAlbedo: {r: 0.050543994, g: 0.13698289, b: 0.21599996, a: 1}
+  waterExtinction: {r: 0.01, g: 0.0035, b: 0.003, a: 1}
+  depthOfFieldSettings:
+    focalPlaneDistance: 64
+    focalTransitionRange: 32
+    blend: 0.11
+    filterRadius: 1

@@ -1,0 +1,58 @@
+#pragma kernel main
+
+Texture2D TextureCoC;
+Texture2D TextureColor;
+
+RWTexture2D<float4> DownresColor, DownresFarMulColor;
+RWTexture2D<float2> DownresCoC;
+
+SamplerState _PointClampSampler;
+float2 _Resolution;
+
+[numthreads(8, 8, 1)]
+void main(uint2 id : SV_DispatchThreadID)
+{
+	float2 uv = (id + 0.5) / _Resolution;
+
+	float  cocNear = TextureCoC.SampleLevel(_PointClampSampler, uv, 0.0).r;
+	float4 color = TextureColor.SampleLevel(_PointClampSampler, uv, 0.0);
+	
+	uint w, h;
+	TextureColor.GetDimensions(w, h);
+	float2 pixelSize = 1.0f / float2(w, h);
+
+	float2 texCoord00 = uv + float2(-0.5f, -0.5f) * pixelSize;
+	float2 texCoord10 = uv + float2( 0.5f, -0.5f) * pixelSize;
+	float2 texCoord01 = uv + float2(-0.5f,  0.5f) * pixelSize;
+	float2 texCoord11 = uv + float2( 0.5f,  0.5f) * pixelSize;
+	
+	float cocFar00 = saturate(TextureCoC.SampleLevel(_PointClampSampler, texCoord00, 0.0).g * 5);
+	float cocFar10 = saturate(TextureCoC.SampleLevel(_PointClampSampler, texCoord10, 0.0).g * 5);
+	float cocFar01 = saturate(TextureCoC.SampleLevel(_PointClampSampler, texCoord01, 0.0).g * 5);
+	float cocFar11 = saturate(TextureCoC.SampleLevel(_PointClampSampler, texCoord11, 0.0).g * 5);
+
+	// Closer The Samples -> Bigger Contributions
+
+	float weight00 = 1000.0f;
+	float4 colorMulCOCFar = weight00 * TextureColor.SampleLevel(_PointClampSampler, texCoord00, 0.0);
+	float weightsSum = weight00;
+	
+	float weight10 = 1.0f / (abs(cocFar00 - cocFar10) + 0.001f);
+	colorMulCOCFar += weight10 * TextureColor.SampleLevel(_PointClampSampler, texCoord10, 0.0);
+	weightsSum += weight10;
+	
+	float weight01 = 1.0f / (abs(cocFar00 - cocFar01) + 0.001f);
+	colorMulCOCFar += weight01 * TextureColor.SampleLevel(_PointClampSampler, texCoord01, 0.0);
+	weightsSum += weight01;
+	
+	float weight11 = 1.0f / (abs(cocFar00 - cocFar11) + 0.001f);
+	colorMulCOCFar += weight11 * TextureColor.SampleLevel(_PointClampSampler, texCoord11, 0.0);
+	weightsSum += weight11;
+
+	colorMulCOCFar /= weightsSum;
+	colorMulCOCFar *= cocFar00;
+	
+    DownresCoC[id] = float2(cocNear, cocFar00);
+	DownresColor[id] = color;
+	DownresFarMulColor[id] = colorMulCOCFar;
+}

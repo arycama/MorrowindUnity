@@ -1,0 +1,41 @@
+#pragma kernel main
+
+SamplerState _LinearClampSampler;
+Texture2D NearCoCTexture;
+
+RWTexture2D<float> FilteredNearCoC;
+float2 _Resolution;
+
+#define RADIUS 6
+
+[numthreads(8, 8, 1)]
+void main(uint2 id : SV_DispatchThreadID)
+{
+	float2 uv = (id + 0.5) / _Resolution;
+
+	uint w, h;
+	NearCoCTexture.GetDimensions(w, h);
+	float2 step = 1.0f / float2(w, h);
+	
+	float filteredNearCoC = 0.0;
+	
+	for(int i = 0; i <= RADIUS * 2; ++i)
+	{
+		int index = (i - RADIUS);
+
+		float2 coords;
+
+#ifdef HORIZONTAL
+		coords = uv + step * float2(float(index), 0.0);
+#else
+		coords = uv + step * float2(0.0, float(index));
+#endif
+
+        float sample = NearCoCTexture.SampleLevel(_LinearClampSampler, coords, 0.0).r;  
+		filteredNearCoC += sample;
+	}
+
+	filteredNearCoC = filteredNearCoC / (RADIUS * 2.0f + 1.0f);
+
+    FilteredNearCoC[id] = filteredNearCoC;
+}

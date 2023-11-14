@@ -17,6 +17,11 @@ public class MorrowindRenderPipelineAsset : RenderPipelineAsset
     [SerializeField, Range(0.0f, 2.0f)] private float blurSigma = 1.0f;
     [SerializeField] private bool nonLinearDepth = true;
 
+    public Color waterAlbedo = Color.white;
+    [ColorUsage(false, true)] public Color waterExtinction = Color.grey;
+
+    public DepthOfField.Settings depthOfFieldSettings;
+
     public int TileSize => tileSize;
     public int DepthSlices => depthSlices;
     public float BlurSigma => blurSigma;

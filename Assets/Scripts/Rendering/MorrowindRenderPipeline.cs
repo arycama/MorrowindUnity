@@ -23,6 +23,7 @@ public class MorrowindRenderPipeline : RenderPipeline
     private readonly ObjectRenderer transparentObjectRenderer;
     private readonly TemporalAA temporalAA;
     private readonly ConvolutionBloom convolutionBloom;
+    private readonly DepthOfField depthOfField;
 
     private Dictionary<Camera, int> cameraRenderedFrameCount = new();
     private Dictionary<Camera, Matrix4x4> previousMatrices = new();
@@ -48,6 +49,7 @@ public class MorrowindRenderPipeline : RenderPipeline
         transparentObjectRenderer = new(RenderQueueRange.transparent, SortingCriteria.CommonTransparent, false, PerObjectData.None, "SRPDefaultUnlit");
         temporalAA = new(renderPipelineAsset.TemporalAASettings);
         convolutionBloom = new(renderPipelineAsset.ConvolutionBloomSettings);
+        depthOfField = new(renderPipelineAsset.depthOfFieldSettings);
 
         motionVectorsMaterial = new Material(Shader.Find("Hidden/Camera Motion Vectors")) { hideFlags = HideFlags.HideAndDontSave };
         tonemappingMaterial = new Material(Shader.Find("Hidden/Tonemapping")) { hideFlags = HideFlags.HideAndDontSave };
@@ -150,6 +152,8 @@ public class MorrowindRenderPipeline : RenderPipeline
         command.SetGlobalFloat("_FogEndDistance", RenderSettings.fogEndDistance);
         command.SetGlobalFloat("_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
 
+        command.SetGlobalVector("_WaterAlbedo", renderPipelineAsset.waterAlbedo.linear);
+        command.SetGlobalVector("_WaterExtinction", renderPipelineAsset.waterExtinction);
 
         // More camera setup
         var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(frameCount % 64));
@@ -205,6 +209,8 @@ public class MorrowindRenderPipeline : RenderPipeline
         transparentObjectRenderer.Render(ref cullingResults, camera, command, ref context);
 
         var taa = temporalAA.Render(camera, command, frameCount, cameraTargetId, motionVectorsId);
+
+        depthOfField.Render(camera, command, cameraDepthId, taa);
 
         convolutionBloom.Render(command, taa, cameraTargetId);
 
