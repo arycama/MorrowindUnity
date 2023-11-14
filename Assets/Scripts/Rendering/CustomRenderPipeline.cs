@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.Rendering;
 
-public class MorrowindRenderPipeline : RenderPipeline
+public class CustomRenderPipeline : RenderPipeline
 {
     private static readonly IndexedString blueNoise1DIds = new("STBN/Scalar/stbn_scalar_2Dx1Dx1D_128x128x64x1_");
     private static readonly IndexedString blueNoise2DIds = new("STBN/Vec2/stbn_vec2_2Dx1D_128x128x64_");
@@ -13,7 +13,7 @@ public class MorrowindRenderPipeline : RenderPipeline
     private static readonly int sceneTextureId = Shader.PropertyToID("_SceneTexture");
     private static readonly int motionVectorsId = Shader.PropertyToID("_MotionVectors");
 
-    private readonly MorrowindRenderPipelineAsset renderPipelineAsset;
+    private readonly CustomRenderPipelineAsset renderPipelineAsset;
 
     private readonly LightingSetup lightingSetup;
     private readonly ClusteredLightCulling clusteredLightCulling;
@@ -31,7 +31,7 @@ public class MorrowindRenderPipeline : RenderPipeline
     private Material motionVectorsMaterial;
     private Material tonemappingMaterial;
 
-    public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset)
+    public CustomRenderPipeline(CustomRenderPipelineAsset renderPipelineAsset)
     {
         this.renderPipelineAsset = renderPipelineAsset;
 

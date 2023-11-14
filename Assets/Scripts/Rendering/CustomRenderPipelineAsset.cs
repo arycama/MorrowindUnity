@@ -2,8 +2,8 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 
-[CreateAssetMenu(menuName = "Morrowind Render Pipeline Asset")]
-public class MorrowindRenderPipelineAsset : RenderPipelineAsset
+[CreateAssetMenu(menuName = "Custom Render Pipeline Asset")]
+public class CustomRenderPipelineAsset : RenderPipelineAsset
 {
     [SerializeField] private bool enableSrpBatcher;
     [SerializeField] private ShadowSettings shadowSettings;
@@ -35,6 +35,6 @@ public class MorrowindRenderPipelineAsset : RenderPipelineAsset
 
     protected override RenderPipeline CreatePipeline()
     {
-        return new MorrowindRenderPipeline(this);
+        return new CustomRenderPipeline(this);
     }
 }
