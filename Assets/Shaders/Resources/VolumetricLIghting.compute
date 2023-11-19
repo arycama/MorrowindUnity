@@ -16,15 +16,21 @@ void Compute(uint3 id : SV_DispatchThreadID)
 	float jitter = _BlueNoise1D[id.xy % 128];
 	//jitter = InterleavedGradientNoise(id.xy, 0);
 	
-	float3 positionCS;
-	positionCS.xy = (id.xy + 0.5) / float2(_VolumeWidth, _VolumeHeight) * 2.0 - 1.0;
-	positionCS.z = GetDeviceDepth((id.z + jitter) / _VolumeSlices);
+	float2 positionNDC = (id.xy + 0.5) / float2(_VolumeWidth, _VolumeHeight);
+	float2 pixelPosition = positionNDC * _ScreenParams.xy;
 	
-	float3 positionWS = MultiplyPointProj(_InvVPMatrix, positionCS).xyz;
+	float normalizedDepth = (id.z + jitter) / _VolumeSlices;
+	
+	float4 positionCS;
+	positionCS.xy = positionNDC * 2.0 - 1.0;
+	positionCS.z = GetDeviceDepth(normalizedDepth);
+	positionCS.w = Remap(normalizedDepth, 0.0, 1.0, _ProjectionParams.y, _ProjectionParams.z);
+	
+	float3 positionWS = MultiplyPointProj(_InvVPMatrix, positionCS.xyz).xyz;
 	float3 lighting = _AmbientLightColor;
 	
 	float viewDistance = distance(positionWS, _WorldSpaceCameraPos);
-	lighting += GetLighting(0.0, positionWS, true);
+	lighting += GetLighting(0.0, positionWS, pixelPosition, positionCS.w, true);
 	
 	float extinction = viewDistance > _FogStartDistance && viewDistance < _FogEndDistance ? rcp(_FogEndDistance - viewDistance) : 0.0;
 	
@@ -37,16 +43,20 @@ void Compute(uint3 id : SV_DispatchThreadID)
 	float4 luminanceExtinction = float4(albedo * lighting, extinction);
 	
 	// Reproject previous frame. Needs to use unjittered world position
-	float3 unjitteredPositionCS;
-	unjitteredPositionCS.xy = (id.xy + 0.5) / float2(_VolumeWidth, _VolumeHeight) * 2.0 - 1.0;
-	unjitteredPositionCS.z = GetDeviceDepth((id.z + 0.5) / _VolumeSlices);
-	float3 unjitteredPositionWS = MultiplyPointProj(_InvVPMatrix, unjitteredPositionCS).xyz;
+	float unjitteredNormalizedDepth = (id.z + 0.5) / _VolumeSlices;
 	
-	float4 prevPositionCS = WorldToClipPrevious(unjitteredPositionWS);
+	float4 unjitteredPositionCS;
+	unjitteredPositionCS.xy = positionNDC * 2.0 - 1.0;
+	unjitteredPositionCS.z = GetDeviceDepth(unjitteredNormalizedDepth);
+	unjitteredPositionCS.w = Remap(unjitteredNormalizedDepth, 0.0, 1.0, _ProjectionParams.y, _ProjectionParams.z);
+	
+	float3 unjitteredPositionWS = MultiplyPointProj(_InvVPMatrix, unjitteredPositionCS.xyz).xyz;
+	
+	float4 prevPositionCS = PerspectiveDivide(WorldToClipPrevious(unjitteredPositionWS));
+	prevPositionCS.y = -prevPositionCS.y;
 	prevPositionCS.xy = 0.5 * prevPositionCS.xy + 0.5;
 	
-	float normalizedDepth = GetVolumetricUv(prevPositionCS.w);
-	float3 volumeUv = float3(prevPositionCS.xy, normalizedDepth);
+	float3 volumeUv = float3(prevPositionCS.xy, GetVolumetricUv(prevPositionCS.w));
 
 	if (all(saturate(volumeUv) == volumeUv))
 	{
@@ -72,8 +82,6 @@ void KERNEL(uint3 id : SV_DispatchThreadID)
 			int3 coord = id + int3(0, i, 0);
 		#endif
 		
-		//coord = clamp(coord, 0, int3(_VolumeWidth, _VolumeHeight, _VolumeSlices) - 1);
-		
 		if (any(coord < 0 || coord >= int3(_VolumeWidth, _VolumeHeight, _VolumeSlices)))
 			continue;
 		
@@ -87,7 +95,6 @@ void KERNEL(uint3 id : SV_DispatchThreadID)
 		result /= weightSum;
 	
 	_Result[id] = result;
-	//_Result[id] = _Input[id];
 }
 
 [numthreads(8, 8, 1)]

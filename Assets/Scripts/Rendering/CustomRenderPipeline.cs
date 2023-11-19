@@ -162,7 +162,7 @@ public class CustomRenderPipeline : RenderPipeline
         command.SetGlobalTexture("_BlueNoise2D", blueNoise2D);
         command.SetGlobalMatrix("_NonJitteredVPMatrix", camera.nonJitteredProjectionMatrix);
         command.SetGlobalMatrix("_PreviousVPMatrix", previousMatrix);
-        command.SetGlobalMatrix("_InvVPMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix).inverse);
+        command.SetGlobalMatrix("_InvVPMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse);
         command.SetGlobalInt("_FrameCount", frameCount);
 
         context.SetupCameraProperties(camera);

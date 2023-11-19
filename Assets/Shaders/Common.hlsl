@@ -124,6 +124,11 @@ float2 ApplyScaleOffset(float2 uv, float4 scaleOffset)
 	return uv * scaleOffset.xy + scaleOffset.zw;
 }
 
+float LinearEyeDepth(float depth)
+{
+	return 1.0 / (_ZBufferParams.z * depth + _ZBufferParams.w);
+}
+
 float4 LinearEyeDepth(float4 depth, float4 zBufferParam)
 {
 	return 1.0 / (zBufferParam.z * depth + zBufferParam.w);
@@ -343,33 +348,8 @@ float GetShadow(float3 worldPosition, uint lightIndex)
 	return weightSum ? shadow / weightSum : 1.0;
 }
 
-float3 GetLighting(float3 normal, float3 worldPosition, bool isVolumetric = false)
+float3 GetLighting(float3 normal, float3 worldPosition, float2 pixelPosition, float eyeDepth, bool isVolumetric = false)
 {
-	//DirectionalLight light = _DirectionalLights[0];
-	
-	//for (uint j = 0; j < min(4, light.cascadeCount); j++)
-	//{
-	//	// find the first cascade which is not out of bounds
-	//	matrix shadowMatrix = _DirectionalMatrices[light.shadowIndex + j];
-	//	float3 positionLS = MultiplyPoint3x4(shadowMatrix, MultiplyPoint3x4(light.worldToLight, worldPosition));
-	//	if (all(saturate(positionLS) == positionLS))
-	//	{
-	//		switch (j)
-	//		{
-	//			case 0:
-	//				return float3(1.0, 0.0, 0.0);
-	//			case 1:
-	//				return float3(0.0, 1.0, 0.0);
-	//			case 2:
-	//				return float3(0.0, 0.0, 1.0);
-	//			case 3:
-	//				return float3(1.0, 0.0, 1.0);
-	//		}
-	//	}
-	//}
-	
-	//return 1.0;
-	
 	// Directional lights
 	float3 lighting = 0.0;
 	for (uint i = 0; i < min(_DirectionalLightCount, 4); i++)
@@ -382,12 +362,9 @@ float3 GetLighting(float3 normal, float3 worldPosition, bool isVolumetric = fals
 		lighting += (isVolumetric ? 1.0 : saturate(dot(normal, light.direction))) * light.color * shadow;
 	}
 	
-	float4 positionCS = PerspectiveDivide(WorldToClip(worldPosition));
-	positionCS.xy = (positionCS.xy * 0.5 + 0.5) * _ScreenParams.xy;
-	
 	uint3 clusterIndex;
-	clusterIndex.xy = floor(positionCS.xy) / _TileSize;
-	clusterIndex.z = log2(positionCS.w) * _ClusterScale + _ClusterBias;
+	clusterIndex.xy = floor(pixelPosition) / _TileSize;
+	clusterIndex.z = log2(eyeDepth) * _ClusterScale + _ClusterBias;
 	
 	uint2 lightOffsetAndCount = _LightClusterIndices[clusterIndex];
 	uint startOffset = lightOffsetAndCount.x;
@@ -448,132 +425,22 @@ float GetVolumetricUv(float linearDepth)
 	}
 }
 
-float4 SampleVolumetricLighting(float3 worldPosition)
+float4 SampleVolumetricLighting(float2 pixelPosition, float eyeDepth)
 {
-	float4 positionCS = PerspectiveDivide(WorldToClip(worldPosition));
-	positionCS.xy = 0.5 * positionCS.xy + 0.5;
-	float normalizedDepth = GetVolumetricUv(positionCS.w);
-	float3 volumeUv = float3(positionCS.xy, normalizedDepth);
-	
+	float normalizedDepth = GetVolumetricUv(eyeDepth);
+	float3 volumeUv = float3(pixelPosition / _ScreenParams.xy, normalizedDepth);
 	return _VolumetricLighting.SampleLevel(_LinearClampSampler, volumeUv, 0.0);
 }
 
 bool3 IsInfOrNaN(float3 x) { return (asuint(x) & 0x7FFFFFFF) >= 0x7F800000; }
 
-float3 ApplyFog(float3 color, float3 worldPosition, float dither)
+float3 ApplyFog(float3 color, float2 pixelPosition, float eyeDepth)
 {
-	// Water
-	float3 rayDir = normalize(worldPosition - _WorldSpaceCameraPos);
-	float dist = distance(worldPosition, _WorldSpaceCameraPos);
-	float4 clip = PerspectiveDivide(WorldToClip(worldPosition));
-	
-	if (worldPosition.y < 0.0)
-	{
-		float t;
-		bool isUnderwater = false;
-		float underwaterDistance = 0.0;
-		float3 hitPos = 0.0;
-		if (_WorldSpaceCameraPos.y < 0.0)
-		{
-			hitPos = _WorldSpaceCameraPos;
-			isUnderwater = true;
-			underwaterDistance = dist;
-		}
-		else if (IntersectRayPlane(_WorldSpaceCameraPos, rayDir, 0.0, float3(0, 1, 0), t) && t < dist)
-		{
-			hitPos = _WorldSpaceCameraPos + rayDir * t;
-			underwaterDistance = distance(hitPos, worldPosition);
-			isUnderwater = true;
-		}
-	
-		if (isUnderwater)
-		{
-			float2 noise = _BlueNoise2D[(clip.xy * 0.5 + 0.5) * _ScreenParams.xy % 128];
-			float3 channelMask = floor(noise.y * 3.0) == float3(0.0, 1.0, 2.0);
-			float xi = noise.x;
-		
-			float3 _Extinction = _WaterExtinction;
-	
-			float t = -log(1.0 - xi * (1.0 - exp(-dot(_Extinction, channelMask) * underwaterDistance))) / dot(_Extinction, channelMask);
-			float3 tr = exp(_Extinction * t) / _Extinction - rcp(_Extinction * exp(_Extinction * (underwaterDistance - t)));
-			float weight = rcp(dot(rcp(tr), 1.0 / 3.0));
-			float3 P = hitPos + rayDir * t;
-	
-			float3 luminance = 0.0;
-	
-			for (uint i = 0; i < min(_DirectionalLightCount, 4); i++)
-			{
-				float shadow = GetShadow(P, i);
-				if (!shadow)
-					continue;
-		
-				DirectionalLight light = _DirectionalLights[i];
-		
-				float shadowDistance = max(0.0, hitPos.y - P.y) / max(1e-6, saturate(light.direction.y));
-				luminance += light.color * shadow * exp(-_Extinction * (shadowDistance + t)) * weight;
-			}
-		
-			luminance *= _Extinction;
-		
-		// Ambient 
-			float3 finalTransmittance = exp(-underwaterDistance * _Extinction);
-			luminance += _AmbientLightColor * (1.0 - finalTransmittance);
-			luminance *= _WaterAlbedo;
-			luminance = IsInfOrNaN(luminance) ? 0.0 : luminance;
-		
-			luminance += color * exp(-_Extinction * underwaterDistance);
-			color = luminance;
-		}
-	}
-
-	//if (!_FogEnabled)
+	if (!_FogEnabled)
 		return color;
 	
-	#if 1
-		float4 volumetricLighting = SampleVolumetricLighting(worldPosition);
-		return color * volumetricLighting.a + volumetricLighting.rgb;
-	#else
-		// Todo: compute on CPU
-		float3 sunColor = 0.0;
-		for (uint i = 0; i < _DirectionalLightCount; i++)
-			sunColor += _DirectionalLights[i].color;
-	
-		// Calculate extinction coefficient from color and distance
-		// TODO: Assume fog is white, and fogcolor is actually lighting.. might not work for interiors though? Could do some kind of... dirlight/fog color or something
-		float3 albedo = _FogColor / (sunColor + _AmbientLightColor);
-		float samples = 64;
-	
-		float3 rayStart = _WorldSpaceCameraPos;
-		float3 ray = worldPosition - rayStart;
-		float3 rayStep = ray / samples;
-		float ds = length(rayStep);
-	
-		float4 result = float2(0.0, 1.0).xxxy;
-		for (float i = dither; i < samples; i++)
-		{
-			// Treat the extinction as a spatially varying coefficient, based on linear fog.
-			float rayDist = ds * i;
-		
-			float3 position = rayStep * i + rayStart;
-		
-			// Point lights
-			float3 lighting = _AmbientLightColor + GetLighting(0.0, position, true);
-		
-			float extinction = 0.0;
-			if (rayDist > _FogStartDistance && rayDist < _FogEndDistance)
-				extinction = rcp(_FogEndDistance - rayDist);
-		
-			float3 luminance = albedo * extinction * lighting;
-		
-			float transmittance = exp(-extinction * ds);
-			float3 integScatt = luminance * (1.0 - transmittance) / max(extinction, 1e-7);
-		
-			result.rgb += integScatt * result.a;
-			result.a *= transmittance;
-		}
-	
-		return color * result.a + result.rgb;
-	#endif
+	float4 volumetricLighting = SampleVolumetricLighting(pixelPosition, eyeDepth);
+	return color * volumetricLighting.a + volumetricLighting.rgb;
 }
 
 float2 UnjitterTextureUV(float2 uv)

@@ -39,8 +39,8 @@ float3 Fragment(FragmentInput input) : SV_Target
 	float3 positionWS = input.worldPosition;
 	float linearWaterDepth = input.position.w;
 
-	float underwaterDepth = _CameraDepth[input.position.xy];
-	float underwaterDistance = LinearEyeDepth(underwaterDepth, _ZBufferParams) - linearWaterDepth;
+	float underwaterDepth = LinearEyeDepth(_CameraDepth[input.position.xy], _ZBufferParams);
+	float underwaterDistance = underwaterDepth - linearWaterDepth;
 	
 	// Clamp underwater depth if sampling a non-underwater pixel
 	//if (underwaterDistance <= 0.0)
@@ -131,13 +131,10 @@ float3 Fragment(FragmentInput input) : SV_Target
 	// Need to remove fog from background
 	if (_FogEnabled)
 	{
-		float3 backgroundPositionCS = float3(input.position.xy / _ScreenParams.xy * 2.0 - 1.0, underwaterDepth);
-		backgroundPositionCS.y = -backgroundPositionCS.y;
-		float3 backgroundPositionWS = MultiplyPointProj(_InvVPMatrix, backgroundPositionCS).xyz;
+		float4 backgroundFog = SampleVolumetricLighting(input.position.xy, underwaterDepth);
 		
-		float4 backgroundFog = SampleVolumetricLighting(backgroundPositionWS);
-		//if (backgroundFog.a)
-			//scene = max(0.0, scene - backgroundFog.rgb) * rcp(backgroundFog.a);
+		if (backgroundFog.a)
+			scene = max(0.0, scene - backgroundFog.rgb) * rcp(backgroundFog.a);
 	}
 	
 	luminance += scene * exp(-_Extinction * underwaterDistance);
@@ -148,6 +145,6 @@ float3 Fragment(FragmentInput input) : SV_Target
 	//color.rgb *= lighting;
 	
 	float3 color = luminance;
-	color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
+	color.rgb = ApplyFog(color.rgb, input.position.xy, input.position.w);
 	return color;
 }

@@ -112,55 +112,19 @@ FragmentOutput Fragment(FragmentInput input)
 		#ifdef _ALPHABLEND_ON
 			//clip(color.a - 0.5);
 			//clip(color.a - InterleavedGradientNoise(input.position.xy, 0));
-			clip(color.a - _BlueNoise1D[uint2(input.position.xy) % 128]);
+			//clip(color.a - _BlueNoise1D[uint2(input.position.xy) % 128]);
 		#endif
 	#else
 		float3 normal = normalize(input.normal);
-		float3 lighting = GetLighting(normal, input.worldPosition);
+		float3 lighting = GetLighting(normal, input.worldPosition, input.position.xy, input.position.w);
 
 		lighting += input.color;
 		color.rgb *= lighting;
-		color.rgb = ApplyFog(color.rgb, input.worldPosition, InterleavedGradientNoise(input.position.xy, 0));
+		color.rgb = ApplyFog(color.rgb, input.position.xy, input.position.w);
 		output.color = color;
 	
 		#ifdef MOTION_VECTORS_ON
-	//if (unity_MotionVectorsParams.y)
-	//{
-	//	float2 nonJitteredPosition = input.position.xy / _ScreenParams.xy; // Convert to NDC (0 to 1)
-	//	nonJitteredPosition = 2.0 * nonJitteredPosition - 1.0; // Convert to clip space (-1 to 1)
-	//	nonJitteredPosition.y = -nonJitteredPosition.y;
-		
-	//	float3 worldPos = MultiplyPointProj(_InvVPMatrix, float3(nonJitteredPosition, input.position.z));
-		
-	//	float4 nonClip = WorldToClipNonJittered(worldPos);
-		
-	//	//nonClip = input.nonJitteredPositionCS;
-	//	nonClip.xy /= nonClip.w;
-	//	nonClip.y = -nonClip.y;
-	//	nonClip.xy = 0.5 * nonClip.xy + 0.5;
-	//	nonJitteredPosition = nonClip.xy;
-		
-	//	nonJitteredPosition.xy = (((input.nonJitteredPositionCS.xy / input.nonJitteredPositionCS.w * 0.5 + 0.5) * _ScreenParams.xy) - _Jitter) / _ScreenParams.xy;
-	//	nonJitteredPosition.y = 1 - nonJitteredPosition.y;
-		
-	//	//nonJitteredPosition -= (2.0 * _Jitter / _ScreenParams.xy); // Apply jitter offset
-			
-	//	//nonJitteredPosition /= input.position.w; // Redo perspectiev divide
-	//	//nonJitteredPosition = nonJitteredPosition * 0.5 + 0.5; // Convert to NDC (0 to 1)
-			
-	//	float4 prevPosCS = input.previousPositionCS;
-		
-		
-	//	// Flip due to matrix stupidity
-	//	prevPosCS.y = -prevPosCS.y;
-	//	output.velocity = nonJitteredPosition - (PerspectiveDivide(prevPosCS).xy * 0.5 + 0.5);
-	//}
-	//else
-	//{
-	//	output.velocity = 0.0;
-	//}
-		
-	output.velocity = unity_MotionVectorsParams.y ? MotionVectorFragment(input.nonJitteredPositionCS, input.previousPositionCS) : 0.0;
+			output.velocity = unity_MotionVectorsParams.y ? MotionVectorFragment(input.nonJitteredPositionCS, input.previousPositionCS) : 0.0;
 		#endif
 	#endif
 	
