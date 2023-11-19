@@ -51,7 +51,7 @@ public class TemporalAA
     public void OnPreRender(Camera camera, int frameCount, CommandBuffer command)
     {
         camera.ResetProjectionMatrix();
-        camera.nonJitteredProjectionMatrix = GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix;
+        camera.nonJitteredProjectionMatrix = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix;
 
         var sampleIndex = frameCount % settings.SampleCount;
         jitter.x = Halton(sampleIndex, 2) - 0.5f;

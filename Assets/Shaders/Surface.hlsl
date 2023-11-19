@@ -111,7 +111,7 @@ FragmentOutput Fragment(FragmentInput input)
 	#if defined(UNITY_PASS_SHADOWCASTER) 
 		#ifdef _ALPHABLEND_ON
 			//clip(color.a - 0.5);
-			//clip(color.a - InterleavedGradientNoise(input.position.xy, 0));
+			clip(color.a - InterleavedGradientNoise(input.position.xy, 0));
 			//clip(color.a - _BlueNoise1D[uint2(input.position.xy) % 128]);
 		#endif
 	#else

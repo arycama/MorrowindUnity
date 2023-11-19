@@ -203,10 +203,14 @@ float EyeToDeviceDepth(float eyeDepth)
 	return (1.0 - eyeDepth * _ZBufferParams.w) * rcp(eyeDepth * _ZBufferParams.z);
 }
 
+float3 ClipToWorld(float3 position)
+{
+	return MultiplyPointProj(_InvVPMatrix, position).xyz;
+}
+
 float3 PixelToWorld(float3 position)
 {
-	float3 positionNDC = float3(position.xy / _ScreenParams.xy * 2 - 1, position.z);
-	return MultiplyPointProj(_InvVPMatrix, positionNDC).xyz;
+	return ClipToWorld(float3(position.xy / _ScreenParams.xy * 2 - 1, position.z));
 }
 
 float4 WorldToClipNonJittered(float3 position) { return MultiplyPoint(_NonJitteredVPMatrix, position); }
@@ -214,10 +218,6 @@ float4 WorldToClipPrevious(float3 position) { return MultiplyPoint(_PreviousVPMa
 
 float2 MotionVectorFragment(float4 nonJitteredPositionCS, float4 previousPositionCS)
 {
-	// Flip due to matrix stupidity
-	nonJitteredPositionCS.y = -nonJitteredPositionCS.y;
-	previousPositionCS.y = -previousPositionCS.y;
-	
 	return (PerspectiveDivide(nonJitteredPositionCS).xy * 0.5 + 0.5) - (PerspectiveDivide(previousPositionCS).xy * 0.5 + 0.5);
 }
 
