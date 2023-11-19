@@ -388,12 +388,12 @@ float3 GetLighting(float3 normal, float3 worldPosition, float2 pixelPosition, fl
 			float dominantAxis = Max3(abs(lightVector * float3(-1, 1, -1)));
 			float depth = rcp(dominantAxis) * light.far + light.near;
 			shadow = _PointShadows.SampleCmpLevelZero(_LinearClampCompareSampler, float4(lightVector * float3(-1, 1, -1), light.shadowIndex), depth);
+			
+			if (!shadow)
+				continue;
 		}
 		
-		if (!shadow)
-			continue;
-		
-		//sqrLightDist = max(Sq(0.01), sqrLightDist);
+		sqrLightDist = max(Sq(0.01), sqrLightDist);
 		float rcpLightDist = rsqrt(sqrLightDist);
 		
 		#if 0
@@ -404,8 +404,7 @@ float3 GetLighting(float3 normal, float3 worldPosition, float2 pixelPosition, fl
 			float attenuation = Remap(light.range * rcp(3.0) * rcpLightDist, rcp(3.0));
 		#endif
 		
-		float3 L = lightVector * rcpLightDist;
-		lighting += (isVolumetric ? 1.0 : saturate(dot(normal, L))) * light.color * attenuation * shadow;
+		lighting += (isVolumetric ? 1.0 : saturate(dot(normal, lightVector) * rcpLightDist)) * light.color * attenuation * shadow;
 	}
 	
 	return lighting;
