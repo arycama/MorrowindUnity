@@ -13,7 +13,7 @@ public class VolumetricLighting
 
     public void Render(Camera camera, CommandBuffer command, int tileSize, int depthSlices, int frameCount, float blurSigma, bool nonLinearDepth)
     {
-        command.BeginSample("Volumetric Lighting");
+        using var profilerScope = command.BeginScopedSample("Volumetric Lighting");
 
         var width = Mathf.CeilToInt(camera.pixelWidth / (float)tileSize);
         var height = Mathf.CeilToInt(camera.pixelHeight / (float)tileSize);
@@ -55,8 +55,6 @@ public class VolumetricLighting
         command.SetComputeTextureParam(computeShader, 3, "_Result", volumetricLightingId);
         command.DispatchNormalized(computeShader, 3, width, height, 1);
         command.SetGlobalTexture("_VolumetricLighting", volumetricLightingId);
-
-        command.EndSample("Volumetric Lighting");
     }
 
     public void CameraRenderComplete(CommandBuffer command)

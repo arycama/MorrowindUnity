@@ -53,7 +53,7 @@ public class DepthOfField
 
             command.GetTemporaryRT(coc, cocDesc);
 
-            command.SetComputeTextureParam(genCoc, 0, "_Depth", depth);
+            command.SetComputeTextureParam(genCoc, 0, "_CameraDepth", depth);
             command.SetComputeTextureParam(genCoc, 0, "_Result", coc);
             command.DispatchNormalized(genCoc, 0, camera.pixelWidth, camera.pixelHeight, 1);
         }

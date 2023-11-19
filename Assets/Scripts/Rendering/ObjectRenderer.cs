@@ -23,7 +23,7 @@ public class ObjectRenderer
 
     public void Render(ref CullingResults cullingResults, Camera camera, CommandBuffer command, ref ScriptableRenderContext context)
     {
-        command.BeginSample(profilerTag);
+        using var profilerScope = command.BeginScopedSample(profilerTag);
 
         var srpDefaultUnlitShaderPassName = new ShaderTagId(passName);
         var rendererListDesc = new RendererListDesc(srpDefaultUnlitShaderPassName, cullingResults, camera)
@@ -36,7 +36,5 @@ public class ObjectRenderer
 
         var rendererList = context.CreateRendererList(rendererListDesc);
         command.DrawRendererList(rendererList);
-
-        command.EndSample(profilerTag);
     }
 }

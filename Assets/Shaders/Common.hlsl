@@ -29,7 +29,7 @@ SamplerState _LinearClampSampler, _LinearRepeatSampler, _PointClampSampler, _Tri
 StructuredBuffer<DirectionalLight> _DirectionalLights;
 StructuredBuffer<matrix> _DirectionalMatrices;
 StructuredBuffer<PointLight> _PointLights;
-Texture2D<float> _BlueNoise1D;
+Texture2D<float> _BlueNoise1D, _CameraDepth;
 Texture2D<float2> _BlueNoise2D;
 Texture2DArray<float> _DirectionalShadows;
 Texture3D<float4> _VolumetricLighting;

@@ -31,4 +31,9 @@ public static class CommandBufferExtensions
 
         command.SetBufferData(computeBuffer, data);
     }
+
+    public static CommandBufferProfilerScope BeginScopedSample(this CommandBuffer command, string name)
+    {
+        return new CommandBufferProfilerScope(command, name);
+    }
 }

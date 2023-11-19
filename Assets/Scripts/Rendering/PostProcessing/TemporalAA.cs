@@ -37,7 +37,7 @@ public class TemporalAA
     public TemporalAA(Settings settings)
     {
         this.settings = settings;
-        material = new Material(Shader.Find("Hidden/Temporal AA"));
+        material = new Material(Shader.Find("Hidden/Temporal AA")) { hideFlags = HideFlags.HideAndDontSave };
         propertyBlock = new();
     }
 
@@ -46,14 +46,14 @@ public class TemporalAA
         textureCache.Dispose();
     }
 
-    private Vector4 jitter;
-
     public void OnPreRender(Camera camera, int frameCount, CommandBuffer command)
     {
         camera.ResetProjectionMatrix();
         camera.nonJitteredProjectionMatrix = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix;
 
         var sampleIndex = frameCount % settings.SampleCount;
+
+        Vector2 jitter;
         jitter.x = Halton(sampleIndex, 2) - 0.5f;
         jitter.y = Halton(sampleIndex, 3) - 0.5f;
         jitter *= settings.JitterSpread;
@@ -68,7 +68,7 @@ public class TemporalAA
 
     public RenderTargetIdentifier Render(Camera camera, CommandBuffer command, int frameCount, RenderTargetIdentifier input, RenderTargetIdentifier motion)
     {
-        command.BeginSample("Temporal AA");
+        using var profilerScope = command.BeginScopedSample("Temporal AA");
 
         var descriptor = new RenderTextureDescriptor(camera.pixelWidth, camera.pixelHeight, RenderTextureFormat.RGB111110Float);
         var wasCreated = textureCache.GetTexture(camera, descriptor, out var current, out var previous, frameCount);
@@ -85,7 +85,6 @@ public class TemporalAA
 
         command.SetRenderTarget(current);
         command.DrawProcedural(Matrix4x4.identity, material, 0, MeshTopology.Triangles, 3, 1, propertyBlock);
-        command.EndSample("Temporal AA");
 
         return current;
     }

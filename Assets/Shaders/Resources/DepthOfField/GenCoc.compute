@@ -1,7 +1,7 @@
 #pragma kernel main
 
 RWTexture2D<float2> _Result;
-Texture2D<float> _Depth;
+Texture2D<float> _CameraDepth;
 
 float	maxRadius;
 float	blend;
@@ -29,7 +29,7 @@ float LinearizeDepth(float depth)
 [numthreads(8, 8, 1)]
 void main(uint2 id : SV_DispatchThreadID)
 {
-	float depth = _Depth[id];
+	float depth = _CameraDepth[id];
 
 	float depth_linearized = LinearEyeDepth(depth, _ZBufferParams);// LinearizeDepth(depth);
 

@@ -16,7 +16,6 @@ struct FragmentInput
 Texture2D<float3> _SceneTexture;
 Texture2D<float> _DepthTexture;
 Texture2D _MainTex, _EmissionMap;
-Texture2D<float> _CameraDepth;
 
 cbuffer UnityPerMaterial
 {

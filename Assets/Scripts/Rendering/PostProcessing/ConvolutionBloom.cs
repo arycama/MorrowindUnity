@@ -47,7 +47,7 @@ public class ConvolutionBloom
 
     public void Render(CommandBuffer command, RenderTargetIdentifier input, RenderTargetIdentifier result)
     {
-        command.BeginSample("Convolution Bloom");
+        using var profilerScope = command.BeginScopedSample("Convolution Bloom");
 
         // Generate Kernel
         var kernelDesc = new RenderTextureDescriptor(settings.Resolution, settings.Resolution, RenderTextureFormat.RGB111110Float) { enableRandomWrite = true };
@@ -140,7 +140,5 @@ public class ConvolutionBloom
         command.SetGlobalTexture("_MainTex", m_sourceFrequencyTextureID);
         command.SetGlobalVector("_Resolution", new Vector2(settings.Resolution, settings.Resolution));
         command.DrawProcedural(Matrix4x4.identity, finalBlitMaterial, 0, MeshTopology.Triangles, 3);
-
-        command.EndSample("Convolution Bloom");
     }
 }

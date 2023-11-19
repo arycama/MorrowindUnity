@@ -10,6 +10,7 @@ public class CustomRenderPipelineAsset : RenderPipelineAsset
     [SerializeField] private ClusteredLightCulling.Settings clusteredLightingSettings;
     [SerializeField] private TemporalAA.Settings temporalAASettings;
     [SerializeField] private ConvolutionBloom.Settings convolutionBloomSettings;
+    [SerializeField] private Bloom.Settings bloomSettings;
 
     [Header("Volumetric Lighting")]
     [SerializeField] private int tileSize = 8;
@@ -32,9 +33,15 @@ public class CustomRenderPipelineAsset : RenderPipelineAsset
     public ClusteredLightCulling.Settings ClusteredLightingSettings => clusteredLightingSettings;
     public TemporalAA.Settings TemporalAASettings => temporalAASettings;
     public ConvolutionBloom.Settings ConvolutionBloomSettings => convolutionBloomSettings;
+    public Bloom.Settings BloomSettings => bloomSettings;
 
     protected override RenderPipeline CreatePipeline()
     {
         return new CustomRenderPipeline(this);
+    }
+
+    protected override void OnValidate()
+    {
+        //base.OnValidate();
     }
 }

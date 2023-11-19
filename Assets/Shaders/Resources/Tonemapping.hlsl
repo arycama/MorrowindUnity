@@ -1,7 +1,7 @@
 #include "../Common.hlsl"
 
-Texture2D<float3> _MainTex;
-float _IsSceneView;
+Texture2D<float3> _MainTex, _Bloom;
+float _IsSceneView, _BloomStrength;
 
 float4 Vertex(uint id : SV_VertexID) : SV_Position
 {
@@ -98,6 +98,35 @@ float3 Fragment(float4 position : SV_Position) : SV_Target
 		position.y = _ScreenParams.y - position.y;
 	
 	float3 input = _MainTex[position.xy];
+	float2 uv = position.xy / _ScreenParams.xy;
+	
+	// Take 9 samples around current texel:
+    // a - b - c
+    // d - e - f
+    // g - h - i
+    // === ('e' is the current texel) ===
+	float3 a = _Bloom.SampleLevel(_LinearClampSampler, uv, 0.0, int2(-1, 1));
+	float3 b = _Bloom.SampleLevel(_LinearClampSampler, uv, 0.0, int2(0, 1));
+	float3 c = _Bloom.SampleLevel(_LinearClampSampler, uv, 0.0, int2(1, 1));
+
+	float3 d = _Bloom.SampleLevel(_LinearClampSampler, uv, 0.0, int2(-1, 0));
+	float3 e = _Bloom.SampleLevel(_LinearClampSampler, uv, 0.0, int2(0, 0));
+	float3 f = _Bloom.SampleLevel(_LinearClampSampler, uv, 0.0, int2(1, 0));
+
+	float3 g = _Bloom.SampleLevel(_LinearClampSampler, uv, 0.0, int2(-1, -1));
+	float3 h = _Bloom.SampleLevel(_LinearClampSampler, uv, 0.0, int2(0, -1));
+	float3 i = _Bloom.SampleLevel(_LinearClampSampler, uv, 0.0, int2(1, -1));
+	
+	// Apply weighted distribution, by using a 3x3 tent filter:
+    //  1   | 1 2 1 |
+    // -- * | 2 4 2 |
+    // 16   | 1 2 1 |
+	float3 upsample = e * 4.0;
+	upsample += (b + d + f + h) * 2.0;
+	upsample += (a + c + g + i);
+	upsample *= 1.0 / 16.0;
+	
+	input = lerp(input, upsample, _BloomStrength);
 	
 	// Reinhard
 	//input *= rcp(1.0 + Luminance(input));

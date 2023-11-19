@@ -1,7 +1,5 @@
 ﻿using System.Collections.Generic;
-using Unity.Collections;
 using UnityEngine;
-using UnityEngine.Pool;
 using UnityEngine.Rendering;
 
 public class CustomRenderPipeline : RenderPipeline
@@ -24,6 +22,7 @@ public class CustomRenderPipeline : RenderPipeline
     private readonly TemporalAA temporalAA;
     private readonly ConvolutionBloom convolutionBloom;
     private readonly DepthOfField depthOfField;
+    private readonly Bloom bloom;
 
     private Dictionary<Camera, int> cameraRenderedFrameCount = new();
     private Dictionary<Camera, Matrix4x4> previousMatrices = new();
@@ -50,6 +49,7 @@ public class CustomRenderPipeline : RenderPipeline
         temporalAA = new(renderPipelineAsset.TemporalAASettings);
         convolutionBloom = new(renderPipelineAsset.ConvolutionBloomSettings);
         depthOfField = new(renderPipelineAsset.depthOfFieldSettings);
+        bloom = new(renderPipelineAsset.BloomSettings);
 
         motionVectorsMaterial = new Material(Shader.Find("Hidden/Camera Motion Vectors")) { hideFlags = HideFlags.HideAndDontSave };
         tonemappingMaterial = new Material(Shader.Find("Hidden/Tonemapping")) { hideFlags = HideFlags.HideAndDontSave };
@@ -96,15 +96,13 @@ public class CustomRenderPipeline : RenderPipeline
 
     protected override void Render(ScriptableRenderContext context, Camera[] cameras)
     {
-        var command = GenericPool<CommandBuffer>.Get();
-        command.name = "Render Camera";
-        command.Clear();
+        var command = CommandBufferPool.Get("Render Camera");
 
         foreach (var camera in cameras)
             RenderCamera(context, camera, command);
 
         context.ExecuteCommandBuffer(command);
-        GenericPool<CommandBuffer>.Release(command);
+        CommandBufferPool.Release(command);
 
         context.Submit();
     }
@@ -119,7 +117,7 @@ public class CustomRenderPipeline : RenderPipeline
         else
         {
             // Only increase when frame debugger not enabled, or we get flickering
-            if (!FrameDebugger.enabled)
+            //if (!FrameDebugger.enabled)
                 cameraRenderedFrameCount[camera] = ++frameCount;
         }
 
@@ -150,6 +148,8 @@ public class CustomRenderPipeline : RenderPipeline
         command.SetGlobalVector("_FogColor", RenderSettings.fogColor.linear);
         command.SetGlobalFloat("_FogStartDistance", RenderSettings.fogStartDistance);
         command.SetGlobalFloat("_FogEndDistance", RenderSettings.fogEndDistance);
+        command.SetGlobalFloat("_FogDensity", RenderSettings.fogDensity);
+        command.SetGlobalFloat("_FogMode", (float)RenderSettings.fogMode);
         command.SetGlobalFloat("_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
 
         command.SetGlobalVector("_WaterAlbedo", renderPipelineAsset.waterAlbedo.linear);
@@ -192,11 +192,12 @@ public class CustomRenderPipeline : RenderPipeline
         motionVectorsRenderer.Render(ref cullingResults, camera, command, ref context);
 
         // Camera motion vectors
-        command.SetRenderTarget(new RenderTargetBinding(motionVectorsId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store) { flags = RenderTargetFlags.ReadOnlyDepthStencil });
-        command.SetGlobalTexture("_Depth", cameraDepthId);
-        command.BeginSample("Camrea Motion Vectors");
-        command.DrawProcedural(Matrix4x4.identity, motionVectorsMaterial, 0, MeshTopology.Triangles, 3);
-        command.EndSample("Camera Motion Vectors");
+        using (var profilerScope = command.BeginScopedSample("Camera Motion Vectors"))
+        {
+            command.SetRenderTarget(new RenderTargetBinding(motionVectorsId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store) { flags = RenderTargetFlags.ReadOnlyDepthStencil });
+            command.SetGlobalTexture("_CameraDepth", cameraDepthId);
+            command.DrawProcedural(Matrix4x4.identity, motionVectorsMaterial, 0, MeshTopology.Triangles, 3);
+        }
 
         // Copy scene texture
         command.GetTemporaryRT(sceneTextureId, camera.pixelWidth, camera.pixelHeight, 0, FilterMode.Bilinear, RenderTextureFormat.RGB111110Float);
@@ -210,16 +211,21 @@ public class CustomRenderPipeline : RenderPipeline
 
         var taa = temporalAA.Render(camera, command, frameCount, cameraTargetId, motionVectorsId);
 
-        depthOfField.Render(camera, command, cameraDepthId, taa);
+        //depthOfField.Render(camera, command, cameraDepthId, taa);
 
-        convolutionBloom.Render(command, taa, cameraTargetId);
+        //convolutionBloom.Render(command, taa, cameraTargetId);
 
-        command.BeginSample("Tonemapping");
-        command.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
-        command.SetGlobalTexture("_MainTex", cameraTargetId);
-        command.SetGlobalFloat("_IsSceneView", camera.cameraType == CameraType.SceneView ? 1f : 0f);
-        command.DrawProcedural(Matrix4x4.identity, tonemappingMaterial, 0, MeshTopology.Triangles, 3);
-        command.EndSample("Tonemapping");
+        var bloomResult = bloom.Render(camera, command, taa);
+
+        using (var profilerScope = command.BeginScopedSample("Tonemapping"))
+        {
+            command.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
+            command.SetGlobalTexture("_MainTex", taa);
+            command.SetGlobalTexture("_Bloom", bloomResult);
+            command.SetGlobalFloat("_BloomStrength", renderPipelineAsset.BloomSettings.Strength);
+            command.SetGlobalFloat("_IsSceneView", camera.cameraType == CameraType.SceneView ? 1f : 0f);
+            command.DrawProcedural(Matrix4x4.identity, tonemappingMaterial, 0, MeshTopology.Triangles, 3);
+        }
 
         // Copy final result
         //command.Blit(cameraTargetId, BuiltinRenderTextureType.CameraTarget);

@@ -57,6 +57,9 @@ MonoBehaviour:
     KernelDistanceExpClampMin: 1
     KernelDistanceExpScale: 1
     KernelImageUseLuminanceAsRGB: 0
+  bloomSettings:
+    strength: 0.125
+    maxMips: 6
   tileSize: 8
   depthSlices: 64
   blurSigma: 1
