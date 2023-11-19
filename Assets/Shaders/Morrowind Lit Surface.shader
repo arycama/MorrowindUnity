@@ -1,4 +1,4 @@
-﻿Shader "Lit Surface"
+﻿Shader "Morrowind Lit Surface"
 {
 	Properties
 	{
@@ -49,7 +49,7 @@
 			#pragma multi_compile_instancing
 			#pragma multi_compile _ _ALPHATEST_ON _ALPHABLEND_ON
 
-			#include "LitSurface.hlsl"
+			#include "MorrowindLitSurface.hlsl"
 			ENDHLSL
 		}
 
@@ -74,7 +74,7 @@
 
 			#define MOTION_VECTORS_ON
 
-			#include "LitSurface.hlsl"
+			#include "MorrowindLitSurface.hlsl"
 			ENDHLSL
 		}
 
@@ -95,7 +95,7 @@
 			#pragma multi_compile_instancing
 			#pragma multi_compile _ _ALPHATEST_ON _ALPHABLEND_ON
 
-			#include "LitSurface.hlsl"
+			#include "MorrowindLitSurface.hlsl"
 			ENDHLSL
 		}
 	}

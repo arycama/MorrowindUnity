@@ -1,0 +1,3 @@
+[submodule "Packages/com.arycama.customrenderpipeline"]
+	path = Packages/com.arycama.customrenderpipeline
+	url = https://github.com/arycama/customrenderpipeline
