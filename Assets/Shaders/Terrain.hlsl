@@ -75,12 +75,13 @@ float3 Fragment(FragmentInput input) : SV_Target
 	color += _MainTex.Sample(_TrilinearRepeatAniso16Sampler, float3(input.uv.zw, terrainData.w)) * weights.w;
 	
 	float3 normal = normalize(input.normal);
-	float3 lighting = GetLighting(normal, input.worldPosition, input.position.xy, input.position.w);
+	float3 lighting = GetLighting(normal, input.worldPosition, input.position.xy, input.position.w, color, 0.0, 1.0);
 	
-	lighting += _AmbientLightColor;
-	color.rgb *= lighting * input.color;
-	color.rgb = ApplyFog(color.rgb, input.position.xy, input.position.w);
+	lighting += _AmbientLightColor * color;
+
+	if (!_AoEnabled)
+		lighting = ApplyFog(lighting, input.position.xy, input.position.w);
 	
-	return color;
+	return lighting;
 }
 #endif

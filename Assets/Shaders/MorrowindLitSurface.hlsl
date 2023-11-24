@@ -116,12 +116,19 @@ FragmentOutput Fragment(FragmentInput input)
 		#endif
 	#else
 		float3 normal = normalize(input.normal);
-		float3 lighting = GetLighting(normal, input.worldPosition, input.position.xy, input.position.w);
-
-		lighting += input.color;
-		color.rgb *= lighting;
-		color.rgb = ApplyFog(color.rgb, input.position.xy, input.position.w);
-		output.color = color;
+		float3 lighting = GetLighting(normal, input.worldPosition, input.position.xy, input.position.w, color.rgb, 0.0, 1.0);
+		lighting += input.color * color.rgb;
+		
+		#ifndef _ALPHABLEND_ON
+		if (!_AoEnabled)
+		#endif
+			lighting = ApplyFog(lighting, input.position.xy, input.position.w);
+			
+		output.color.rgb = lighting;
+		
+		#ifdef _ALPHABLEND_ON
+			output.color.a = color.a;
+		#endif
 	
 		#ifdef MOTION_VECTORS_ON
 			output.velocity = unity_MotionVectorsParams.y ? MotionVectorFragment(input.nonJitteredPositionCS, input.previousPositionCS) : 0.0;

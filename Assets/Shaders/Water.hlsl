@@ -133,7 +133,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 		float4 backgroundFog = SampleVolumetricLighting(input.position.xy, underwaterDepth);
 		
 		if (backgroundFog.a)
-			scene = max(0.0, scene - backgroundFog.rgb) * rcp(backgroundFog.a);
+			scene = saturate((scene - backgroundFog.rgb) * rcp(backgroundFog.a));
 	}
 	
 	luminance += scene * exp(-_Extinction * underwaterDistance);

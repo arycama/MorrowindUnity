@@ -2,15 +2,13 @@
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
-/.vs/TESUnity/v15
+/.vs
 /Library
 /obj
 /Temp
 /Builds
-/.vs/TESUnity/DesignTimeBuild
 *.csproj
 *.sln
-/.vs
 /Logs
 /UserSettings
 *.vsconfig
