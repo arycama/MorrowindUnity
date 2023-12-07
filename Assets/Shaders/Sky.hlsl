@@ -41,23 +41,14 @@ float4 Fragment(FragmentInput i) : SV_Target
 	// Fade between the two textures based on transition factor
 	color = lerp(color, fadeTex, _LerpFactor);
 	
-	float normalizedDepth = 1.0;// i.position.w / _VolumeDepth;
-	float3 volumeUv = float3(i.position.xy / _ScreenParams.xy, normalizedDepth);
-	float4 volumetricFog = _VolumetricLighting.SampleLevel(_LinearClampSampler, volumeUv, 0.0);
+	float4 volumetricFog = SampleVolumetricLighting(i.position.xy, _ProjectionParams.z);
 	float3 fog = _FogColor;// volumetricFog.rgb;
 	//return float4(fog, 1);
 	float4 fogColor;
-	
 	fogColor.a = i.uv.z * 0.005 - 0.5;
 	fogColor.rgb = lerp(fog, _SkyColor.rgb, fogColor.a);
 
-	
-
 	color.rgb = lerp(fogColor.rgb, color.rgb * fog, color.a * fogColor.a) ;
-	
-	
-	
 	color.a = saturate(_SkyColor.a + color.a);
-
 	return color;
 }

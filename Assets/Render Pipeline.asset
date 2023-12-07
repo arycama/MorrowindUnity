@@ -42,6 +42,7 @@ MonoBehaviour:
     sharpness: 0.25
     stationaryBlending: 0.95
     motionBlending: 0.85
+    motionWeight: 6000
   convolutionBloomSettings:
     resolution: 1024
     kernelTexture: {fileID: 2800000, guid: ba159027bff5c8845ac4916bfd145294, type: 3}
@@ -58,10 +59,10 @@ MonoBehaviour:
     KernelDistanceExpScale: 1
     KernelImageUseLuminanceAsRGB: 0
   bloomSettings:
-    strength: 0
+    strength: 0.125
     maxMips: 6
   ambientOcclusionSettings:
-    strength: 0
+    strength: 1
     tint: {r: 0, g: 0, b: 0, a: 1}
     radius: 128
     falloff: 0.75
@@ -77,6 +78,11 @@ MonoBehaviour:
     focalTransitionRange: 32
     blend: 0.11
     filterRadius: 1
+  dynamicResolutionSettings:
+    targetFrameRate: 144
+    minScaleFactor: 0.5
+    maxScaleFactor: 0.5
+    damping: 0.05
   waterAlbedo: {r: 0.050543994, g: 0.13698289, b: 0.21599996, a: 1}
   waterExtinction: {r: 0.01, g: 0.0035, b: 0.003, a: 1}
   defaultMaterials:

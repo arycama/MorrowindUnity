@@ -75,7 +75,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 	}
 	
 	float4 positionCS = PerspectiveDivide(WorldToClip(P));
-	positionCS.xy = (positionCS.xy * 0.5 + 0.5) * _ScreenParams.xy;
+	positionCS.xy = (positionCS.xy * 0.5 + 0.5) * floor(_ScreenParams.xy * _Scale);
 	
 	uint3 clusterIndex;
 	clusterIndex.xy = floor(positionCS.xy) / _TileSize;
