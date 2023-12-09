@@ -71,7 +71,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 		DirectionalLight light = _DirectionalLights[i];
 		
 		float shadowDistance = max(0.0, input.worldPosition.y - P.y) / max(1e-6, saturate(light.direction.y));
-		luminance += light.color * shadow * exp(-_Extinction * (shadowDistance + t)) * weight;
+		luminance += light.color * _Exposure * shadow * exp(-_Extinction * (shadowDistance + t)) * weight;
 	}
 	
 	float4 positionCS = PerspectiveDivide(WorldToClip(P));
@@ -114,14 +114,14 @@ float3 Fragment(FragmentInput input) : SV_Target
 		
 		float3 L = lightVector * rcpLightDist;
 		float shadowDistance = max(0.0, input.worldPosition.y - P.y) / max(1e-6, saturate(L.y));
-		luminance += light.color * attenuation * shadow * exp(-_Extinction * (shadowDistance + t)) * weight;
+		luminance += light.color * _Exposure * attenuation * shadow * exp(-_Extinction * (shadowDistance + t)) * weight;
 	}
 	
 	luminance *= _Extinction;
 	
 	// Ambient 
 	float3 finalTransmittance = exp(-underwaterDistance * _Extinction);
-	luminance += _AmbientLightColor * (1.0 - finalTransmittance);
+	luminance += _AmbientLightColor * _Exposure * (1.0 - finalTransmittance);
 	luminance *= _Albedo;
 	luminance = IsInfOrNaN(luminance) ? 0.0 : luminance;
 	
@@ -140,7 +140,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 	
 	//float3 color = _MainTex.Sample(_LinearRepeatSampler, input.uv).rgb;
 	//color = lerp(_Albedo, color, _Alpha); // 
-	//float3 lighting = GetLighting(float3(0, 1, 0), input.worldPosition) + _AmbientLightColor;
+	//float3 lighting = GetLighting(float3(0, 1, 0), input.worldPosition) + _AmbientLightColor * _Exposure;
 	//color.rgb *= lighting;
 	
 	float3 color = luminance;

@@ -81,7 +81,7 @@ FragmentInput Vertex(VertexInput input)
 	#ifndef UNITY_PASS_SHADOWCASTER
 		output.worldPosition = worldPosition;
 		output.normal = ObjectToWorldNormal(input.normal, input.instanceID);
-		output.color = _AmbientLightColor * input.color + _EmissionColor;
+	output.color = (_AmbientLightColor * input.color + _EmissionColor) * _Exposure;
 	#endif
 	
 	#ifdef MOTION_VECTORS_ON

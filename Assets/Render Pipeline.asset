@@ -14,12 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   enableSrpBatcher: 1
   shadowSettings:
-    customShadowRendering: 1
-    includeCameraPlanes: 1
-    maxSpaceWasteTolerance: 0.291
-    resolutionTolerance: 0
     closeFit: 1
-    overlapFix: 1
     shadowCascades: 4
     shadowCascadeSplits: {x: 0.037037034, y: 0.1111111, z: 0.33333334}
     shadowDistance: 8192
@@ -59,15 +54,15 @@ MonoBehaviour:
     KernelDistanceExpScale: 1
     KernelImageUseLuminanceAsRGB: 0
   bloomSettings:
-    strength: 0.125
+    strength: 0.1875
     maxMips: 6
   ambientOcclusionSettings:
-    strength: 1
-    tint: {r: 0, g: 0, b: 0, a: 1}
+    strength: 2
+    tint: {r: 0.25, g: 0.25, b: 0.25, a: 1}
     radius: 128
     falloff: 0.75
     directionCount: 4
-    sampleCount: 16
+    sampleCount: 8
   volumetricLightingSettings:
     tileSize: 8
     depthSlices: 128
@@ -79,7 +74,7 @@ MonoBehaviour:
     blend: 0.11
     filterRadius: 1
   dynamicResolutionSettings:
-    targetFrameRate: 144
+    targetFrameRate: 60
     minScaleFactor: 0.5
     maxScaleFactor: 0.5
     damping: 0.05
@@ -138,3 +133,20 @@ MonoBehaviour:
   - 
   - 
   - 
+  autoExposureSettings:
+    minLogLuminance: -10
+    maxLogLuminance: 2
+    tau: 5
+    exposureCompensation: 0
+  tonemappingSettings:
+    toeStrength: 0.5
+    toeLength: 0.5
+    shoulderStrength: 2
+    shoulderLength: 0.5
+    shoulderAngle: 1
+  lensSettings:
+    aperture: 1
+    shutterSpeed: 1
+    sensitivity: 1
+    sensorHeight: 24.89
+    focalDistance: 15

@@ -13,13 +13,20 @@
 
 	SubShader
 	{
-		Blend SrcAlpha OneMinusSrcAlpha
-		ZWrite Off
-
-		Tags { "Queue"="Background" "PreviewType"="Skybox" }
+        Cull Off
+        ZWrite Off
+		ZTest Always
 
 		Pass
 		{
+			Stencil
+            {
+                Ref 0
+				Comp Equal
+            }
+
+            Tags { "LightMode" = "Sky" }
+
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment

@@ -77,7 +77,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 	float3 normal = normalize(input.normal);
 	float3 lighting = GetLighting(normal, input.worldPosition, input.position.xy, input.position.w, color, 0.0, 1.0);
 	
-	lighting += _AmbientLightColor * color;
+	lighting += _AmbientLightColor * _Exposure * color;
 
 	if (!_AoEnabled)
 		lighting = ApplyFog(lighting, input.position.xy, input.position.w);

@@ -69,7 +69,7 @@ public class WeatherManager : Singleton<WeatherManager>
 
 	private float SecondsOfDay => seconds + minute * SecondsPerMinute + hour * SecondsPerHour;
 
-	private void Awake()
+	private void OnEnable()
 	{
 		RenderPipelineManager.beginCameraRendering += OnCameraPreCull;
 		CellManager.OnFinishedLoadingCells += SwitchCell;
@@ -131,7 +131,7 @@ public class WeatherManager : Singleton<WeatherManager>
 		//	camera.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, buffer);
 		//}
 
-		var localMatrix = Matrix4x4.TRS(new Vector3(0, -15, 0) + camera.transform.position, Quaternion.identity, Vector3.one);
+        var localMatrix = Matrix4x4.TRS(camera.transform.position, Quaternion.identity, Vector3.one * camera.farClipPlane / 1000f);
 
 		//buffer.Clear();
 		//buffer.DrawMesh(skyboxMesh, localMatrix, skyboxMaterial);
@@ -139,7 +139,7 @@ public class WeatherManager : Singleton<WeatherManager>
 		Graphics.DrawMesh(skyboxMesh, localMatrix, skyboxMaterial, 0, camera);
 	}
 
-	private void OnDestroy()
+	private void OnDisable()
 	{
         RenderPipelineManager.beginCameraRendering -= OnCameraPreCull;
 		CellManager.OnFinishedLoadingCells -= SwitchCell;
@@ -257,6 +257,7 @@ public class WeatherManager : Singleton<WeatherManager>
 	private void SetWeatherSettings(WeatherType weatherType)
 	{
 		currentWeatherSettings = ScriptableObject.CreateInstance<WeatherSettings>();
+		currentWeatherSettings.name = weatherType.ToString();
 		currentWeatherSettings.Create(weatherType, skyboxMaterial);
 
 		currentWeatherSettings.UpdateWeather(SecondsOfDay / SecondsPerDay);
