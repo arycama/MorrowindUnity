@@ -9,7 +9,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fb3b5037eb3a80a459c23f054a097a1d, type: 3}
+  m_Script: {fileID: 11500000, guid: 05bf43dfe18873a45a11eabb90c6ccee, type: 3}
   m_Name: Render Pipeline
   m_EditorClassIdentifier: 
   enableSrpBatcher: 1
@@ -69,7 +69,6 @@ MonoBehaviour:
     blurSigma: 1
     nonLinearDepth: 0
   depthOfFieldSettings:
-    mode: 0
     sampleRadius: 0.5
     sampleCount: 16
   dynamicResolutionSettings:
