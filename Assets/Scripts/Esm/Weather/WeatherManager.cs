@@ -65,7 +65,7 @@ public class WeatherManager : Singleton<WeatherManager>
 	private Material skyboxMaterial;
 
 	private Mesh skyboxMesh;
-	private Dictionary<Camera, CommandBuffer> cameraBuffers = new Dictionary<Camera, CommandBuffer>();
+	private bool shouldUpdate;
 
 	private float SecondsOfDay => seconds + minute * SecondsPerMinute + hour * SecondsPerHour;
 
@@ -74,30 +74,32 @@ public class WeatherManager : Singleton<WeatherManager>
 		RenderPipelineManager.beginCameraRendering += OnCameraPreCull;
 		CellManager.OnFinishedLoadingCells += SwitchCell;
 
-		// Night Sky
-		//var nightNif = new Nif.NiFile(nightSkyPath);
-		//var nightGo = nightNif.CreateGameObject();
+		shouldUpdate = true;
 
-		//nightCommandBuffer = new CommandBuffer();
-		//var nightMeshes = nightGo.GetComponentsInChildren<MeshFilter>();
-		//var nightMeshRenderers = nightGo.GetComponentsInChildren<MeshRenderer>();
-		//for (var i = 0; i < nightMeshes.Length; i++)
-		//{
-		//	if (i > 3)
-		//		continue;
+        // Night Sky
+        //var nightNif = new Nif.NiFile(nightSkyPath);
+        //var nightGo = nightNif.CreateGameObject();
 
-		//	var material = nightMeshRenderers[i].sharedMaterial;
-		//	material.shader = MaterialManager.Instance.NightSkyShader;
+        //nightCommandBuffer = new CommandBuffer();
+        //var nightMeshes = nightGo.GetComponentsInChildren<MeshFilter>();
+        //var nightMeshRenderers = nightGo.GetComponentsInChildren<MeshRenderer>();
+        //for (var i = 0; i < nightMeshes.Length; i++)
+        //{
+        //	if (i > 3)
+        //		continue;
 
-		//	var mesh = nightMeshes[i].sharedMesh;
-		//	nightCommandBuffer.DrawMesh(mesh, Matrix4x4.identity, material);
-		//}
+        //	var material = nightMeshRenderers[i].sharedMaterial;
+        //	material.shader = MaterialManager.Instance.NightSkyShader;
 
-		//Camera.main.AddCommandBuffer(CameraEvent.AfterForwardOpaque, nightCommandBuffer);
-		//Destroy(nightGo);
+        //	var mesh = nightMeshes[i].sharedMesh;
+        //	nightCommandBuffer.DrawMesh(mesh, Matrix4x4.identity, material);
+        //}
 
-		// Load skybox
-		var reader = BsaFileReader.LoadArchiveFileData($"meshes\\{skyboxPath}");
+        //Camera.main.AddCommandBuffer(CameraEvent.AfterForwardOpaque, nightCommandBuffer);
+        //Destroy(nightGo);
+
+        // Load skybox
+        var reader = BsaFileReader.LoadArchiveFileData($"meshes\\{skyboxPath}");
 		var nif = new Nif.NiFile(reader);
 		var go = nif.CreateGameObject(Camera.main.transform);
 
@@ -124,18 +126,10 @@ public class WeatherManager : Singleton<WeatherManager>
 
 	private void OnCameraPreCull(ScriptableRenderContext context, Camera camera)
 	{
-		//if(!cameraBuffers.TryGetValue(camera, out var buffer))
-		//{
-		//	buffer = new CommandBuffer() { name = "Camera Skybox Buffer" };
-		//	cameraBuffers.Add(camera, buffer);
-		//	camera.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, buffer);
-		//}
+		if (!shouldUpdate)
+			return;
 
         var localMatrix = Matrix4x4.TRS(camera.transform.position, Quaternion.identity, Vector3.one * camera.farClipPlane / 1000f);
-
-		//buffer.Clear();
-		//buffer.DrawMesh(skyboxMesh, localMatrix, skyboxMaterial);
-
 		Graphics.DrawMesh(skyboxMesh, localMatrix, skyboxMaterial, 0, camera);
 	}
 
@@ -143,21 +137,11 @@ public class WeatherManager : Singleton<WeatherManager>
 	{
         RenderPipelineManager.beginCameraRendering -= OnCameraPreCull;
 		CellManager.OnFinishedLoadingCells -= SwitchCell;
-
-		foreach(var buffer in cameraBuffers)
-		{
-			if(buffer.Key != null)
-			{
-				buffer.Key.RemoveCommandBuffer(CameraEvent.BeforeForwardAlpha, buffer.Value);
-			}
-		}
-
-		cameraBuffers.Clear();
 	}
 
 	private void SwitchCell(CellRecord cell)
 	{
-		enabled = !cell.CellData.IsInterior;
+        shouldUpdate = !cell.CellData.IsInterior;
 
 		if (cell.CellData.IsInterior)
 		{
@@ -195,6 +179,9 @@ public class WeatherManager : Singleton<WeatherManager>
 
 	private void Update()
 	{
+		if (!shouldUpdate)
+			return;
+
 		//if(Random.value > 0.9999f)
 		//{
 		//	weatherType = (WeatherType)Random.Range(1, 8);

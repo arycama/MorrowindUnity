@@ -58,7 +58,7 @@ MonoBehaviour:
     maxMips: 6
   ambientOcclusionSettings:
     strength: 2
-    tint: {r: 0.25, g: 0.25, b: 0.25, a: 1}
+    tint: {r: 0.15, g: 0.15, b: 0.15, a: 1}
     radius: 128
     falloff: 0.75
     directionCount: 4
@@ -69,14 +69,13 @@ MonoBehaviour:
     blurSigma: 1
     nonLinearDepth: 0
   depthOfFieldSettings:
-    focalPlaneDistance: 64
-    focalTransitionRange: 32
-    blend: 0.11
-    filterRadius: 1
+    mode: 0
+    sampleRadius: 0.5
+    sampleCount: 16
   dynamicResolutionSettings:
     targetFrameRate: 60
-    minScaleFactor: 0.5
-    maxScaleFactor: 0.5
+    minScaleFactor: 1
+    maxScaleFactor: 1
     damping: 0.05
   waterAlbedo: {r: 0.050543994, g: 0.13698289, b: 0.21599996, a: 1}
   waterExtinction: {r: 0.01, g: 0.0035, b: 0.003, a: 1}
@@ -134,19 +133,84 @@ MonoBehaviour:
   - 
   - 
   autoExposureSettings:
-    minLogLuminance: -10
-    maxLogLuminance: 2
-    tau: 5
+    minEv: -10
+    maxEv: 18
+    adaptationSpeed: 2
     exposureCompensation: 0
+    histogramPercentages: {x: 40, y: 90}
+    exposureResolution: 128
+    exposureCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: -6.275088
+        value: -3.01261
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 136
+        weightedMode: 0
+        inWeight: 0.33333334
+        outWeight: 0.33333334
+      - serializedVersion: 3
+        time: -4.0010085
+        value: -1.8859804
+        inSlope: 0.5866815
+        outSlope: 0.5866815
+        tangentMode: 136
+        weightedMode: 0
+        inWeight: 0.33333334
+        outWeight: 0.33333334
+      - serializedVersion: 3
+        time: -2.1263165
+        value: -0.57860255
+        inSlope: 0.64658254
+        outSlope: 0.64658254
+        tangentMode: 136
+        weightedMode: 0
+        inWeight: 0.33333334
+        outWeight: 0.33333334
+      - serializedVersion: 3
+        time: -0.7308321
+        value: 0.22845876
+        inSlope: 0.4208351
+        outSlope: 0.4208351
+        tangentMode: 136
+        weightedMode: 0
+        inWeight: 0.33333334
+        outWeight: 0.33333334
+      - serializedVersion: 3
+        time: 0.5978056
+        value: 0.56780356
+        inSlope: 0.13284153
+        outSlope: 0.13284153
+        tangentMode: 136
+        weightedMode: 0
+        inWeight: 0.33333334
+        outWeight: 0.33333334
+      - serializedVersion: 3
+        time: 1.7938232
+        value: 0.65164834
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 136
+        weightedMode: 0
+        inWeight: 0.33333334
+        outWeight: 0.33333334
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
   tonemappingSettings:
+    noiseIntensity: 0.001953125
+    noiseResponse: 0.234
+    filmGrainTexture: {fileID: 2800000, guid: 17c8cfeea9f5af84fa19cdb7a3b585a7, type: 3}
     toeStrength: 0.5
     toeLength: 0.5
-    shoulderStrength: 2
+    shoulderStrength: 1.1
     shoulderLength: 0.5
     shoulderAngle: 1
   lensSettings:
-    aperture: 1
-    shutterSpeed: 1
-    sensitivity: 1
-    sensorHeight: 24.89
-    focalDistance: 15
+    aperture: 8
+    shutterSpeed: 18
+    iso: 76000
+    sensorHeight: 40000
+    focalDistance: 64
