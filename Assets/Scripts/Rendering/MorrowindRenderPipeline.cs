@@ -33,7 +33,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
     private readonly Material skyClearMaterial;
 
     private readonly RenderGraph renderGraph = new();
-    private readonly RTHandleSystem rtHandleSystem = new();
+    //private readonly RTHandleSystem rtHandleSystem = new();
 
     public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset)
     {
@@ -106,24 +106,26 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         volumetricLighting.Release();
         temporalAA.Release();
         dynamicResolution.Release();
+
+        renderGraph.Release();
     }
 
     protected override void Render(ScriptableRenderContext context, Camera[] cameras)
     {
         dynamicResolution.Update(frameTimeSampler.GetRecorder().gpuElapsedNanoseconds);
 
-        var command = CommandBufferPool.Get("Render Camera");
-        command.BeginSample(frameTimeSampler);
-
         foreach (var camera in cameras)
             RenderCamera(camera);
 
-        command.EndSample(frameTimeSampler);
+        var command = CommandBufferPool.Get("Render Camera");
+        command.BeginSample(frameTimeSampler);
         renderGraph.Execute(command, context);
+        command.EndSample(frameTimeSampler);
         context.ExecuteCommandBuffer(command);
         CommandBufferPool.Release(command);
 
         context.Submit();
+        renderGraph.ReleaseRTHandles();
     }
 
     private void RenderCamera(Camera camera)
@@ -138,7 +140,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var scaledWidth = (int)(camera.pixelWidth * dynamicResolution.ScaleFactor);
         var scaledHeight = (int)(camera.pixelHeight * dynamicResolution.ScaleFactor);
 
-        rtHandleSystem.SetResolution(scaledWidth, scaledHeight);
+        //rtHandleSystem.SetResolution(scaledWidth, scaledHeight);
 
         renderGraph.AddRenderPass((command, context) => BeginCameraRendering(context, camera));
 
@@ -183,21 +185,11 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         clusteredLightCulling.Render(camera, dynamicResolution.ScaleFactor);
         volumetricLighting.Render(camera, dynamicResolution.ScaleFactor);
 
-        // old
-        var cameraTargetId = Shader.PropertyToID("_CameraTarget");
-        var cameraDepthId = Shader.PropertyToID("_CameraDepth");
-
-        // new
-        //var cameraTargetHandle = rtHandleSystem.GetHandle(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
-        //var cameraDepthHandle = rtHandleSystem.GetHandle(scaledWidth, scaledHeight, GraphicsFormat.D32_SFloat_S8_UInt);
+        var cameraTargetId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
+        var cameraDepthId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.D32_SFloat_S8_UInt);
 
         renderGraph.AddRenderPass((command, context) =>
         {
-            command.GetTemporaryRT(cameraTargetId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.RGB111110Float));
-            command.GetTemporaryRT(cameraDepthId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.Depth, 32));
-
-
-
             // Base pass
             command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, cameraDepthId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store));
             command.ClearRenderTarget(true, true, Color.clear);
@@ -205,11 +197,10 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         opaqueObjectRenderer.Render(cullingResults, camera);
 
-        var motionVectorsId = Shader.PropertyToID("_MotionVectors");
+        var motionVectorsId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.R16G16_SFloat);
         renderGraph.AddRenderPass((command, context) =>
         {
             // Motion Vectors
-            command.GetTemporaryRT(motionVectorsId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.RGHalf));
             command.SetRenderTarget(motionVectorsId);
             command.ClearRenderTarget(false, true, Color.clear);
 
@@ -234,14 +225,13 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         skyRenderer.Render(cullingResults, camera);
 
+        var sceneTextureId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
         renderGraph.AddRenderPass((command, context) =>
         {
             // Copy scene texture
-            var sceneTextureId = Shader.PropertyToID("_SceneTexture");
-            command.GetTemporaryRT(sceneTextureId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.RGB111110Float));
             command.CopyTexture(cameraTargetId, sceneTextureId);
-            command.SetGlobalTexture(sceneTextureId, sceneTextureId);
-            command.SetGlobalTexture(cameraDepthId, cameraDepthId);
+            command.SetGlobalTexture("_SceneTexture", sceneTextureId);
+            command.SetGlobalTexture("_CameraDepth", cameraDepthId);
 
             // Transparent
             command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepthStencil });
@@ -251,9 +241,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         autoExposure.Render(cameraTargetId, scaledWidth, scaledHeight);
 
         var dofResult = depthOfField.Render(scaledWidth, scaledHeight, camera.fieldOfView, cameraTargetId, cameraDepthId);
-
         var taa = temporalAA.Render(camera, dofResult, motionVectorsId, dynamicResolution.ScaleFactor);
-
         var bloomResult = bloom.Render(camera, taa);
 
         tonemapping.Render(taa, bloomResult, camera.cameraType == CameraType.SceneView, camera.pixelWidth, camera.pixelHeight);
