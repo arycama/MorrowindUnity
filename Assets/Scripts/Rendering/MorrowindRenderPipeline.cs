@@ -1,6 +1,9 @@
 using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
+using Arycama.CustomRenderPipeline;
+using UnityEngine.Experimental.Rendering;
+using CommandBufferPool = Arycama.CustomRenderPipeline.CommandBufferPool;
 
 public class MorrowindRenderPipeline : CustomRenderPipeline
 {
@@ -29,6 +32,9 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
     private readonly Material skyClearMaterial;
 
+    private readonly RenderGraph renderGraph = new();
+    private readonly RTHandleSystem rtHandleSystem = new();
+
     public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset)
     {
         this.renderPipelineAsset = renderPipelineAsset;
@@ -39,22 +45,22 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         GraphicsSettings.disableBuiltinCustomRenderTextureUpdate = true;
         GraphicsSettings.realtimeDirectRectangularAreaLights = true;
 
-        lightingSetup = new(renderPipelineAsset.ShadowSettings);
-        clusteredLightCulling = new(renderPipelineAsset.ClusteredLightingSettings);
-        volumetricLighting = new(renderPipelineAsset.VolumetricLightingSettings);
-        opaqueObjectRenderer = new(RenderQueueRange.opaque, SortingCriteria.CommonOpaque, true, PerObjectData.None, "SRPDefaultUnlit");
-        motionVectorsRenderer = new(RenderQueueRange.opaque, SortingCriteria.CommonOpaque, false, PerObjectData.MotionVectors, "MotionVectors");
+        lightingSetup = new(renderPipelineAsset.ShadowSettings, renderGraph);
+        clusteredLightCulling = new(renderPipelineAsset.ClusteredLightingSettings, renderGraph);
+        volumetricLighting = new(renderPipelineAsset.VolumetricLightingSettings, renderGraph);
+        opaqueObjectRenderer = new(RenderQueueRange.opaque, SortingCriteria.CommonOpaque, true, PerObjectData.None, "SRPDefaultUnlit", renderGraph);
+        motionVectorsRenderer = new(RenderQueueRange.opaque, SortingCriteria.CommonOpaque, false, PerObjectData.MotionVectors, "MotionVectors", renderGraph);
 
-        skyRenderer = new(RenderQueueRange.all, SortingCriteria.None, false, PerObjectData.None, "Sky");
+        skyRenderer = new(RenderQueueRange.all, SortingCriteria.None, false, PerObjectData.None, "Sky", renderGraph);
 
-        cameraMotionVectors = new();
-        ambientOcclusion = new(renderPipelineAsset.AmbientOcclusionSettings);
-        transparentObjectRenderer = new(RenderQueueRange.transparent, SortingCriteria.CommonTransparent, false, PerObjectData.None, "SRPDefaultUnlit");
-        depthOfField = new(renderPipelineAsset.DepthOfFieldSettings, renderPipelineAsset.LensSettings);
-        autoExposure = new AutoExposure(renderPipelineAsset.AutoExposureSettings, renderPipelineAsset.LensSettings);
-        temporalAA = new(renderPipelineAsset.TemporalAASettings);
-        bloom = new(renderPipelineAsset.BloomSettings);
-        tonemapping = new(renderPipelineAsset.TonemappingSettings, renderPipelineAsset.BloomSettings, renderPipelineAsset.LensSettings);
+        cameraMotionVectors = new(renderGraph);
+        ambientOcclusion = new(renderPipelineAsset.AmbientOcclusionSettings, renderGraph);
+        transparentObjectRenderer = new(RenderQueueRange.transparent, SortingCriteria.CommonTransparent, false, PerObjectData.None, "SRPDefaultUnlit", renderGraph);
+        depthOfField = new(renderPipelineAsset.DepthOfFieldSettings, renderPipelineAsset.LensSettings, renderGraph);
+        autoExposure = new AutoExposure(renderPipelineAsset.AutoExposureSettings, renderPipelineAsset.LensSettings, renderGraph);
+        temporalAA = new(renderPipelineAsset.TemporalAASettings, renderGraph);
+        bloom = new(renderPipelineAsset.BloomSettings, renderGraph);
+        tonemapping = new(renderPipelineAsset.TonemappingSettings, renderPipelineAsset.BloomSettings, renderPipelineAsset.LensSettings, renderGraph);
 
         SupportedRenderingFeatures.active = new SupportedRenderingFeatures()
         {
@@ -110,131 +116,158 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         command.BeginSample(frameTimeSampler);
 
         foreach (var camera in cameras)
-            RenderCamera(context, camera, command);
+            RenderCamera(camera);
 
         command.EndSample(frameTimeSampler);
+        renderGraph.Execute(command, context);
         context.ExecuteCommandBuffer(command);
         CommandBufferPool.Release(command);
 
         context.Submit();
     }
 
-    private void RenderCamera(ScriptableRenderContext context, Camera camera, CommandBuffer command)
+    private void RenderCamera(Camera camera)
     {
         camera.depthTextureMode = DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
 
-        temporalAA.OnPreRender(camera, command, dynamicResolution.ScaleFactor, out var previousMatrix);
+        temporalAA.OnPreRender(camera, dynamicResolution.ScaleFactor, out var previousMatrix);
 
         if (!camera.TryGetCullingParameters(out var cullingParameters))
             return;
 
-        BeginCameraRendering(context, camera);
-
-        cullingParameters.shadowDistance = renderPipelineAsset.ShadowSettings.ShadowDistance;
-        cullingParameters.cullingOptions = CullingOptions.NeedsLighting | CullingOptions.DisablePerObjectCulling | CullingOptions.ShadowCasters;
-        var cullingResults = context.Cull(ref cullingParameters);
-
-        lightingSetup.Render(command, cullingResults, context, camera);
-
-        command.SetGlobalVector("_AmbientLightColor", RenderSettings.ambientLight.linear);
-        command.SetGlobalVector("_FogColor", RenderSettings.fogColor.linear);
-        command.SetGlobalFloat("_FogStartDistance", RenderSettings.fogStartDistance);
-        command.SetGlobalFloat("_FogEndDistance", RenderSettings.fogEndDistance);
-        command.SetGlobalFloat("_FogDensity", RenderSettings.fogDensity);
-        command.SetGlobalFloat("_FogMode", (float)RenderSettings.fogMode);
-        command.SetGlobalFloat("_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
-        command.SetGlobalFloat("_AoEnabled", renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f);
-        command.SetGlobalFloat("_Scale", dynamicResolution.ScaleFactor);
-
-        command.SetGlobalVector("_WaterAlbedo", renderPipelineAsset.waterAlbedo.linear);
-        command.SetGlobalVector("_WaterExtinction", renderPipelineAsset.waterExtinction);
-
-        // More camera setup
-        var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(Time.renderedFrameCount % 64));
-        var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds.GetString(Time.renderedFrameCount % 64));
-        command.SetGlobalTexture("_BlueNoise1D", blueNoise1D);
-        command.SetGlobalTexture("_BlueNoise2D", blueNoise2D);
-        command.SetGlobalMatrix("_NonJitteredVPMatrix", camera.nonJitteredProjectionMatrix);
-        command.SetGlobalMatrix("_PreviousVPMatrix", previousMatrix);
-        command.SetGlobalMatrix("_InvVPMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse);
-        command.SetGlobalInt("_FrameCount", Time.renderedFrameCount);
-
-        context.SetupCameraProperties(camera);
-
-        clusteredLightCulling.Render(command, camera, dynamicResolution.ScaleFactor);
-        volumetricLighting.Render(camera, command, dynamicResolution.ScaleFactor);
-
         var scaledWidth = (int)(camera.pixelWidth * dynamicResolution.ScaleFactor);
         var scaledHeight = (int)(camera.pixelHeight * dynamicResolution.ScaleFactor);
 
-        var cameraTargetId = Shader.PropertyToID("_CameraTarget");
-        command.GetTemporaryRT(cameraTargetId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.RGB111110Float));
+        rtHandleSystem.SetResolution(scaledWidth, scaledHeight);
 
-        var cameraDepthId = Shader.PropertyToID("_CameraDepth");
-        command.GetTemporaryRT(cameraDepthId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.Depth, 32));
+        renderGraph.AddRenderPass((command, context) => BeginCameraRendering(context, camera));
 
-        // Base pass
-        command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, cameraDepthId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store));
-        command.ClearRenderTarget(true, true, Color.clear);
-        opaqueObjectRenderer.Render(ref cullingResults, camera, command, ref context);
-
-        // Motion Vectors
-        var motionVectorsId = Shader.PropertyToID("_MotionVectors");
-        command.GetTemporaryRT(motionVectorsId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.RGHalf));
-        command.SetRenderTarget(motionVectorsId);
-        command.ClearRenderTarget(false, true, Color.clear);
-
-        command.SetRenderTarget(
-            new RenderTargetBinding(new RenderTargetIdentifier[] { cameraTargetId, motionVectorsId },
-            new RenderBufferLoadAction[] { RenderBufferLoadAction.Load, RenderBufferLoadAction.DontCare },
-            new RenderBufferStoreAction[] { RenderBufferStoreAction.Store, RenderBufferStoreAction.Store },
-            cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store));
-
-        motionVectorsRenderer.Render(ref cullingResults, camera, command, ref context);
-        cameraMotionVectors.Render(command, motionVectorsId, cameraDepthId);
-        ambientOcclusion.Render(command, camera, cameraDepthId, cameraTargetId, dynamicResolution.ScaleFactor);
-
-        // Render sky
-        command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepth });
-
-        command.DrawProcedural(Matrix4x4.identity, skyClearMaterial, 0, MeshTopology.Triangles, 3);
-
-        skyRenderer.Render(ref cullingResults, camera, command, ref context);
-
-        // Copy scene texture
-        var sceneTextureId = Shader.PropertyToID("_SceneTexture");
-        command.GetTemporaryRT(sceneTextureId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.RGB111110Float));
-        command.CopyTexture(cameraTargetId, sceneTextureId);
-        command.SetGlobalTexture(sceneTextureId, sceneTextureId);
-        command.SetGlobalTexture(cameraDepthId, cameraDepthId);
-
-        // Transparent
-        command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepthStencil });
-        volumetricLighting.CameraRenderComplete(command);
-        transparentObjectRenderer.Render(ref cullingResults, camera, command, ref context);
-        clusteredLightCulling.CameraRenderingComplete(command);
-        command.ReleaseTemporaryRT(sceneTextureId);
-
-        autoExposure.Render(command, cameraTargetId, scaledWidth, scaledHeight);
-
-        var dofResult = depthOfField.Render(command, scaledWidth, scaledHeight, camera.fieldOfView, cameraTargetId, cameraDepthId);
-        command.ReleaseTemporaryRT(cameraTargetId);
-
-        var taa = temporalAA.Render(camera, command, dofResult, motionVectorsId, dynamicResolution.ScaleFactor);
-
-        var bloomResult = bloom.Render(camera, command, taa);
-
-
-        tonemapping.Render(command, taa, bloomResult, camera.cameraType == CameraType.SceneView, camera.pixelWidth, camera.pixelHeight);
-
-        command.ReleaseTemporaryRT(cameraDepthId);
-        context.ExecuteCommandBuffer(command);
-        command.Clear();
-
-        if (UnityEditor.Handles.ShouldRenderGizmos())
+        var cullingResults = new CullingResultsHandle();
+        renderGraph.AddRenderPass((command, context) =>
         {
-            context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
-            context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
-        }
+            cullingParameters.shadowDistance = renderPipelineAsset.ShadowSettings.ShadowDistance;
+            cullingParameters.cullingOptions = CullingOptions.NeedsLighting | CullingOptions.DisablePerObjectCulling | CullingOptions.ShadowCasters;
+            cullingResults.CullingResults = context.Cull(ref cullingParameters);
+        });
+
+        lightingSetup.Render(cullingResults, camera);
+
+        renderGraph.AddRenderPass((command, context) =>
+        {
+            command.SetGlobalVector("_AmbientLightColor", RenderSettings.ambientLight.linear);
+            command.SetGlobalVector("_FogColor", RenderSettings.fogColor.linear);
+            command.SetGlobalFloat("_FogStartDistance", RenderSettings.fogStartDistance);
+            command.SetGlobalFloat("_FogEndDistance", RenderSettings.fogEndDistance);
+            command.SetGlobalFloat("_FogDensity", RenderSettings.fogDensity);
+            command.SetGlobalFloat("_FogMode", (float)RenderSettings.fogMode);
+            command.SetGlobalFloat("_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
+            command.SetGlobalFloat("_AoEnabled", renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f);
+            command.SetGlobalFloat("_Scale", dynamicResolution.ScaleFactor);
+
+            command.SetGlobalVector("_WaterAlbedo", renderPipelineAsset.waterAlbedo.linear);
+            command.SetGlobalVector("_WaterExtinction", renderPipelineAsset.waterExtinction);
+
+            // More camera setup
+            var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(Time.renderedFrameCount % 64));
+            var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds.GetString(Time.renderedFrameCount % 64));
+            command.SetGlobalTexture("_BlueNoise1D", blueNoise1D);
+            command.SetGlobalTexture("_BlueNoise2D", blueNoise2D);
+            command.SetGlobalMatrix("_NonJitteredVPMatrix", camera.nonJitteredProjectionMatrix);
+            command.SetGlobalMatrix("_PreviousVPMatrix", previousMatrix);
+            command.SetGlobalMatrix("_InvVPMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse);
+            command.SetGlobalInt("_FrameCount", Time.renderedFrameCount);
+
+            context.SetupCameraProperties(camera);
+        });
+
+        clusteredLightCulling.Render(camera, dynamicResolution.ScaleFactor);
+        volumetricLighting.Render(camera, dynamicResolution.ScaleFactor);
+
+        // old
+        var cameraTargetId = Shader.PropertyToID("_CameraTarget");
+        var cameraDepthId = Shader.PropertyToID("_CameraDepth");
+
+        // new
+        //var cameraTargetHandle = rtHandleSystem.GetHandle(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
+        //var cameraDepthHandle = rtHandleSystem.GetHandle(scaledWidth, scaledHeight, GraphicsFormat.D32_SFloat_S8_UInt);
+
+        renderGraph.AddRenderPass((command, context) =>
+        {
+            command.GetTemporaryRT(cameraTargetId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.RGB111110Float));
+            command.GetTemporaryRT(cameraDepthId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.Depth, 32));
+
+
+
+            // Base pass
+            command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, cameraDepthId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store));
+            command.ClearRenderTarget(true, true, Color.clear);
+        });
+
+        opaqueObjectRenderer.Render(cullingResults, camera);
+
+        var motionVectorsId = Shader.PropertyToID("_MotionVectors");
+        renderGraph.AddRenderPass((command, context) =>
+        {
+            // Motion Vectors
+            command.GetTemporaryRT(motionVectorsId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.RGHalf));
+            command.SetRenderTarget(motionVectorsId);
+            command.ClearRenderTarget(false, true, Color.clear);
+
+            command.SetRenderTarget(
+                new RenderTargetBinding(new RenderTargetIdentifier[] { cameraTargetId, motionVectorsId },
+                new RenderBufferLoadAction[] { RenderBufferLoadAction.Load, RenderBufferLoadAction.DontCare },
+                new RenderBufferStoreAction[] { RenderBufferStoreAction.Store, RenderBufferStoreAction.Store },
+                cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store));
+        });
+
+        motionVectorsRenderer.Render(cullingResults, camera);
+        cameraMotionVectors.Render(motionVectorsId, cameraDepthId);
+        ambientOcclusion.Render(camera, cameraDepthId, cameraTargetId, dynamicResolution.ScaleFactor);
+
+        renderGraph.AddRenderPass((command, context) =>
+        {
+            // Render sky
+            command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepth });
+
+            command.DrawProcedural(Matrix4x4.identity, skyClearMaterial, 0, MeshTopology.Triangles, 3);
+        });
+
+        skyRenderer.Render(cullingResults, camera);
+
+        renderGraph.AddRenderPass((command, context) =>
+        {
+            // Copy scene texture
+            var sceneTextureId = Shader.PropertyToID("_SceneTexture");
+            command.GetTemporaryRT(sceneTextureId, new RenderTextureDescriptor(scaledWidth, scaledHeight, RenderTextureFormat.RGB111110Float));
+            command.CopyTexture(cameraTargetId, sceneTextureId);
+            command.SetGlobalTexture(sceneTextureId, sceneTextureId);
+            command.SetGlobalTexture(cameraDepthId, cameraDepthId);
+
+            // Transparent
+            command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepthStencil });
+        });
+
+        transparentObjectRenderer.Render(cullingResults, camera);
+        autoExposure.Render(cameraTargetId, scaledWidth, scaledHeight);
+
+        var dofResult = depthOfField.Render(scaledWidth, scaledHeight, camera.fieldOfView, cameraTargetId, cameraDepthId);
+
+        var taa = temporalAA.Render(camera, dofResult, motionVectorsId, dynamicResolution.ScaleFactor);
+
+        var bloomResult = bloom.Render(camera, taa);
+
+        tonemapping.Render(taa, bloomResult, camera.cameraType == CameraType.SceneView, camera.pixelWidth, camera.pixelHeight);
+
+        renderGraph.AddRenderPass((command, context) =>
+        {
+            context.ExecuteCommandBuffer(command);
+            command.Clear();
+
+            if (UnityEditor.Handles.ShouldRenderGizmos())
+            {
+                context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
+                context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
+            }
+        });
     }
 }

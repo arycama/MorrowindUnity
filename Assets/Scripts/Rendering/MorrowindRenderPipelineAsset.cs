@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Rendering;
+using Arycama.CustomRenderPipeline;
 
 [CreateAssetMenu(menuName = "Custom Render Pipeline Asset")]
 public class MorrowindRenderPipelineAsset : CustomRenderPipelineAsset
