@@ -102,7 +102,6 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
     protected override void Dispose(bool disposing)
     {
         lightingSetup.Release();
-        clusteredLightCulling.Release();
         volumetricLighting.Release();
         temporalAA.Release();
         dynamicResolution.Release();
@@ -125,7 +124,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         CommandBufferPool.Release(command);
 
         context.Submit();
-        renderGraph.ReleaseRTHandles();
+        renderGraph.ReleaseHandles();
     }
 
     private void RenderCamera(Camera camera, ScriptableRenderContext context)
@@ -151,7 +150,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         lightingSetup.Render(cullingResults, camera);
 
         {
-            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
+            var pass = renderGraph.AddRenderPass<GlobalRenderPass>();
 
             // More camera setup
             var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(Time.renderedFrameCount % 64));
@@ -162,25 +161,25 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
                 pass.SetTexture(command, "_BlueNoise1D", blueNoise1D);
                 pass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
 
-                command.SetGlobalVector("_Jitter", temporalAA.Jitter);
+                pass.SetVector(command, "_Jitter", temporalAA.Jitter);
+                pass.SetVector(command, "_AmbientLightColor", RenderSettings.ambientLight.linear);
+                pass.SetVector(command, "_FogColor", RenderSettings.fogColor.linear);
 
-                command.SetGlobalVector("_AmbientLightColor", RenderSettings.ambientLight.linear);
-                command.SetGlobalVector("_FogColor", RenderSettings.fogColor.linear);
-                command.SetGlobalFloat("_FogStartDistance", RenderSettings.fogStartDistance);
-                command.SetGlobalFloat("_FogEndDistance", RenderSettings.fogEndDistance);
-                command.SetGlobalFloat("_FogDensity", RenderSettings.fogDensity);
-                command.SetGlobalFloat("_FogMode", (float)RenderSettings.fogMode);
-                command.SetGlobalFloat("_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
-                command.SetGlobalFloat("_AoEnabled", renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f);
-                command.SetGlobalFloat("_Scale", dynamicResolution.ScaleFactor);
+                pass.SetFloat(command, "_FogStartDistance", RenderSettings.fogStartDistance);
+                pass.SetFloat(command, "_FogEndDistance", RenderSettings.fogEndDistance);
+                pass.SetFloat(command, "_FogDensity", RenderSettings.fogDensity);
+                pass.SetFloat(command, "_FogMode", (float)RenderSettings.fogMode);
+                pass.SetFloat(command, "_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
+                pass.SetFloat(command, "_AoEnabled", renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f);
+                pass.SetFloat(command, "_Scale", dynamicResolution.ScaleFactor);
 
-                command.SetGlobalVector("_WaterAlbedo", renderPipelineAsset.waterAlbedo.linear);
-                command.SetGlobalVector("_WaterExtinction", renderPipelineAsset.waterExtinction);
+                pass.SetVector(command, "_WaterAlbedo", renderPipelineAsset.waterAlbedo.linear);
+                pass.SetVector(command, "_WaterExtinction", renderPipelineAsset.waterExtinction);
                
                 command.SetGlobalMatrix("_NonJitteredVPMatrix", camera.nonJitteredProjectionMatrix);
                 command.SetGlobalMatrix("_PreviousVPMatrix", previousMatrix);
                 command.SetGlobalMatrix("_InvVPMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse);
-                command.SetGlobalInt("_FrameCount", Time.renderedFrameCount);
+                pass.SetInt(command, "_FrameCount", Time.renderedFrameCount);
 
                 context.SetupCameraProperties(camera);
             });
@@ -193,7 +192,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var cameraDepthId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.D32_SFloat_S8_UInt);
 
         {
-            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
+            var pass = renderGraph.AddRenderPass<GlobalRenderPass>();
             pass.SetRenderFunction((command, context) =>
             {
                 // Base pass
@@ -206,7 +205,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var motionVectorsId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.R16G16_SFloat);
 
         {
-            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
+            var pass = renderGraph.AddRenderPass<GlobalRenderPass>();
             pass.SetRenderFunction((command, context) =>
             {
                 // Motion Vectors
@@ -226,7 +225,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         ambientOcclusion.Render(camera, cameraDepthId, cameraTargetId, dynamicResolution.ScaleFactor);
 
         {
-            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
+            var pass = renderGraph.AddRenderPass<GlobalRenderPass>();
             pass.SetRenderFunction((command, context) =>
             {
                 // Render sky
@@ -240,7 +239,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         var sceneTextureId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
         {
-            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
+            var pass = renderGraph.AddRenderPass<GlobalRenderPass>();
             pass.SetRenderFunction((command, context) =>
             {
                 // Copy scene texture
@@ -264,7 +263,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         tonemapping.Render(taa, bloomResult, camera.cameraType == CameraType.SceneView, camera.pixelWidth, camera.pixelHeight);
 
         {
-            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
+            var pass = renderGraph.AddRenderPass<GlobalRenderPass>();
             pass.SetRenderFunction((command, context) =>
             {
                 context.ExecuteCommandBuffer(command);
