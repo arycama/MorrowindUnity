@@ -115,7 +115,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         dynamicResolution.Update(frameTimeSampler.GetRecorder().gpuElapsedNanoseconds);
 
         foreach (var camera in cameras)
-            RenderCamera(camera);
+            RenderCamera(camera, context);
 
         var command = CommandBufferPool.Get("Render Camera");
         command.BeginSample(frameTimeSampler);
@@ -128,7 +128,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         renderGraph.ReleaseRTHandles();
     }
 
-    private void RenderCamera(Camera camera)
+    private void RenderCamera(Camera camera, ScriptableRenderContext context)
     {
         camera.depthTextureMode = DepthTextureMode.Depth | DepthTextureMode.MotionVectors;
 
@@ -142,45 +142,49 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         //rtHandleSystem.SetResolution(scaledWidth, scaledHeight);
 
-        renderGraph.AddRenderPass((command, context) => BeginCameraRendering(context, camera));
+        BeginCameraRendering(context, camera);
 
-        var cullingResults = new CullingResultsHandle();
-        renderGraph.AddRenderPass((command, context) =>
-        {
-            cullingParameters.shadowDistance = renderPipelineAsset.ShadowSettings.ShadowDistance;
-            cullingParameters.cullingOptions = CullingOptions.NeedsLighting | CullingOptions.DisablePerObjectCulling | CullingOptions.ShadowCasters;
-            cullingResults.CullingResults = context.Cull(ref cullingParameters);
-        });
+        cullingParameters.shadowDistance = renderPipelineAsset.ShadowSettings.ShadowDistance;
+        cullingParameters.cullingOptions = CullingOptions.NeedsLighting | CullingOptions.DisablePerObjectCulling | CullingOptions.ShadowCasters;
+        var cullingResults = context.Cull(ref cullingParameters);
 
         lightingSetup.Render(cullingResults, camera);
 
-        renderGraph.AddRenderPass((command, context) =>
         {
-            command.SetGlobalVector("_AmbientLightColor", RenderSettings.ambientLight.linear);
-            command.SetGlobalVector("_FogColor", RenderSettings.fogColor.linear);
-            command.SetGlobalFloat("_FogStartDistance", RenderSettings.fogStartDistance);
-            command.SetGlobalFloat("_FogEndDistance", RenderSettings.fogEndDistance);
-            command.SetGlobalFloat("_FogDensity", RenderSettings.fogDensity);
-            command.SetGlobalFloat("_FogMode", (float)RenderSettings.fogMode);
-            command.SetGlobalFloat("_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
-            command.SetGlobalFloat("_AoEnabled", renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f);
-            command.SetGlobalFloat("_Scale", dynamicResolution.ScaleFactor);
-
-            command.SetGlobalVector("_WaterAlbedo", renderPipelineAsset.waterAlbedo.linear);
-            command.SetGlobalVector("_WaterExtinction", renderPipelineAsset.waterExtinction);
+            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
 
             // More camera setup
             var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(Time.renderedFrameCount % 64));
             var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds.GetString(Time.renderedFrameCount % 64));
-            command.SetGlobalTexture("_BlueNoise1D", blueNoise1D);
-            command.SetGlobalTexture("_BlueNoise2D", blueNoise2D);
-            command.SetGlobalMatrix("_NonJitteredVPMatrix", camera.nonJitteredProjectionMatrix);
-            command.SetGlobalMatrix("_PreviousVPMatrix", previousMatrix);
-            command.SetGlobalMatrix("_InvVPMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse);
-            command.SetGlobalInt("_FrameCount", Time.renderedFrameCount);
 
-            context.SetupCameraProperties(camera);
-        });
+            pass.SetRenderFunction((command, context) =>
+            {
+                pass.SetTexture(command, "_BlueNoise1D", blueNoise1D);
+                pass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
+
+                command.SetGlobalVector("_Jitter", temporalAA.Jitter);
+
+                command.SetGlobalVector("_AmbientLightColor", RenderSettings.ambientLight.linear);
+                command.SetGlobalVector("_FogColor", RenderSettings.fogColor.linear);
+                command.SetGlobalFloat("_FogStartDistance", RenderSettings.fogStartDistance);
+                command.SetGlobalFloat("_FogEndDistance", RenderSettings.fogEndDistance);
+                command.SetGlobalFloat("_FogDensity", RenderSettings.fogDensity);
+                command.SetGlobalFloat("_FogMode", (float)RenderSettings.fogMode);
+                command.SetGlobalFloat("_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
+                command.SetGlobalFloat("_AoEnabled", renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f);
+                command.SetGlobalFloat("_Scale", dynamicResolution.ScaleFactor);
+
+                command.SetGlobalVector("_WaterAlbedo", renderPipelineAsset.waterAlbedo.linear);
+                command.SetGlobalVector("_WaterExtinction", renderPipelineAsset.waterExtinction);
+               
+                command.SetGlobalMatrix("_NonJitteredVPMatrix", camera.nonJitteredProjectionMatrix);
+                command.SetGlobalMatrix("_PreviousVPMatrix", previousMatrix);
+                command.SetGlobalMatrix("_InvVPMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse);
+                command.SetGlobalInt("_FrameCount", Time.renderedFrameCount);
+
+                context.SetupCameraProperties(camera);
+            });
+        }
 
         clusteredLightCulling.Render(camera, dynamicResolution.ScaleFactor);
         volumetricLighting.Render(camera, dynamicResolution.ScaleFactor);
@@ -188,54 +192,67 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var cameraTargetId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
         var cameraDepthId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.D32_SFloat_S8_UInt);
 
-        renderGraph.AddRenderPass((command, context) =>
         {
-            // Base pass
-            command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, cameraDepthId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store));
-            command.ClearRenderTarget(true, true, Color.clear);
-        });
+            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
+            pass.SetRenderFunction((command, context) =>
+            {
+                // Base pass
+                command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, cameraDepthId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store));
+                command.ClearRenderTarget(true, true, Color.clear);
+            });
+        }
 
         opaqueObjectRenderer.Render(cullingResults, camera);
-
         var motionVectorsId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.R16G16_SFloat);
-        renderGraph.AddRenderPass((command, context) =>
-        {
-            // Motion Vectors
-            command.SetRenderTarget(motionVectorsId);
-            command.ClearRenderTarget(false, true, Color.clear);
 
-            command.SetRenderTarget(
-                new RenderTargetBinding(new RenderTargetIdentifier[] { cameraTargetId, motionVectorsId },
-                new RenderBufferLoadAction[] { RenderBufferLoadAction.Load, RenderBufferLoadAction.DontCare },
-                new RenderBufferStoreAction[] { RenderBufferStoreAction.Store, RenderBufferStoreAction.Store },
-                cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store));
-        });
+        {
+            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
+            pass.SetRenderFunction((command, context) =>
+            {
+                // Motion Vectors
+                command.SetRenderTarget(motionVectorsId);
+                command.ClearRenderTarget(false, true, Color.clear);
+
+                command.SetRenderTarget(
+                    new RenderTargetBinding(new RenderTargetIdentifier[] { cameraTargetId, motionVectorsId },
+                    new RenderBufferLoadAction[] { RenderBufferLoadAction.Load, RenderBufferLoadAction.DontCare },
+                    new RenderBufferStoreAction[] { RenderBufferStoreAction.Store, RenderBufferStoreAction.Store },
+                    cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store));
+            });
+        }
 
         motionVectorsRenderer.Render(cullingResults, camera);
         cameraMotionVectors.Render(motionVectorsId, cameraDepthId);
         ambientOcclusion.Render(camera, cameraDepthId, cameraTargetId, dynamicResolution.ScaleFactor);
 
-        renderGraph.AddRenderPass((command, context) =>
         {
-            // Render sky
-            command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepth });
+            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
+            pass.SetRenderFunction((command, context) =>
+            {
+                // Render sky
+                command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepth });
 
-            command.DrawProcedural(Matrix4x4.identity, skyClearMaterial, 0, MeshTopology.Triangles, 3);
-        });
+                command.DrawProcedural(Matrix4x4.identity, skyClearMaterial, 0, MeshTopology.Triangles, 3);
+            });
+        }
 
         skyRenderer.Render(cullingResults, camera);
 
         var sceneTextureId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
-        renderGraph.AddRenderPass((command, context) =>
         {
-            // Copy scene texture
-            command.CopyTexture(cameraTargetId, sceneTextureId);
-            command.SetGlobalTexture("_SceneTexture", sceneTextureId);
-            command.SetGlobalTexture("_CameraDepth", cameraDepthId);
+            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
+            pass.SetRenderFunction((command, context) =>
+            {
+                // Copy scene texture
+                command.CopyTexture(cameraTargetId, sceneTextureId);
 
-            // Transparent
-            command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepthStencil });
-        });
+                pass.SetTexture(command, "_SceneTexture", sceneTextureId);
+                pass.SetTexture(command, "_CameraDepth", cameraDepthId);
+
+                // Transparent
+                command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepthStencil });
+            });
+        }
 
         transparentObjectRenderer.Render(cullingResults, camera);
         autoExposure.Render(cameraTargetId, scaledWidth, scaledHeight);
@@ -246,16 +263,19 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         tonemapping.Render(taa, bloomResult, camera.cameraType == CameraType.SceneView, camera.pixelWidth, camera.pixelHeight);
 
-        renderGraph.AddRenderPass((command, context) =>
         {
-            context.ExecuteCommandBuffer(command);
-            command.Clear();
-
-            if (UnityEditor.Handles.ShouldRenderGizmos())
+            var pass = renderGraph.AddRenderPass<GenericRenderPass>();
+            pass.SetRenderFunction((command, context) =>
             {
-                context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
-                context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
-            }
-        });
+                context.ExecuteCommandBuffer(command);
+                command.Clear();
+
+                if (UnityEditor.Handles.ShouldRenderGizmos())
+                {
+                    context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
+                    context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
+                }
+            });
+        }
     }
 }

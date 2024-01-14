@@ -13,71 +13,6 @@ MonoBehaviour:
   m_Name: Render Pipeline
   m_EditorClassIdentifier: 
   enableSrpBatcher: 1
-  shadowSettings:
-    closeFit: 1
-    shadowCascades: 4
-    shadowCascadeSplits: {x: 0.037037034, y: 0.1111111, z: 0.33333334}
-    shadowDistance: 8192
-    directionalShadowResolution: 2048
-    shadowBias: 128
-    shadowSlopeBias: 1
-    pointShadowResolution: 256
-    pcfSamples: 4
-    pcfRadius: 1
-    blockerSamples: 8
-    blockerRadius: 8
-    pcssSoftness: 32
-  clusteredLightingSettings:
-    tileSize: 32
-    clusterDepth: 64
-    maxLightsPerTile: 32
-  temporalAASettings:
-    sampleCount: 8
-    jitterSpread: 1
-    sharpness: 0.25
-    stationaryBlending: 0.95
-    motionBlending: 0.85
-    motionWeight: 6000
-  convolutionBloomSettings:
-    resolution: 1024
-    kernelTexture: {fileID: 2800000, guid: ba159027bff5c8845ac4916bfd145294, type: 3}
-    kernelIntensity: 8
-    kernelTint: {r: 0.9811321, g: 0.9811321, b: 0.9811321, a: 1}
-    kernelScale: {x: 2, y: 2}
-    kernelOffset: {x: 0, y: 0}
-    Intensity: 1
-    Threshold: 0
-    KernelPositionOffset: {x: 0, y: 0}
-    KernelSizeScale: {x: 0.25, y: 0.25}
-    KernelDistanceExp: 0
-    KernelDistanceExpClampMin: 1
-    KernelDistanceExpScale: 1
-    KernelImageUseLuminanceAsRGB: 0
-  bloomSettings:
-    strength: 0.1875
-    maxMips: 6
-  ambientOcclusionSettings:
-    strength: 2
-    tint: {r: 0.15, g: 0.15, b: 0.15, a: 1}
-    radius: 128
-    falloff: 0.75
-    directionCount: 4
-    sampleCount: 8
-  volumetricLightingSettings:
-    tileSize: 8
-    depthSlices: 128
-    blurSigma: 1
-    nonLinearDepth: 0
-  depthOfFieldSettings:
-    sampleRadius: 0.5
-    sampleCount: 16
-  dynamicResolutionSettings:
-    targetFrameRate: 60
-    minScaleFactor: 1
-    maxScaleFactor: 1
-    damping: 0.05
-  waterAlbedo: {r: 0.050543994, g: 0.13698289, b: 0.21599996, a: 1}
-  waterExtinction: {r: 0.01, g: 0.0035, b: 0.003, a: 1}
   defaultMaterials:
     defaultMaterial: {fileID: 0}
     defaultUIMaterial: {fileID: 0}
@@ -131,6 +66,54 @@ MonoBehaviour:
   - 
   - 
   - 
+  shadowSettings:
+    closeFit: 1
+    shadowCascades: 4
+    shadowCascadeSplits: {x: 0.037037034, y: 0.1111111, z: 0.33333334}
+    shadowDistance: 8192
+    directionalShadowResolution: 2048
+    shadowBias: 128
+    shadowSlopeBias: 1
+    pointShadowResolution: 256
+    pcfSamples: 4
+    pcfRadius: 1
+    blockerSamples: 8
+    blockerRadius: 8
+    pcssSoftness: 32
+  clusteredLightingSettings:
+    tileSize: 32
+    clusterDepth: 64
+    maxLightsPerTile: 32
+  temporalAASettings:
+    sampleCount: 8
+    jitterSpread: 1
+    sharpness: 0.25
+    stationaryBlending: 0.95
+    motionBlending: 0.85
+    motionWeight: 6000
+  bloomSettings:
+    strength: 0.1875
+    maxMips: 6
+  ambientOcclusionSettings:
+    strength: 2
+    tint: {r: 0.15, g: 0.15, b: 0.15, a: 1}
+    radius: 128
+    falloff: 0.75
+    directionCount: 4
+    sampleCount: 8
+  volumetricLightingSettings:
+    tileSize: 8
+    depthSlices: 128
+    blurSigma: 1
+    nonLinearDepth: 0
+  depthOfFieldSettings:
+    sampleRadius: 0.5
+    sampleCount: 16
+  dynamicResolutionSettings:
+    targetFrameRate: 60
+    minScaleFactor: 1
+    maxScaleFactor: 1
+    damping: 0.05
   autoExposureSettings:
     minEv: -10
     maxEv: 18
@@ -213,3 +196,5 @@ MonoBehaviour:
     iso: 76000
     sensorHeight: 40000
     focalDistance: 64
+  waterAlbedo: {r: 0.050543994, g: 0.13698289, b: 0.21599996, a: 1}
+  waterExtinction: {r: 0.01, g: 0.0035, b: 0.003, a: 1}
