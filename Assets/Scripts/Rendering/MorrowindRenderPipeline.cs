@@ -188,49 +188,36 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         clusteredLightCulling.Render(camera, dynamicResolution.ScaleFactor);
         volumetricLighting.Render(camera, dynamicResolution.ScaleFactor);
 
-        var cameraTargetId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
-        var cameraDepthId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.D32_SFloat_S8_UInt);
+        var cameraTarget = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
+        var cameraDepth = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.D32_SFloat_S8_UInt);
 
         {
             var pass = renderGraph.AddRenderPass<GlobalRenderPass>();
-            pass.SetRenderFunction((command, context) =>
-            {
-                // Base pass
-                command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, cameraDepthId, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store));
-                command.ClearRenderTarget(true, true, Color.clear);
-            });
+            pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
+            pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
         }
 
         opaqueObjectRenderer.Render(cullingResults, camera);
-        var motionVectorsId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.R16G16_SFloat);
+        var motionVectors = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.R16G16_SFloat);
 
         {
             var pass = renderGraph.AddRenderPass<GlobalRenderPass>();
-            pass.SetRenderFunction((command, context) =>
-            {
-                // Motion Vectors
-                command.SetRenderTarget(motionVectorsId);
-                command.ClearRenderTarget(false, true, Color.clear);
-
-                command.SetRenderTarget(
-                    new RenderTargetBinding(new RenderTargetIdentifier[] { cameraTargetId, motionVectorsId },
-                    new RenderBufferLoadAction[] { RenderBufferLoadAction.Load, RenderBufferLoadAction.DontCare },
-                    new RenderBufferStoreAction[] { RenderBufferStoreAction.Store, RenderBufferStoreAction.Store },
-                    cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store));
-            });
+            pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+            pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+            pass.WriteTexture("", motionVectors, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
         }
 
         motionVectorsRenderer.Render(cullingResults, camera);
-        cameraMotionVectors.Render(motionVectorsId, cameraDepthId);
-        ambientOcclusion.Render(camera, cameraDepthId, cameraTargetId, dynamicResolution.ScaleFactor);
+        cameraMotionVectors.Render(motionVectors, cameraDepth);
+        ambientOcclusion.Render(camera, cameraDepth, cameraTarget, dynamicResolution.ScaleFactor);
 
         {
             var pass = renderGraph.AddRenderPass<GlobalRenderPass>();
+            pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
+            pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+
             pass.SetRenderFunction((command, context) =>
             {
-                // Render sky
-                command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepth });
-
                 command.DrawProcedural(Matrix4x4.identity, skyClearMaterial, 0, MeshTopology.Triangles, 3);
             });
         }
@@ -240,24 +227,23 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var sceneTextureId = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
         {
             var pass = renderGraph.AddRenderPass<GlobalRenderPass>();
+            pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
+            pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+
             pass.SetRenderFunction((command, context) =>
             {
                 // Copy scene texture
-                command.CopyTexture(cameraTargetId, sceneTextureId);
-
+                command.CopyTexture(cameraTarget, sceneTextureId);
                 pass.SetTexture(command, "_SceneTexture", sceneTextureId);
-                pass.SetTexture(command, "_CameraDepth", cameraDepthId);
-
-                // Transparent
-                command.SetRenderTarget(new RenderTargetBinding(cameraTargetId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare, cameraDepthId, RenderBufferLoadAction.Load, RenderBufferStoreAction.DontCare) { flags = RenderTargetFlags.ReadOnlyDepthStencil });
+                pass.SetTexture(command, "_CameraDepth", cameraDepth);
             });
         }
 
         transparentObjectRenderer.Render(cullingResults, camera);
-        autoExposure.Render(cameraTargetId, scaledWidth, scaledHeight);
+        autoExposure.Render(cameraTarget, scaledWidth, scaledHeight);
 
-        var dofResult = depthOfField.Render(scaledWidth, scaledHeight, camera.fieldOfView, cameraTargetId, cameraDepthId);
-        var taa = temporalAA.Render(camera, dofResult, motionVectorsId, dynamicResolution.ScaleFactor);
+        var dofResult = depthOfField.Render(scaledWidth, scaledHeight, camera.fieldOfView, cameraTarget, cameraDepth);
+        var taa = temporalAA.Render(camera, dofResult, motionVectors, dynamicResolution.ScaleFactor);
         var bloomResult = bloom.Render(camera, taa);
 
         tonemapping.Render(taa, bloomResult, camera.cameraType == CameraType.SceneView, camera.pixelWidth, camera.pixelHeight);
