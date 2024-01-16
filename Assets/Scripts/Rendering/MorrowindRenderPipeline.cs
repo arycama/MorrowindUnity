@@ -5,6 +5,7 @@ using Arycama.CustomRenderPipeline;
 using UnityEngine.Experimental.Rendering;
 using CommandBufferPool = Arycama.CustomRenderPipeline.CommandBufferPool;
 using RendererListDesc = UnityEngine.Rendering.RendererUtils.RendererListDesc;
+using System.Collections.Generic;
 
 public class MorrowindRenderPipeline : CustomRenderPipeline
 {
@@ -98,7 +99,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         renderGraph.Release();
     }
 
-    protected override void Render(ScriptableRenderContext context, Camera[] cameras)
+    protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
     {
         dynamicResolution.Update(frameTimeSampler.GetRecorder().gpuElapsedNanoseconds);
 
@@ -115,6 +116,18 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         context.Submit();
         renderGraph.ReleaseHandles();
     }
+
+    protected override void Render(ScriptableRenderContext context, Camera[] cameras)
+    {
+        
+    }
+
+    class Pass0Data { }
+    class Pass1Data { }
+    class Pass2Data { }
+    class Pass3Data { }
+    class Pass4Data { }
+    class Pass5Data { }
 
     private void RenderCamera(Camera camera, ScriptableRenderContext context)
     {
@@ -141,7 +154,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds.GetString(Time.renderedFrameCount % 64));
 
         var setGlobalsPass = renderGraph.AddRenderPass<GlobalRenderPass>();
-        setGlobalsPass.SetRenderFunction((command, context) =>
+        var data0 = setGlobalsPass.SetRenderFunction<Pass0Data>((command, context, data) =>
         {
             setGlobalsPass.SetTexture(command, "_BlueNoise1D", blueNoise1D);
             setGlobalsPass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
@@ -150,7 +163,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             setGlobalsPass.SetVector(command, "_AmbientLightColor", RenderSettings.ambientLight.linear);
             setGlobalsPass.SetVector(command, "_FogColor", RenderSettings.fogColor.linear);
 
-            setGlobalsPass.SetFloat(command, "_FogStartDistance", RenderSettings.fogStartDistance); 
+            setGlobalsPass.SetFloat(command, "_FogStartDistance", RenderSettings.fogStartDistance);
             setGlobalsPass.SetFloat(command, "_FogEndDistance", RenderSettings.fogEndDistance);
             setGlobalsPass.SetFloat(command, "_FogDensity", RenderSettings.fogDensity);
             setGlobalsPass.SetFloat(command, "_FogMode", (float)RenderSettings.fogMode);
@@ -179,7 +192,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         opaquePass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.opaque, SortingCriteria.CommonOpaque, PerObjectData.None, true);
         opaquePass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
         opaquePass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
-        opaquePass.SetRenderFunction((command, context) =>
+        var data1 = opaquePass.SetRenderFunction<Pass1Data>((command, context, data) =>
         {
             opaquePass.Execute(command);
         });
@@ -192,7 +205,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         motionVectorPass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
         motionVectorPass.WriteTexture("", motionVectors, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
 
-        motionVectorPass.SetRenderFunction((command, context) =>
+        var data2 = motionVectorPass.SetRenderFunction<Pass2Data>((command, context, data) =>
         {
             motionVectorPass.Execute(command);
         });
@@ -202,7 +215,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         skyPass.Initialize("Sky", context, cullingResults, camera, RenderQueueRange.all);
         skyPass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
         skyPass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-        skyPass.SetRenderFunction((command, context) =>
+        var data3 = skyPass.SetRenderFunction<Pass3Data>((command, context, data) =>
         {
             command.DrawProcedural(Matrix4x4.identity, skyClearMaterial, 0, MeshTopology.Triangles, 3);
             skyPass.Execute(command);
@@ -218,7 +231,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         transparentPass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.transparent, SortingCriteria.CommonTransparent);
         transparentPass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
         transparentPass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-        transparentPass.SetRenderFunction((command, context) =>
+        var data4 = transparentPass.SetRenderFunction<Pass4Data>((command, context, data) =>
         {
             // Copy scene texture
             command.CopyTexture(cameraTarget, sceneTextureId);
@@ -238,7 +251,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         // Only in editor
         var gizmosPass = renderGraph.AddRenderPass<GlobalRenderPass>();
-        gizmosPass.SetRenderFunction((command, context) =>
+        var data5 = gizmosPass.SetRenderFunction<Pass5Data>((command, context, data) =>
         {
             context.ExecuteCommandBuffer(command);
             command.Clear();
