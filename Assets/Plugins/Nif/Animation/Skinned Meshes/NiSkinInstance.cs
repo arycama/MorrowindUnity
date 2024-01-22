@@ -6,8 +6,8 @@ namespace Nif
 	[Serializable]
 	class NiSkinInstance : NiObject
 	{
-		private int data, rootBone;
-		private int[] bones;
+		private readonly int data, rootBone;
+		private readonly int[] bones;
 
 		public NiSkinInstance(NiFile niFile) : base(niFile)
 		{

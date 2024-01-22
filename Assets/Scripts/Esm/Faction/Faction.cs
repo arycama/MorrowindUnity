@@ -9,7 +9,7 @@ namespace Esm
 	public class Faction : EsmRecord
 	{
 		// Used to store factions during initialization so stack overflows don't occur
-		private static Dictionary<string, Faction> factionDictionary = new Dictionary<string, Faction>();
+		private static readonly Dictionary<string, Faction> factionDictionary = new Dictionary<string, Faction>();
 
 		[SerializeField]
 		private string fullName;

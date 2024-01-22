@@ -43,10 +43,10 @@ public class Tes3Record : EsmRecord
 		const int companyNameLength = 32;
 		const int fileDescriptionLength = 256;
 
-		private float version;
-		private FileType fileType;
+		private readonly float version;
+		private readonly FileType fileType;
 		public string companyName, fileDescription;
-		private int numberOfRecords;
+		private readonly int numberOfRecords;
 
 		public Tes3Header(BinaryReader reader)
 		{

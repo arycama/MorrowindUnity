@@ -6,7 +6,7 @@ namespace Esm
 	[Serializable]
 	class SkillData
 	{
-		private int block, armorer, mediumArmor, heavyArmor, bluntWeapon, longBlade, axe, spear, athletics, enchant, destruction, alteration, illustion, conjuration, mysticism, restoration, alchemy, unarmored, security, sneak, acrobatics, lightArmor, shortBlade, marksman, mercantile, speechcraft, handToHand;
+		private readonly int block, armorer, mediumArmor, heavyArmor, bluntWeapon, longBlade, axe, spear, athletics, enchant, destruction, alteration, illustion, conjuration, mysticism, restoration, alchemy, unarmored, security, sneak, acrobatics, lightArmor, shortBlade, marksman, mercantile, speechcraft, handToHand;
 
 		public SkillData(System.IO.BinaryReader reader)
 		{

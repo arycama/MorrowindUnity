@@ -12,7 +12,7 @@ public class MusicManager : MonoBehaviour
 	[SerializeField]
 	private string[] battleMusic;
 
-	private Coroutine musicLoopRoutine;
+	private readonly Coroutine musicLoopRoutine;
 
 	private AudioSource audio;
 

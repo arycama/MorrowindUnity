@@ -6,9 +6,9 @@ namespace Nif
 {
 	class NiColorData : NiObject
 	{
-		private int keyCount;
-		private KeyType interpolation;
-		private ColorKey[] keys;
+		private readonly int keyCount;
+		private readonly KeyType interpolation;
+		private readonly ColorKey[] keys;
 		
 		public NiColorData(NiFile niFile) : base(niFile)
 		{

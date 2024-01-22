@@ -5,7 +5,7 @@ namespace Nif
 	[Serializable]
 	class NiVisController : NiBoolInterpController
 	{
-		private int dataIndex;
+		private readonly int dataIndex;
 
 		public NiVisController(NiFile niFile) : base(niFile)
 		{

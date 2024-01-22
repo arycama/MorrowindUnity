@@ -16,7 +16,7 @@ namespace Esm
 		[SerializeField, TextArea(1, 30)]
 		private string scriptText;
 
-		private Dictionary<string, float> scriptVariables = new Dictionary<string, float>();
+		private readonly Dictionary<string, float> scriptVariables = new Dictionary<string, float>();
 
 		public string Id => name;
 		public string ScriptText => scriptText;

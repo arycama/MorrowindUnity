@@ -4,9 +4,9 @@ using System.Text;
 
 public class DialogResultLexer
 {
-	private string source;
+	private readonly string source;
 	private int index, line, column;
-	private StringBuilder stringBuilder = new StringBuilder();
+	private readonly StringBuilder stringBuilder = new StringBuilder();
 
 	private char Current => source[index];
 	private char Last => Peek(-1);

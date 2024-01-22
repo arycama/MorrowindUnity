@@ -14,7 +14,7 @@ public class CharacterEquipment : MonoBehaviour
 	private CharacterAnimation animation;
 	private CharacterBody body;
 
-	private Dictionary<EquipmentSlot, IEquippable> equippedItems = new Dictionary<EquipmentSlot, IEquippable>();
+	private readonly Dictionary<EquipmentSlot, IEquippable> equippedItems = new Dictionary<EquipmentSlot, IEquippable>();
 
 	public WeaponRecord EquippedWeapon { get; private set; } //Should be inventoryItemData<WeaponData> or something
 

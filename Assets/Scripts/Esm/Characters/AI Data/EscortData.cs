@@ -5,8 +5,8 @@ using UnityEngine;
 public class EscortData
 {
 	private Vector3 position;
-	private int duration, unknown;
-	private string id;
+	private readonly int duration, unknown;
+	private readonly string id;
 
 	public EscortData(System.IO.BinaryReader reader)
 	{

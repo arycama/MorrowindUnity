@@ -119,7 +119,7 @@ namespace Esm
 		private class PathgridData
 		{
 			public int x, y;
-			private short granularity;
+			private readonly short granularity;
 
 			public short PointCount { get; private set; }
 

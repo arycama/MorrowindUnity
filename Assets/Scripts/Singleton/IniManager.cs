@@ -5,7 +5,7 @@ using UnityEngine;
 
 public class IniManager : MonoBehaviour
 {
-	private static Dictionary<string, Dictionary<string, string>> Settings = new Dictionary<string, Dictionary<string, string>>();
+	private static readonly Dictionary<string, Dictionary<string, string>> Settings = new Dictionary<string, Dictionary<string, string>>();
 
 	[SerializeField]
 	private string path = "C:/Program Files (x86)/Steam/SteamApps/common/Morrowind/Morrowind.ini";
@@ -88,55 +88,53 @@ public class IniManager : MonoBehaviour
 
 	private void Awake()
 	{
-		using (var file = new StreamReader(path))
-		{
-			string section = string.Empty;
+        using var file = new StreamReader(path);
+        string section = string.Empty;
 
-			int lineNumber = -1;
-			string line;
-			while ((line = file.ReadLine()) != null)
-			{
-				lineNumber++;
+        int lineNumber = -1;
+        string line;
+        while ((line = file.ReadLine()) != null)
+        {
+            lineNumber++;
 
-				// Remove whitespace and skip if the line is empty
-				line = line.Trim();
-				if (line.Length == 0)
-				{
-					continue;
-				}
+            // Remove whitespace and skip if the line is empty
+            line = line.Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
 
-				// Skip lines that start with a semi-colon, as these are comments
-				if (line.StartsWith(";"))
-				{
-					continue;
-				}
+            // Skip lines that start with a semi-colon, as these are comments
+            if (line.StartsWith(";"))
+            {
+                continue;
+            }
 
-				// Each section is a string enclosed in square brackets "[Section]"
-				if (line.StartsWith("[") && line.EndsWith("]"))
-				{
-					section = line.Substring(1, line.Length - 2);
-					Settings.Add(section, new Dictionary<string, string>());
-					continue;
-				}
+            // Each section is a string enclosed in square brackets "[Section]"
+            if (line.StartsWith("[") && line.EndsWith("]"))
+            {
+                section = line.Substring(1, line.Length - 2);
+                Settings.Add(section, new Dictionary<string, string>());
+                continue;
+            }
 
-				// Split the line according to equals signs
-				var strings = line.Split('=');
+            // Split the line according to equals signs
+            var strings = line.Split('=');
 
-				// Some settings may have empty values
-				if (strings.Length == 1)
-				{
-					Settings[section].Add(strings[0], null);
-					continue;
-				}
+            // Some settings may have empty values
+            if (strings.Length == 1)
+            {
+                Settings[section].Add(strings[0], null);
+                continue;
+            }
 
-				// Log a warning if more than one equals sign is detected
-				if(strings.Length > 2)
-				{
-					Debug.LogWarningFormat("Line {0} has more than one '=' sign. Any subsequent values will be ignored. ({1})", lineNumber, line);
-				}
+            // Log a warning if more than one equals sign is detected
+            if (strings.Length > 2)
+            {
+                Debug.LogWarningFormat("Line {0} has more than one '=' sign. Any subsequent values will be ignored. ({1})", lineNumber, line);
+            }
 
-				Settings[section].Add(strings[0], strings[1]);
-			}
-		}
-	}
+            Settings[section].Add(strings[0], strings[1]);
+        }
+    }
 }

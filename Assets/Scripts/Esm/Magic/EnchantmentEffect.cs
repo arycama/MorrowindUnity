@@ -9,10 +9,10 @@ namespace Esm
 		[SerializeField]
 		private MagicEffectRecord magicEffect;
 
-		private int area, duration, minMagnitude, maxMagnitude;
-		private CharacterAttribute characterAttribute;
-		private RangeType rangeType;
-		private CharacterSkill characterSkill;
+		private readonly int area, duration, minMagnitude, maxMagnitude;
+		private readonly CharacterAttribute characterAttribute;
+		private readonly RangeType rangeType;
+		private readonly CharacterSkill characterSkill;
 
 		public MagicEffectRecord MagicEffect { get { return magicEffect; } }
 

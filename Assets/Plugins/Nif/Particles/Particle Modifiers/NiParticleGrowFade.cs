@@ -5,7 +5,7 @@ namespace Nif
 {
 	class NiParticleGrowFade : NiParticleModifier
 	{
-		private float grow, fade;
+		private readonly float grow, fade;
 
 		public NiParticleGrowFade(NiFile niFile) : base(niFile)
 		{

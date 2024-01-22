@@ -7,9 +7,9 @@ namespace Nif
 	[Serializable]
 	class NiVertexColorProperty : NiProperty
 	{
-		private int flags;
-		private VertMode vertexMode;
-		private LightMode lightingMode;
+		private readonly int flags;
+		private readonly VertMode vertexMode;
+		private readonly LightMode lightingMode;
 
 		public NiVertexColorProperty(NiFile niFile) : base(niFile)
 		{

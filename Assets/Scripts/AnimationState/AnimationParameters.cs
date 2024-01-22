@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 public class AnimationParameters
 {
-    private Dictionary<string, object> animationParameters = new Dictionary<string, object>();
+    private readonly Dictionary<string, object> animationParameters = new Dictionary<string, object>();
 
     public T GetParameter<T>(string name)
     {

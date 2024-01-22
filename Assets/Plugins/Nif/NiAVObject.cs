@@ -7,13 +7,13 @@ namespace Nif
 	abstract class NiAVObject : NiObjectNet
 	{
 		protected Vector3 position, velocity;
-		private Flags flags;
+		private readonly Flags flags;
 		private Quaternion rotation;
-		private float scale;
+		private readonly float scale;
 		protected int propertyCount;
 		protected int[] properties;
-		private bool hasBoundingBox;
-		private BoundingBox boundingBox;
+		private readonly bool hasBoundingBox;
+		private readonly BoundingBox boundingBox;
 
 		[Flags]
 		protected enum Flags
@@ -126,7 +126,7 @@ namespace Nif
 
 		public class BoundingBox
 		{
-			private int unknownInt;
+			private readonly int unknownInt;
 			private Vector3 position, size;
 			private Matrix4x4 rotation;
 

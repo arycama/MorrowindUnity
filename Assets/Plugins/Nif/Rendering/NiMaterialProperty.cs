@@ -7,9 +7,9 @@ namespace Nif
 	[Serializable]
 	class NiMaterialProperty : NiProperty
 	{
-		private short flags;
+		private readonly short flags;
 		private Color ambient, diffuse, specular, emissive;
-		private float glossiness;
+		private readonly float glossiness;
 
 		public NiMaterialProperty(NiFile niFile) : base(niFile)
 		{

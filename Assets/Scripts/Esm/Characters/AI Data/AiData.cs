@@ -8,7 +8,7 @@ public class AiData
 	[SerializeField]
 	private byte hello;
 
-	private int unknown1, fight, flee, alarm, unknown2, unknown3, unknown4;
+	private readonly int unknown1, fight, flee, alarm, unknown2, unknown3, unknown4;
 
 	[SerializeField, EnumFlags]
 	private ServiceFlags buySellFlags;

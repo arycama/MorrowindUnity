@@ -5,8 +5,8 @@ namespace Nif
 	[Serializable]
 	class NiTriShapeData : NiTriBasedGeomData
 	{
-		private int matchGroupCount;
-		private MatchGroup[] matchGroups;
+		private readonly int matchGroupCount;
+		private readonly MatchGroup[] matchGroups;
 
 		public NiTriShapeData(NiFile niFile) : base(niFile)
 		{
@@ -24,8 +24,8 @@ namespace Nif
 
 		private class MatchGroup
 		{
-			private short vertexCount;
-			private short[] vertexIndices;
+			private readonly short vertexCount;
+			private readonly short[] vertexIndices;
 
 			public MatchGroup(System.IO.BinaryReader reader)
 			{

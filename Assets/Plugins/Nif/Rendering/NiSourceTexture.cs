@@ -6,14 +6,14 @@ namespace Nif
 {
 	class NiSourceTexture : NiTexture
 	{
-		private static Dictionary<string, Texture> textureCache = new Dictionary<string, Texture>();
+		private static readonly Dictionary<string, Texture> textureCache = new Dictionary<string, Texture>();
 
-		private byte useExternal;
+		private readonly byte useExternal;
 		public string FileName { get; private set; }
-		private PixelLayout pixelLayout;
-		private MipMapFormat useMipMaps;
-		private AlphaFormat alphaFormat;
-		private byte isStatic;
+		private readonly PixelLayout pixelLayout;
+		private readonly MipMapFormat useMipMaps;
+		private readonly AlphaFormat alphaFormat;
+		private readonly byte isStatic;
 
 		public NiSourceTexture(NiFile niFile) : base(niFile)
 		{

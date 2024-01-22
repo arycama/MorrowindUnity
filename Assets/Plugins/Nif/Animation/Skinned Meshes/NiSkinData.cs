@@ -7,8 +7,8 @@ namespace Nif
 	class NiSkinData : NiObject
 	{
 		private Matrix4x4 matrix;
-		private int skinPartition;
-		private SkinData[] boneList;
+		private readonly int skinPartition;
+		private readonly SkinData[] boneList;
 		private BoneWeight[] boneWeights;
 		private Matrix4x4[] bindPoses;
 
@@ -54,8 +54,8 @@ namespace Nif
 		private class SkinData
 		{
 			private Vector3 boundingSphereOffset;
-			private float boundingSphereRadius;
-			private SkinWeight[] vertexWeights;
+			private readonly float boundingSphereRadius;
+			private readonly SkinWeight[] vertexWeights;
 
 			public SkinData(System.IO.BinaryReader reader)
 			{

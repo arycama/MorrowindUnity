@@ -11,7 +11,7 @@ public class WaterAudio : MonoBehaviour
 	[SerializeField]
 	private string audioName = "Water Layer";
 
-	private float maxVolume = 0.7f;
+	private readonly float maxVolume = 0.7f;
 	private AudioSource audio;
 
 	private void Start()

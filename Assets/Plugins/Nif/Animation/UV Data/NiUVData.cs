@@ -6,7 +6,7 @@ namespace Nif
 	[Serializable]
 	class NiUVData : NiObject
 	{
-		private AnimationClip clip;
+		private readonly AnimationClip clip;
 
 		public NiUVData(NiFile niFile) : base(niFile)
 		{

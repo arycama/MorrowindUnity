@@ -18,7 +18,7 @@ public class WanderData
 	[SerializeField]
 	private byte[] idles;
 
-	private int unknown;
+	private readonly int unknown;
 
 	public WanderData(System.IO.BinaryReader reader)
 	{

@@ -26,7 +26,7 @@ public class ListPanelUI : MonoBehaviour
 	[SerializeField]
 	private Text button;
 
-	private Dictionary<string, DialogTopicUI> currentOptions = new Dictionary<string, DialogTopicUI>();
+	private readonly Dictionary<string, DialogTopicUI> currentOptions = new Dictionary<string, DialogTopicUI>();
 
 	public static ListPanelUI Create(IEnumerable<ListUIOption> options, string title, string description, string button, int gold, PauseGameUI parent, bool closeOnComplete = false, bool closeUIOnComplete = false)
 	{

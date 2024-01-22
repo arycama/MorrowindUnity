@@ -39,7 +39,7 @@ public class DialogView : PauseGameUI, IDialogView
 
 	// Save list of current topics so it can be modiifed/sorted when needed
 	private List<DialogRecord> currentTopics;
-	private List<DialogTopicUI> currentChoices = new List<DialogTopicUI>();
+	private readonly List<DialogTopicUI> currentChoices = new List<DialogTopicUI>();
 
 	private IDialogController controller;
 

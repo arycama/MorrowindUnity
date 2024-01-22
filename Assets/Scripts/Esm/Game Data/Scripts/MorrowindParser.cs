@@ -7,9 +7,9 @@ using UnityEngine;
 
 public class MorrowindParser
 {
-	private bool hasBegun = false, hasEnded = false;
+	private readonly bool hasBegun = false, hasEnded = false;
 
-	private string text;
+	private readonly string text;
 	private StringBuilder token;
 	private StringReader reader;
 

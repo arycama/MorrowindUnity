@@ -9,8 +9,8 @@ namespace Nif
 {
 	public class NiFile
 	{
-		private NiObject[] niObjects;
-		private NiAVObject[] roots;
+		private readonly NiObject[] niObjects;
+		private readonly NiAVObject[] roots;
 		public Dictionary<string, ClipInfo> animationCache;
 		private readonly List<GameObject> createdObjects = new List<GameObject>();
 

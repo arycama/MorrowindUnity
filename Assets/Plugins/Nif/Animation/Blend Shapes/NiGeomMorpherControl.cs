@@ -5,8 +5,8 @@ namespace Nif
 {
 	class NiGeomMorpherController : NiInterpController
 	{
-		private int dataIndex;
-		private bool alwaysUpdate;
+		private readonly int dataIndex;
+		private readonly bool alwaysUpdate;
 
 		public NiGeomMorpherController(NiFile niFile) : base(niFile)
 		{

@@ -7,11 +7,11 @@ namespace Nif
 {
 	class NiAlphaProperty : NiProperty
 	{
-		private int flags, zWrite;
-		private bool alphaBlend, alphaTest;
-		private BlendModes sourceBlendMode, destinationBlendMode;
-		private TestModes alphaTestMode;
-		private byte cutoff;
+		private readonly int flags, zWrite;
+		private readonly bool alphaBlend, alphaTest;
+		private readonly BlendModes sourceBlendMode, destinationBlendMode;
+		private readonly TestModes alphaTestMode;
+		private readonly byte cutoff;
 
 		[Flags]
 		private enum Flags

@@ -6,8 +6,8 @@ namespace Nif
 	[Serializable]
 	class NiUVController : NiTimeController
 	{
-		private short unknownShort;
-		private int dataIndex;
+		private readonly short unknownShort;
+		private readonly int dataIndex;
 
 		public NiUVController(NiFile niFile) : base(niFile)
 		{

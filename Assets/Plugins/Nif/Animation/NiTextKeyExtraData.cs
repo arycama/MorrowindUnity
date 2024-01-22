@@ -9,8 +9,8 @@ namespace Nif
 	[Serializable]
 	class NiTextKeyExtraData : NiExtraData
 	{
-		private int unknownInt1, numTextKeys;
-		private StringKey[] textKeys;
+		private readonly int unknownInt1, numTextKeys;
+		private readonly StringKey[] textKeys;
 
 		public NiTextKeyExtraData(NiFile niFile) : base(niFile)
 		{

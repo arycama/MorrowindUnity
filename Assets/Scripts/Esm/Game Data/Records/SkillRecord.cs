@@ -36,9 +36,9 @@ namespace Esm
 		[Serializable]
 		private class SkillData
 		{
-			private CharacterAttribute attribute;
-			private Specialization specialization;
-			private float[] useValue = new float[4];
+			private readonly CharacterAttribute attribute;
+			private readonly Specialization specialization;
+			private readonly float[] useValue = new float[4];
 
 			public SkillData(System.IO.BinaryReader reader)
 			{

@@ -25,7 +25,7 @@ public class Water : Singleton<Water>
 	private MeshFilter meshFilter;
 	private MeshRenderer meshRenderer;
 
-	private int textureCount = 32;
+	private readonly int textureCount = 32;
 
 	private void Awake()
 	{

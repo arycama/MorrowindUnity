@@ -10,8 +10,8 @@ namespace Nif
 		[SerializeField]
 		private ApplyMode applyMode;
 
-		private static Dictionary<string, Material> cache = new Dictionary<string, Material>();
-		private TexDesc[] textureDescriptions;
+		private static readonly Dictionary<string, Material> cache = new Dictionary<string, Material>();
+		private readonly TexDesc[] textureDescriptions;
 
 		private static readonly string[] textures = new string[7]
 		{

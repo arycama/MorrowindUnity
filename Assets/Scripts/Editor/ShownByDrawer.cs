@@ -3,8 +3,8 @@ using UnityEditor;
 
 public class ShownByDrawer : MaterialPropertyDrawer
 {
-	private string propertyName;
-	private float value;
+	private readonly string propertyName;
+	private readonly float value;
 
 	public ShownByDrawer(string propertyName, float value)
 	{

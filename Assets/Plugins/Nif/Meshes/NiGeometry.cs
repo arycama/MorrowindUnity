@@ -7,8 +7,8 @@ namespace Nif
 	[Serializable]
 	class NiGeometry : NiAVObject
 	{
-		private Ref<NiGeometryData> data;
-		private Ref<NiSkinInstance> skin;
+		private readonly Ref<NiGeometryData> data;
+		private readonly Ref<NiSkinInstance> skin;
 
 		public NiGeometry(NiFile niFile) : base(niFile)
 		{

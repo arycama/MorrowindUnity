@@ -10,9 +10,13 @@ public class Character : MonoBehaviour
 {
 	[SerializeField]
 	private NpcRecord npcData;
-
-	private float fatigue, health, magicka, maxFatigueMod, maxHealthMod, maxMagickaMod;
-	private byte reputationMod, levelMod;
+    private float fatigue;
+    private float health;
+    private float magicka;
+    private readonly float maxFatigueMod;
+    private readonly float maxHealthMod;
+    private readonly float maxMagickaMod;
+    private readonly byte reputationMod, levelMod;
 
 	private byte[] attributeMods, skillMods;
 

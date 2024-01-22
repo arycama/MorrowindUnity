@@ -8,7 +8,7 @@ namespace Esm
 	[Serializable]
 	public class DialogRecord : EsmRecordCollection<DialogRecord>
 	{
-		private static Dictionary<string, DialogRecord>
+		private static readonly Dictionary<string, DialogRecord>
 			TopicCache = new Dictionary<string, DialogRecord>(),
 			VoiceCache = new Dictionary<string, DialogRecord>(),
 			GreetingCache = new Dictionary<string, DialogRecord>(),

@@ -5,8 +5,8 @@ namespace Nif
 {
 	abstract class NiDynamicEffect : NiAVObject
 	{
-		int numAffectedNodeListPointers;
-		int[] affectedNodeListPointers;
+        readonly int numAffectedNodeListPointers;
+        readonly int[] affectedNodeListPointers;
 
 		public NiDynamicEffect(NiFile niFile) : base(niFile)
 		{

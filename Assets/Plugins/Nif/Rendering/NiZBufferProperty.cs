@@ -7,7 +7,7 @@ namespace Nif
 	[Serializable]
 	class NiZBufferProperty : NiProperty
 	{
-		private ZBufferFlags flags;
+		private readonly ZBufferFlags flags;
 
 		[Flags]
 		private enum ZBufferFlags : short

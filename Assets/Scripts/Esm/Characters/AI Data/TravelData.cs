@@ -6,7 +6,7 @@ using UnityEngine;
 public class TravelData
 {
 	private Vector3 position;
-	private int unknown;
+	private readonly int unknown;
 
 	public TravelData(System.IO.BinaryReader reader)
 	{

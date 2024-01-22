@@ -3,7 +3,7 @@ using System.Linq;
 
 public static class TextDefineProcessor
 {
-	private static StringBuilder resultBuilder = new StringBuilder(), defineBuilder = new StringBuilder();
+	private static readonly StringBuilder resultBuilder = new StringBuilder(), defineBuilder = new StringBuilder();
 
 	public static string ProcessText(string text, Character player, Character npc)
 	{

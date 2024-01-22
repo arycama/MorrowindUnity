@@ -13,7 +13,7 @@ public class AnimSubState : AnimStateBase
 
 	private AnimSubStateTransition baseState, activeState;
 
-	private float previousSpeed;
+	private readonly float previousSpeed;
 
     public override string AnimationName => activeState.AnimationName;
 

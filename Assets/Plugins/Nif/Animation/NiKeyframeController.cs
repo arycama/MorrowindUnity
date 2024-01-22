@@ -7,7 +7,7 @@ namespace Nif
 	[Serializable]
 	class NiKeyframeController : NiSingleInterpController
 	{
-		private int data;
+		private readonly int data;
 
 		public NiKeyframeController(NiFile niFile) : base(niFile)
 		{

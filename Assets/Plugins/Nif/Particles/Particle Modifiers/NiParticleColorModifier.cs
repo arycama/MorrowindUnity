@@ -5,7 +5,7 @@ namespace Nif
 {
 	class NiParticleColorModifier : NiParticleModifier
 	{
-		private Ref<NiColorData> data;
+		private readonly Ref<NiColorData> data;
 
 		public NiParticleColorModifier(NiFile niFile) : base(niFile)
 		{

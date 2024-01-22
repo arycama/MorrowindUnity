@@ -3,7 +3,7 @@ using UnityEngine;
 
 public class TextureData
 {
-	private short[,] textureIndices;
+	private readonly short[,] textureIndices;
 
 	public TextureData(System.IO.BinaryReader reader, int size)
 	{

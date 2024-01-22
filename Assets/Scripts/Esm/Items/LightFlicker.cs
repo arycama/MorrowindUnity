@@ -9,9 +9,11 @@ public class LightFlicker : MonoBehaviour
 {
 	[SerializeField]
 	private LightFlickerMode lightFlickerMode;
-
-	private float baseIntensity, direction, intensity, randomSpeed;
-	private Light light;
+    private float baseIntensity;
+    private float direction;
+    private float intensity;
+    private readonly float randomSpeed;
+    private Light light;
 
 	private void Awake()
 	{

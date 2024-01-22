@@ -40,7 +40,7 @@ public class FourWayBlendTree : AnimStateBase
 	[SerializeField]
 	private BlendState2D[] blendStates;
 
-	private AnimationState upState, downState, leftState, rightState;
+	private readonly AnimationState upState, downState, leftState, rightState;
 
     public override string AnimationName
     {

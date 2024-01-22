@@ -9,10 +9,10 @@ namespace Esm
 	[Serializable]
 	public class RaceBody
 	{
-		private Dictionary<BodyPartPiece, BodyPartRecord> maleParts = new Dictionary<BodyPartPiece, BodyPartRecord>(13),
+		private readonly Dictionary<BodyPartPiece, BodyPartRecord> maleParts = new Dictionary<BodyPartPiece, BodyPartRecord>(13),
 			femaleParts = new Dictionary<BodyPartPiece, BodyPartRecord>(13);
 
-		private List<BodyPartRecord>
+		private readonly List<BodyPartRecord>
 			maleHeads = new List<BodyPartRecord>(),
 			femaleHeads = new List<BodyPartRecord>(),
 			maleHair = new List<BodyPartRecord>(),

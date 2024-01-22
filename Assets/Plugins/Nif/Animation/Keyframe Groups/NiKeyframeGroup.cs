@@ -12,8 +12,8 @@ namespace Nif
 		public NiKeyframe<T>[] Keyframes { get; protected set; }
 		protected Keyframe[][] animationKeyframes;
 
-		private int length;
-		private KeyType interpolation;
+		private readonly int length;
+		private readonly KeyType interpolation;
 
 		public NiKeyframeGroup(int length, KeyType interpolation, System.IO.BinaryReader reader)
 		{

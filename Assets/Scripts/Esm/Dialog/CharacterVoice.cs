@@ -30,7 +30,7 @@ public class CharacterVoice : MonoBehaviour
 
 	private AudioSource audio;
 	
-	private HashSet<Collider> greetedNpcs = new HashSet<Collider>();
+	private readonly HashSet<Collider> greetedNpcs = new HashSet<Collider>();
 
 	private float GreetDistance => npcRecord.AiData.Hello;
 

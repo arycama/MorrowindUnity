@@ -5,13 +5,13 @@ using UnityEngine;
 [ExecuteAlways]
 public static class BsaFileReader
 {
-	private static Dictionary<int, FileMetadata> fileCache;
+	private static readonly Dictionary<int, FileMetadata> fileCache;
 
-	private static string path = "C:/Program Files (x86)/Steam/steamapps/common/Morrowind/Data Files/Morrowind.bsa";
+	private static readonly string path = "C:/Program Files (x86)/Steam/steamapps/common/Morrowind/Data Files/Morrowind.bsa";
 	private static BsaHeader header;
 
-	private static FileStream fileStream;
-	private static BinaryReader reader;
+	private static readonly FileStream fileStream;
+	private static readonly BinaryReader reader;
 
 	static BsaFileReader()
 	{

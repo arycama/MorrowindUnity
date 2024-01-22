@@ -7,7 +7,7 @@ namespace Nif
 	{
 		public float unknownFloat1;
 		public float force;
-		private FieldType type;
+		private readonly FieldType type;
 		private Vector3 position, direction;
 
 		public NiGravity(NiFile niFile) : base(niFile)

@@ -6,10 +6,10 @@ using UnityEngine;
 
 public class SoundManager
 {
-	private static string soundPath = "C:/Program Files (x86)/Steam/SteamApps/common/Morrowind/Data Files/Sound/";
-	private static string musicPath = "C:/Program Files (x86)/Steam/SteamApps/common/Morrowind/Data Files/Music/";
+	private static readonly string soundPath = "C:/Program Files (x86)/Steam/SteamApps/common/Morrowind/Data Files/Sound/";
+	private static readonly string musicPath = "C:/Program Files (x86)/Steam/SteamApps/common/Morrowind/Data Files/Music/";
 
-	private static Dictionary<string, AudioClip> AudioClipCache = new Dictionary<string, AudioClip>();
+	private static readonly Dictionary<string, AudioClip> AudioClipCache = new Dictionary<string, AudioClip>();
 
 	// Creates a Unity AudioClip from an audio file
 	public static AudioClip LoadAudio(string filePath)
@@ -22,24 +22,22 @@ public class SoundManager
 
 		try
 		{
-			using (var reader = new AudioFileReader(soundPath + filePath))
-			{
-				var length = reader.Length / 4;
-				var samples = new float[length];
+            using var reader = new AudioFileReader(soundPath + filePath);
+            var length = reader.Length / 4;
+            var samples = new float[length];
 
-				reader.Read(samples, 0, samples.Length);
+            reader.Read(samples, 0, samples.Length);
 
-				var name = Path.GetFileNameWithoutExtension(filePath);
-				var channels = reader.WaveFormat.Channels;
-				var frequency = reader.WaveFormat.SampleRate;
+            var name = Path.GetFileNameWithoutExtension(filePath);
+            var channels = reader.WaveFormat.Channels;
+            var frequency = reader.WaveFormat.SampleRate;
 
-				audioClip = AudioClip.Create(name, (int)length, channels, frequency, false);
-				audioClip.SetData(samples, 0);
-				AudioClipCache.Add(filePath, audioClip);
+            audioClip = AudioClip.Create(name, (int)length, channels, frequency, false);
+            audioClip.SetData(samples, 0);
+            AudioClipCache.Add(filePath, audioClip);
 
-				return audioClip;
-			}
-		}
+            return audioClip;
+        }
 		catch (Exception)
 		{
 			return null;

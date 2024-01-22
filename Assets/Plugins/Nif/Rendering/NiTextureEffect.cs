@@ -11,8 +11,8 @@ namespace Nif
 		public Vector3 modelProjectionTransform;
 		public TexFilterMode textureFiltering;
 		public TexClampMode textureClamping;
-		private EffectType textureType;
-		private CoordGenType coordinateGenerationType;
+		private readonly EffectType textureType;
+		private readonly CoordGenType coordinateGenerationType;
 		public int sourceTexture;
 		public byte clippingPlane;
 		public Vector3 unknownVector;

@@ -43,7 +43,7 @@ public class WeatherManager : Singleton<WeatherManager>
 	[SerializeField]
 	private WeatherSettings currentWeatherSettings;
 
-	private TimeOfDay timeOfDay = TimeOfDay.Day;
+	private readonly TimeOfDay timeOfDay = TimeOfDay.Day;
 	private WeatherType weatherType = WeatherType.Cloudy;
 
 	[SerializeField, Repeat(60)]

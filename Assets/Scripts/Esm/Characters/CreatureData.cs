@@ -5,11 +5,11 @@ namespace Esm
 	[Serializable]
 		public class CreatureData
 		{
-			private int level, soul, combat, magic, stealth, attackMin1, attackMax1, attackMin2, attackMax2, attackMin3, attackMax3, gold;
-			private CreatureType type;
-			private BaseAttributeData baseAttributeData;
-			private DerivedAttributeData derivedAttributeData;
-			private AttackData[] attackData = new AttackData[3];
+			private readonly int level, soul, combat, magic, stealth, attackMin1, attackMax1, attackMin2, attackMax2, attackMin3, attackMax3, gold;
+			private readonly CreatureType type;
+			private readonly BaseAttributeData baseAttributeData;
+			private readonly DerivedAttributeData derivedAttributeData;
+			private readonly AttackData[] attackData = new AttackData[3];
 
 			public CreatureData(System.IO.BinaryReader reader)
 			{
@@ -32,7 +32,7 @@ namespace Esm
 
 			private struct AttackData
 			{
-				private int minimumDamage, maximumDamage;
+				private readonly int minimumDamage, maximumDamage;
 
 				public AttackData(System.IO.BinaryReader reader)
 				{

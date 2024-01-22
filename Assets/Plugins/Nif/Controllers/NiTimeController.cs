@@ -6,7 +6,7 @@ namespace Nif
 	abstract class NiTimeController : NiObject
 	{
 		protected Ref<NiTimeController> nextController;
-		private Flags flags;
+		private readonly Flags flags;
 		protected Ref<NiObjectNet> target;
 		protected float frequency, phase, startTime, stopTime;
 

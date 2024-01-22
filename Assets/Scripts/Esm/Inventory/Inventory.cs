@@ -5,7 +5,7 @@ namespace Esm
 {
 	public abstract class Inventory<T, K> : RecordBehaviour<T, K>, IInventory where T : Inventory<T, K> where K : EsmRecord, IInventoryRecord
 	{
-		private Dictionary<ItemRecord, int> items = new Dictionary<ItemRecord, int>();
+		private readonly Dictionary<ItemRecord, int> items = new Dictionary<ItemRecord, int>();
 
 		public IReadOnlyDictionary<ItemRecord, int> Items => items;
 

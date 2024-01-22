@@ -6,7 +6,7 @@ public static class EconomyManager
 {
 	public static MiscItemRecord Gold => Record.GetRecord<MiscItemRecord>("Gold_001");
 
-	private static HashSet<string> GoldIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+	private static readonly HashSet<string> GoldIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
 	{
 		"Gold_001",
 		"Gold_005",

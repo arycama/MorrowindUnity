@@ -20,7 +20,7 @@ public class CharacterMovement : MonoBehaviour
 
     private Rigidbody rb;
     private bool isGrounded;
-    private float currentHealth;
+    private readonly float currentHealth;
     private CharacterInput input;
     private CharacterAnimation animation;
     private Vector3 movement;

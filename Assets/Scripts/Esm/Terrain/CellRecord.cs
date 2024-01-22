@@ -6,11 +6,11 @@ using UnityEngine;
 [Serializable]
 public class CellRecord : EsmRecord
 {
-	private static Dictionary<string, RecordHeader> interiorCellHeaders = new Dictionary<string, RecordHeader>();
-	private static Dictionary<Vector2Int, RecordHeader> exteriorCellHeaders = new Dictionary<Vector2Int, RecordHeader>();
+	private static readonly Dictionary<string, RecordHeader> interiorCellHeaders = new Dictionary<string, RecordHeader>();
+	private static readonly Dictionary<Vector2Int, RecordHeader> exteriorCellHeaders = new Dictionary<Vector2Int, RecordHeader>();
 
-	private static Dictionary<string, CellRecord> interiorCells = new Dictionary<string, CellRecord>();
-	private static Dictionary<Vector2Int, CellRecord> exteriorCells = new Dictionary<Vector2Int, CellRecord>();
+	private static readonly Dictionary<string, CellRecord> interiorCells = new Dictionary<string, CellRecord>();
+	private static readonly Dictionary<Vector2Int, CellRecord> exteriorCells = new Dictionary<Vector2Int, CellRecord>();
 
 	[SerializeField]
 	private Region region;

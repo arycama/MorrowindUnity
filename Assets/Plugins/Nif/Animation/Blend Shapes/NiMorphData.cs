@@ -6,8 +6,8 @@ namespace Nif
 	[Serializable]
 	class NiMorphData : NiObject
 	{
-		private bool relativeTargets;
-		private Morph[] morphs;
+		private readonly bool relativeTargets;
+		private readonly Morph[] morphs;
 
 		public NiMorphData(NiFile niFile) : base(niFile)
 		{

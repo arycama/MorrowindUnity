@@ -7,7 +7,7 @@ public class AnimState : AnimStateBase
 	[SerializeField]
 	private string animationName;
 
-	private AnimationState animationState;
+	private readonly AnimationState animationState;
 
     public override string AnimationName => animationName;
 

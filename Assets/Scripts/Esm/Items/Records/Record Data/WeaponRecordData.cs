@@ -15,7 +15,7 @@ namespace Esm
 		public float reach;
 		public float Speed;
 		public short enchantPts;
-		private short maxHealth;
+		private readonly short maxHealth;
 
 		public WeaponFlags WeaponFlags;
 		public WeaponType type;

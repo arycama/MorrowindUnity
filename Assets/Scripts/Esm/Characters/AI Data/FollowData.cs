@@ -6,8 +6,8 @@ using UnityEngine;
 public class FollowData
 {
 	private Vector3 position;
-	private int duration, unknown;
-	private string id;
+	private readonly int duration, unknown;
+	private readonly string id;
 
 	public FollowData(System.IO.BinaryReader reader)
 	{

@@ -15,7 +15,7 @@ public class NpcRecord : AIRecord
 	[SerializeField] private Race race;
 	[SerializeField] private List<DoorExitData> destinationData = new List<DoorExitData>();
 
-	private Rigidbody rb;
+	private readonly Rigidbody rb;
 
 	public bool IsFemale => npcFlags.HasFlag(NpcFlags.Female);
 

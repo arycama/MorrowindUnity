@@ -31,12 +31,12 @@ using UnityEngine;
 		/// </summary>
 		Matrix4x4 m_projectorR = Matrix4x4.identity, m_projectorI = new Matrix4x4();
 
-		/// <summary>
-		/// The frustum corners in world space.
-		/// </summary>
-		Vector3[] m_frustumCorners = new Vector3[8];
+    /// <summary>
+    /// The frustum corners in world space.
+    /// </summary>
+    readonly Vector3[] m_frustumCorners = new Vector3[8];
 
-		List<Vector3> m_pointList = new List<Vector3>(12);
+    readonly List<Vector3> m_pointList = new List<Vector3>(12);
 
 		public void UpdateProjection(Camera camera)
 		{

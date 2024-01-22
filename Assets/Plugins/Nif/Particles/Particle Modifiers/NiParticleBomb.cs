@@ -11,7 +11,7 @@ namespace Nif
 		public float duration;
 		public float deltaV;
 		public float start;
-		private DecayType decayType;
+		private readonly DecayType decayType;
 		public Vector3 position;
 		public Vector3 direction;
 

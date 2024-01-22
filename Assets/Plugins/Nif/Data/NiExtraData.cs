@@ -7,7 +7,7 @@ namespace Nif
 	[Serializable]
 	abstract class NiExtraData : NiObject
 	{
-		private Ref<NiExtraData> nextExtraData;
+		private readonly Ref<NiExtraData> nextExtraData;
 
 		public NiExtraData(NiFile niFile) : base(niFile)
 		{

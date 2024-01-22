@@ -6,9 +6,9 @@ namespace Nif
 	abstract class NiGeometryData : NiObject
 	{
 		protected int vertexCount, uvSetCount;
-		private bool hasVertices, hasNormals, hasColors, hasUVs;
+		private readonly bool hasVertices, hasNormals, hasColors, hasUVs;
 		private Vector3 center;
-		private float radius;
+		private readonly float radius;
 
 		public NiGeometryData(NiFile niFile) : base(niFile)
 		{

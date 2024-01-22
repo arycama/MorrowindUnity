@@ -6,7 +6,7 @@ using Esm;
 
 public static class Record
 {
-	private static Dictionary<string, EsmRecord> Records = new Dictionary<string, EsmRecord>(StringComparer.OrdinalIgnoreCase);
+	private static readonly Dictionary<string, EsmRecord> Records = new Dictionary<string, EsmRecord>(StringComparer.OrdinalIgnoreCase);
 
 	public static void Create(BinaryReader reader)
 	{

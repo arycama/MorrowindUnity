@@ -6,7 +6,7 @@ namespace Nif
 	[Serializable]
 	class NiKeyframeData : NiObject
 	{
-		private NiKeyframe<Vector3>[] eulerKeys;
+		private readonly NiKeyframe<Vector3>[] eulerKeys;
 		private KeyType rotationInterpolation;
 
 		private NiQuaternionKeyframeGroup quaternionKeys;

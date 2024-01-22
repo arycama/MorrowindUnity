@@ -9,7 +9,7 @@ namespace Esm
 	{
 		protected int strength, intelligence, willpower, agility, speed, endurance, personality, luck;
 
-		private Dictionary<CharacterAttribute, byte> attributes;
+		private readonly Dictionary<CharacterAttribute, byte> attributes;
 
 		public BaseAttributeData(System.IO.BinaryReader reader)
 		{

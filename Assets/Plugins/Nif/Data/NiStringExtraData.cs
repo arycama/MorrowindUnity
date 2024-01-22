@@ -6,8 +6,8 @@ namespace Nif
 {
 	class NiStringExtraData : NiExtraData
 	{
-		private int bytesRemaining;
-		private string data;
+		private readonly int bytesRemaining;
+		private readonly string data;
 
 		public NiStringExtraData(NiFile niFile) : base(niFile)
 		{

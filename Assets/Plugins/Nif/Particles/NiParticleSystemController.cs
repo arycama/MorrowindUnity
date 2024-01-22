@@ -5,14 +5,14 @@ namespace Nif
 
 	class NiParticleSystemController : NiTimeController
 	{
-		private float speed, speedRandom, verticalDirection, verticalAngle, horizontalDirection, horizontalAngle, size, emitStartTime, emitStopTime, emitRate, lifetime, lifetimeRandom, unknownFloat13;
-		private int unknownByte, emitFlags, unknownShort2, unknownInt1, unknownInt2, unknownShort3, numParticles, numValid, unknownLink, unknownLink2, trailer;
+		private readonly float speed, speedRandom, verticalDirection, verticalAngle, horizontalDirection, horizontalAngle, size, emitStartTime, emitStopTime, emitRate, lifetime, lifetimeRandom, unknownFloat13;
+		private readonly int unknownByte, emitFlags, unknownShort2, unknownInt1, unknownInt2, unknownShort3, numParticles, numValid, unknownLink, unknownLink2, trailer;
 
-		private int emitter;
-		private Ref<NiParticleModifier> particleExtra;
+		private readonly int emitter;
+		private readonly Ref<NiParticleModifier> particleExtra;
 
 		private Color unknownColor;
-		private Particle[] particles;
+		private readonly Particle[] particles;
 		private Vector3 unknownNormal, startRandom;
 
 		public NiParticleSystemController(NiFile niFile) : base(niFile)
@@ -110,8 +110,8 @@ namespace Nif
 		private class Particle
 		{
 			private Vector3 velocity, unknownVector;
-			private float lifetime, lifespan, timestamp;
-			private int unknownShort, vertexID;
+			private readonly float lifetime, lifespan, timestamp;
+			private readonly int unknownShort, vertexID;
 
 			public Particle(NiFile niFile)
 			{

@@ -8,7 +8,7 @@ namespace Nif
 	[Serializable]
 	class NiVisData : NiObject
 	{
-		private NiByteKeyframeGroup keyframes;
+		private readonly NiByteKeyframeGroup keyframes;
 
 		public NiVisData(NiFile niFile) : base(niFile)
 		{

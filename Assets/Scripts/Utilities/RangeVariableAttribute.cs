@@ -2,7 +2,7 @@
 
 public class RangeVariableAttribute : PropertyAttribute
 {
-	private string name;
+	private readonly string name;
 
 	public string Name { get { return name; } }
 
