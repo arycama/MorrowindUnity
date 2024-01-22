@@ -121,7 +121,6 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
     {
         
     }
-
     class Pass0Data { }
     class Pass1Data { }
     class Pass2Data { }
@@ -192,10 +191,6 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         opaquePass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.opaque, SortingCriteria.CommonOpaque, PerObjectData.None, true);
         opaquePass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
         opaquePass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
-        var data1 = opaquePass.SetRenderFunction<Pass1Data>((command, context, data) =>
-        {
-            opaquePass.Execute(command);
-        });
 
         // Motion Vectors
         var motionVectors = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.R16G16_SFloat);
@@ -205,11 +200,6 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         motionVectorPass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
         motionVectorPass.WriteTexture("", motionVectors, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
 
-        var data2 = motionVectorPass.SetRenderFunction<Pass2Data>((command, context, data) =>
-        {
-            motionVectorPass.Execute(command);
-        });
-
         // Sky
         var skyPass = renderGraph.AddRenderPass<ObjectRenderPass>();
         skyPass.Initialize("Sky", context, cullingResults, camera, RenderQueueRange.all);
@@ -217,8 +207,8 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         skyPass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
         var data3 = skyPass.SetRenderFunction<Pass3Data>((command, context, data) =>
         {
+            // Should this be another pass
             command.DrawProcedural(Matrix4x4.identity, skyClearMaterial, 0, MeshTopology.Triangles, 3);
-            skyPass.Execute(command);
         });
 
         // Before transparent post processing
@@ -237,7 +227,6 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             command.CopyTexture(cameraTarget, sceneTextureId);
             transparentPass.SetTexture(command, "_SceneTexture", sceneTextureId);
             transparentPass.SetTexture(command, "_CameraDepth", cameraDepth);
-            transparentPass.Execute(command);
         });
 
         // After transparent post processing
