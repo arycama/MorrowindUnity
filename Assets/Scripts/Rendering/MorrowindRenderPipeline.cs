@@ -144,30 +144,30 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>())
         {
-            pass.RenderPass.SetRenderFunction((command, context) =>
+            pass.SetRenderFunction((command, context) =>
             {
-                pass.RenderPass.SetTexture(command, "_BlueNoise1D", blueNoise1D);
-                pass.RenderPass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
+                pass.SetTexture(command, "_BlueNoise1D", blueNoise1D);
+                pass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
 
-                pass.RenderPass.SetVector(command, "_Jitter", temporalAA.Jitter);
-                pass.RenderPass.SetVector(command, "_AmbientLightColor", RenderSettings.ambientLight.linear);
-                pass.RenderPass.SetVector(command, "_FogColor", RenderSettings.fogColor.linear);
+                pass.SetVector(command, "_Jitter", temporalAA.Jitter);
+                pass.SetVector(command, "_AmbientLightColor", RenderSettings.ambientLight.linear);
+                pass.SetVector(command, "_FogColor", RenderSettings.fogColor.linear);
 
-                pass.RenderPass.SetFloat(command, "_FogStartDistance", RenderSettings.fogStartDistance);
-                pass.RenderPass.SetFloat(command, "_FogEndDistance", RenderSettings.fogEndDistance);
-                pass.RenderPass.SetFloat(command, "_FogDensity", RenderSettings.fogDensity);
-                pass.RenderPass.SetFloat(command, "_FogMode", (float)RenderSettings.fogMode);
-                pass.RenderPass.SetFloat(command, "_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
-                pass.RenderPass.SetFloat(command, "_AoEnabled", renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f);
-                pass.RenderPass.SetFloat(command, "_Scale", dynamicResolution.ScaleFactor);
+                pass.SetFloat(command, "_FogStartDistance", RenderSettings.fogStartDistance);
+                pass.SetFloat(command, "_FogEndDistance", RenderSettings.fogEndDistance);
+                pass.SetFloat(command, "_FogDensity", RenderSettings.fogDensity);
+                pass.SetFloat(command, "_FogMode", (float)RenderSettings.fogMode);
+                pass.SetFloat(command, "_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
+                pass.SetFloat(command, "_AoEnabled", renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f);
+                pass.SetFloat(command, "_Scale", dynamicResolution.ScaleFactor);
 
-                pass.RenderPass.SetVector(command, "_WaterAlbedo", renderPipelineAsset.waterAlbedo.linear);
-                pass.RenderPass.SetVector(command, "_WaterExtinction", renderPipelineAsset.waterExtinction);
+                pass.SetVector(command, "_WaterAlbedo", renderPipelineAsset.waterAlbedo.linear);
+                pass.SetVector(command, "_WaterExtinction", renderPipelineAsset.waterExtinction);
 
                 command.SetGlobalMatrix("_NonJitteredVPMatrix", camera.nonJitteredProjectionMatrix);
                 command.SetGlobalMatrix("_PreviousVPMatrix", previousMatrix);
                 command.SetGlobalMatrix("_InvVPMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse);
-                pass.RenderPass.SetInt(command, "_FrameCount", Time.renderedFrameCount);
+                pass.SetInt(command, "_FrameCount", Time.renderedFrameCount);
 
                 context.SetupCameraProperties(camera);
             });
@@ -181,40 +181,40 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var cameraDepth = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.D32_SFloat_S8_UInt);
         using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>())
         {
-            pass.RenderPass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.opaque, SortingCriteria.CommonOpaque, PerObjectData.None, true);
-            pass.RenderPass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
-            pass.RenderPass.WriteTexture("", cameraTarget, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
-            pass.RenderPass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+            pass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.opaque, SortingCriteria.CommonOpaque, PerObjectData.None, true);
+            pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
+            pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
+            pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
         }
 
         // Motion Vectors
         var motionVectors = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.R16G16_SFloat);
         using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>())
         {
-            pass.RenderPass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.opaque, SortingCriteria.CommonOpaque, PerObjectData.MotionVectors);
-            pass.RenderPass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            pass.RenderPass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            pass.RenderPass.WriteTexture("", motionVectors, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store, Color.clear);
-            pass.RenderPass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+            pass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.opaque, SortingCriteria.CommonOpaque, PerObjectData.MotionVectors);
+            pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+            pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+            pass.WriteTexture("", motionVectors, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store, Color.clear);
+            pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
         }
 
         // Sky clear color
         using (var pass = renderGraph.AddRenderPass<FullscreenRenderPass>())
         {
-            pass.RenderPass.Material = skyClearMaterial;
-            pass.RenderPass.Index = 0;
-            pass.RenderPass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
-            pass.RenderPass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            pass.RenderPass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+            pass.Material = skyClearMaterial;
+            pass.Index = 0;
+            pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
+            pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+            pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
         }
 
         // Sky
         using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>())
         {
-            pass.RenderPass.Initialize("Sky", context, cullingResults, camera, RenderQueueRange.all);
-            pass.RenderPass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
-            pass.RenderPass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            pass.RenderPass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+            pass.Initialize("Sky", context, cullingResults, camera, RenderQueueRange.all);
+            pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
+            pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+            pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
         }
 
         // Before transparent post processing
@@ -225,18 +225,18 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var sceneTexture = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
         using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>())
         {
-            pass.RenderPass.SetRenderFunction((command, context) => { command.CopyTexture(cameraTarget, sceneTexture); });
+            pass.SetRenderFunction((command, context) => { command.CopyTexture(cameraTarget, sceneTexture); });
         }
 
         // Transparents
         using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>())
         {
-            pass.RenderPass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.transparent, SortingCriteria.CommonTransparent);
-            pass.RenderPass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
-            pass.RenderPass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            pass.RenderPass.ReadTexture("_SceneTexture", sceneTexture);
-            pass.RenderPass.ReadTexture("_CameraDepth", cameraDepth);
-            pass.RenderPass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+            pass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.transparent, SortingCriteria.CommonTransparent);
+            pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
+            pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+            pass.ReadTexture("_SceneTexture", sceneTexture);
+            pass.ReadTexture("_CameraDepth", cameraDepth);
+            pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
         }
 
         // After transparent post processing
@@ -251,7 +251,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         // Only in editor
         using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>())
         {
-            pass.RenderPass.SetRenderFunction((command, context) =>
+            pass.SetRenderFunction((command, context) =>
             {
                 context.ExecuteCommandBuffer(command);
                 command.Clear();
