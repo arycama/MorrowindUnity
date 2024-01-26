@@ -15,6 +15,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
     private readonly DynamicResolution dynamicResolution;
     private readonly CustomSampler frameTimeSampler;
+    private readonly Recorder frameTimeRecorder;
 
     private readonly LightingSetup lightingSetup;
     private readonly ClusteredLightCulling clusteredLightCulling;
@@ -85,13 +86,13 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         dynamicResolution = new(renderPipelineAsset.DynamicResolutionSettings);
         frameTimeSampler = CustomSampler.Create("Frame Time", true);
+        frameTimeRecorder = frameTimeSampler.GetRecorder();
 
         skyClearMaterial = new Material(Shader.Find("Hidden/SkyClear")) { hideFlags = HideFlags.HideAndDontSave };
     }
 
     protected override void Dispose(bool disposing)
     {
-        lightingSetup.Release();
         volumetricLighting.Release();
         temporalAA.Release();
         dynamicResolution.Release();
@@ -100,15 +101,13 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
     protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
     {
-        dynamicResolution.Update(frameTimeSampler.GetRecorder().gpuElapsedNanoseconds);
+        dynamicResolution.Update(frameTimeRecorder.gpuElapsedNanoseconds);
 
         foreach (var camera in cameras)
             RenderCamera(camera, context);
 
         var command = CommandBufferPool.Get("Render Camera");
-        command.BeginSample(frameTimeSampler);
         renderGraph.Execute(command, context);
-        command.EndSample(frameTimeSampler);
         context.ExecuteCommandBuffer(command);
         CommandBufferPool.Release(command);
 
@@ -144,33 +143,53 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>())
         {
-            pass.SetRenderFunction((command, context) =>
+            var data = pass.SetRenderFunction<Pass0Data>((command, context, pass, data) =>
             {
-                pass.SetTexture(command, "_BlueNoise1D", blueNoise1D);
-                pass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
+                pass.SetTexture(command, "_BlueNoise1D", data.blueNoise1D);
+                pass.SetTexture(command, "_BlueNoise2D", data.blueNoise2D);
 
-                pass.SetVector(command, "_Jitter", temporalAA.Jitter);
-                pass.SetVector(command, "_AmbientLightColor", RenderSettings.ambientLight.linear);
-                pass.SetVector(command, "_FogColor", RenderSettings.fogColor.linear);
+                pass.SetVector(command, "_Jitter", data.jitter);
+                pass.SetVector(command, "_AmbientLightColor", data.ambientLightColor);
+                pass.SetVector(command, "_FogColor", data.fogColor);
 
-                pass.SetFloat(command, "_FogStartDistance", RenderSettings.fogStartDistance);
-                pass.SetFloat(command, "_FogEndDistance", RenderSettings.fogEndDistance);
-                pass.SetFloat(command, "_FogDensity", RenderSettings.fogDensity);
-                pass.SetFloat(command, "_FogMode", (float)RenderSettings.fogMode);
-                pass.SetFloat(command, "_FogEnabled", RenderSettings.fog ? 1.0f : 0.0f);
-                pass.SetFloat(command, "_AoEnabled", renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f);
-                pass.SetFloat(command, "_Scale", dynamicResolution.ScaleFactor);
+                pass.SetFloat(command, "_FogStartDistance", data.fogStartDistance);
+                pass.SetFloat(command, "_FogEndDistance", data.fogEndDistance);
+                pass.SetFloat(command, "_FogDensity", data.fogDensity);
+                pass.SetFloat(command, "_FogMode", data.fogMode);
+                pass.SetFloat(command, "_FogEnabled", data.fogEnabled);
+                pass.SetFloat(command, "_AoEnabled", data.aoEnabled);
+                pass.SetFloat(command, "_Scale", data.scale);
 
-                pass.SetVector(command, "_WaterAlbedo", renderPipelineAsset.waterAlbedo.linear);
-                pass.SetVector(command, "_WaterExtinction", renderPipelineAsset.waterExtinction);
+                pass.SetVector(command, "_WaterAlbedo", data.waterAlbedo);
+                pass.SetVector(command, "_WaterExtinction", data.waterExtinction);
 
-                command.SetGlobalMatrix("_NonJitteredVPMatrix", camera.nonJitteredProjectionMatrix);
-                command.SetGlobalMatrix("_PreviousVPMatrix", previousMatrix);
-                command.SetGlobalMatrix("_InvVPMatrix", (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse);
-                pass.SetInt(command, "_FrameCount", Time.renderedFrameCount);
+                command.SetGlobalMatrix("_NonJitteredVPMatrix", data.nonJitteredVpMatrix);
+                command.SetGlobalMatrix("_PreviousVPMatrix", data.previousVpMatrix);
+                command.SetGlobalMatrix("_InvVPMatrix", data.invVpMatrix);
+                pass.SetInt(command, "_FrameCount", data.frameCount);
 
-                context.SetupCameraProperties(camera);
+                context.SetupCameraProperties(data.camera);
             });
+
+            data.blueNoise1D = blueNoise1D;
+            data.blueNoise2D = blueNoise2D;
+            data.jitter = temporalAA.Jitter;
+            data.ambientLightColor = RenderSettings.ambientLight.linear;
+            data.fogColor = RenderSettings.fogColor.linear;
+            data.fogStartDistance = RenderSettings.fogStartDistance;
+            data.fogEndDistance = RenderSettings.fogEndDistance;
+            data.fogDensity = RenderSettings.fogDensity;
+            data.fogMode = (float)RenderSettings.fogMode;
+            data.fogEnabled = RenderSettings.fog ? 1.0f : 0.0f;
+            data.aoEnabled = renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f;
+            data.scale = dynamicResolution.ScaleFactor;
+            data.waterAlbedo = renderPipelineAsset.waterAlbedo.linear;
+            data.waterExtinction = renderPipelineAsset.waterExtinction.linear;
+            data.nonJitteredVpMatrix = camera.nonJitteredProjectionMatrix;
+            data.previousVpMatrix = previousMatrix;
+            data.invVpMatrix = (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse;
+            data.frameCount = Time.renderedFrameCount;
+            data.camera = camera;
         }
 
         clusteredLightCulling.Render(scaledWidth, scaledHeight, camera.nearClipPlane, camera.farClipPlane);
@@ -225,7 +244,10 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var sceneTexture = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
         using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>())
         {
-            pass.SetRenderFunction((command, context) => { command.CopyTexture(cameraTarget, sceneTexture); });
+            var data = pass.SetRenderFunction<Pass1Data>((command, context, pass, data) => { command.CopyTexture(data.cameraTarget, data.sceneTexture); });
+
+            data.cameraTarget = cameraTarget;
+            data.sceneTexture = sceneTexture;
         }
 
         // Transparents
@@ -251,17 +273,53 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         // Only in editor
         using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>())
         {
-            pass.SetRenderFunction((command, context) =>
+            var data = pass.SetRenderFunction<Pass2Data>((command, context, pass, data) =>
             {
                 context.ExecuteCommandBuffer(command);
                 command.Clear();
 
                 if (UnityEditor.Handles.ShouldRenderGizmos())
                 {
-                    context.DrawGizmos(camera, GizmoSubset.PreImageEffects);
-                    context.DrawGizmos(camera, GizmoSubset.PostImageEffects);
+                    context.DrawGizmos(data.camera, GizmoSubset.PreImageEffects);
+                    context.DrawGizmos(data.camera, GizmoSubset.PostImageEffects);
                 }
             });
+
+            data.camera = camera;
         }
+    }
+
+    private class Pass0Data
+    {
+        internal Texture2D blueNoise1D;
+        internal Texture2D blueNoise2D;
+        internal Vector2 jitter;
+        internal Color ambientLightColor;
+        internal Color fogColor;
+        internal float fogStartDistance;
+        internal float fogEndDistance;
+        internal float fogMode;
+        internal float aoEnabled;
+        internal float scale;
+        internal Color waterAlbedo;
+        internal Color waterExtinction;
+        internal Matrix4x4 nonJitteredVpMatrix;
+        internal Matrix4x4 previousVpMatrix;
+        internal Matrix4x4 invVpMatrix;
+        internal int frameCount;
+        internal Camera camera;
+        internal float fogDensity;
+        internal float fogEnabled;
+    }
+
+    private class Pass1Data
+    {
+        internal RTHandle cameraTarget;
+        internal RTHandle sceneTexture;
+    }
+
+    private class Pass2Data
+    {
+        internal Camera camera;
     }
 }
