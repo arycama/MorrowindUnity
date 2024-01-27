@@ -141,7 +141,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(Time.renderedFrameCount % 64));
         var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds.GetString(Time.renderedFrameCount % 64));
 
-        using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>())
+        using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>("Setup Globals"))
         {
             var data = pass.SetRenderFunction<Pass0Data>((command, context, pass, data) =>
             {
@@ -198,7 +198,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         // Opaque
         var cameraTarget = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
         var cameraDepth = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.D32_SFloat_S8_UInt);
-        using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>())
+        using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>("Render Opaque"))
         {
             pass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.opaque, SortingCriteria.CommonOpaque, PerObjectData.None, true);
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
@@ -208,9 +208,9 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         // Motion Vectors
         var motionVectors = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.R16G16_SFloat);
-        using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>())
+        using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>("Render Motion Vectors"))
         {
-            pass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.opaque, SortingCriteria.CommonOpaque, PerObjectData.MotionVectors);
+            pass.Initialize("MotionVectors", context, cullingResults, camera, RenderQueueRange.opaque, SortingCriteria.CommonOpaque, PerObjectData.MotionVectors);
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             pass.WriteTexture("", motionVectors, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store, Color.clear);
@@ -218,7 +218,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         }
 
         // Sky clear color
-        using (var pass = renderGraph.AddRenderPass<FullscreenRenderPass>())
+        using (var pass = renderGraph.AddRenderPass<FullscreenRenderPass>("Clear Color"))
         {
             pass.Material = skyClearMaterial;
             pass.Index = 0;
@@ -228,7 +228,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         }
 
         // Sky
-        using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>())
+        using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>("Render Sky"))
         {
             pass.Initialize("Sky", context, cullingResults, camera, RenderQueueRange.all);
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
@@ -242,7 +242,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         // Copy scene texture
         var sceneTexture = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
-        using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>())
+        using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>("Copy Scene Texture"))
         {
             var data = pass.SetRenderFunction<Pass1Data>((command, context, pass, data) => { command.CopyTexture(data.cameraTarget, data.sceneTexture); });
 
@@ -251,7 +251,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         }
 
         // Transparents
-        using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>())
+        using (var pass = renderGraph.AddRenderPass<ObjectRenderPass>("Render Transparent"))
         {
             pass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.transparent, SortingCriteria.CommonTransparent);
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
@@ -271,7 +271,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         tonemapping.Render(taa, bloomResult, camera.cameraType == CameraType.SceneView, camera.pixelWidth, camera.pixelHeight);
 
         // Only in editor
-        using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>())
+        using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>("Render Gizmos"))
         {
             var data = pass.SetRenderFunction<Pass2Data>((command, context, pass, data) =>
             {
