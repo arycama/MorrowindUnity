@@ -23,13 +23,13 @@ public class AnimationAction
 		switch (type)
 		{
 			case TransitionType.Bool:
-				animation.SetParameter(name, boolValue);
+				animation.Parameters.SetBoolParameter(name, boolValue);
 				break;
 			case TransitionType.Int:
-				animation.SetParameter(name, intValue);
+				animation.Parameters.SetIntParameter(name, intValue);
 				break;
 			case TransitionType.Float:
-				animation.SetParameter(name, floatValue);
+				animation.Parameters.SetFloatParameter(name, floatValue);
 				break;
 		}
 	}

@@ -16,9 +16,9 @@ public class PlayerInput : CharacterInput
 	private void Update()
 	{
 		// Set some animation parameters to 0
-		animation.SetParameter("Vertical", 0f);
-		animation.SetParameter("Horizontal", 0f);
-		animation.SetParameter("Walk", false);
+		animation.Parameters.SetFloatParameter("Vertical", 0f);
+		animation.Parameters.SetFloatParameter("Horizontal", 0f);
+		animation.Parameters.SetBoolParameter("Walk", false);
 
 		if (Time.timeScale == 0)
 		{
@@ -27,7 +27,7 @@ public class PlayerInput : CharacterInput
 
         // Set attack strength to none when it is frst pressed
 		Attack = Input.GetMouseButton(0);
-		animation.SetParameter("Attack", Attack);
+		animation.Parameters.SetBoolParameter("Attack", Attack);
 		//if (Input.GetMouseButtonDown(0))
 		//{
 		//	// set attack strength to none here
@@ -49,46 +49,46 @@ public class PlayerInput : CharacterInput
 
 		// Averaging?
 		Yaw = (Yaw + Input.GetAxis("Mouse X")) * 0.5f;
-		animation.SetParameter("Yaw", Yaw);
+		animation.Parameters.SetFloatParameter("Yaw", Yaw);
 
 		// Equip
 		Equip = Input.GetKeyDown(KeyCode.R);
-		animation.SetParameter("Equip", Equip);
+		animation.Parameters.SetBoolParameter("Equip", Equip);
 
 		// Jump
 		Jump = Input.GetButtonDown("Jump");
-		animation.SetParameter("Jump", Jump);
+		animation.Parameters.SetBoolParameter("Jump", Jump);
 
 		Forward = Input.GetAxis("Vertical") > 0;
-		animation.SetParameter("Forward", Forward);
+		animation.Parameters.SetBoolParameter("Forward", Forward);
 		if (Forward)
 		{
-			animation.SetParameter("Walk", true);
-			animation.SetParameter("Vertical", 1f);
+			animation.Parameters.SetBoolParameter("Walk", true);
+			animation.Parameters.SetFloatParameter("Vertical", 1f);
 		}
 
 		Left = Input.GetAxis("Horizontal") < 0;
-		animation.SetParameter("Left", Left);
+		animation.Parameters.SetBoolParameter("Left", Left);
 		if (Left)
 		{
-			animation.SetParameter("Walk", true);
-			animation.SetParameter("Horizontal", -1f);
+			animation.Parameters.SetBoolParameter("Walk", true);
+			animation.Parameters.SetFloatParameter("Horizontal", -1f);
 		}
 
 		Back = Input.GetAxis("Vertical") < 0;
-		animation.SetParameter("Back", Back);
+		animation.Parameters.SetBoolParameter("Back", Back);
 		if (Back)
 		{
-			animation.SetParameter("Walk", true);
-			animation.SetParameter("Vertical", -1f);
+			animation.Parameters.SetBoolParameter("Walk", true);
+			animation.Parameters.SetFloatParameter("Vertical", -1f);
 		}
 
 		Right = Input.GetAxis("Horizontal") > 0;
-		animation.SetParameter("Right", Right);
+		animation.Parameters.SetBoolParameter("Right", Right);
 		if (Right)
 		{
-			animation.SetParameter("Walk", true);
-			animation.SetParameter("Horizontal", 1f);
+			animation.Parameters.SetBoolParameter("Walk", true);
+			animation.Parameters.SetFloatParameter("Horizontal", 1f);
 		}
 
 		GetTarget();
@@ -114,27 +114,27 @@ public class PlayerInput : CharacterInput
 		}
 
 		Sneak = Input.GetKey(KeyCode.LeftControl);
-		animation.SetParameter("Sneak", Sneak);
+		animation.Parameters.SetBoolParameter("Sneak", Sneak);
 
 		if (!Forward && !Left && !Right && !Back)
 		{
 			if(!isIdle)
 			{
-				animation.SetParameter("Idle", Random.Range(2, 10));
+				animation.Parameters.SetIntParameter("Idle", Random.Range(2, 10));
 				isIdle = true;
 
 				Run = false;
-				animation.SetParameter("Run", false);
+				animation.Parameters.SetBoolParameter("Run", false);
 			}
 		}
 		else
 		{
-			animation.SetParameter("Idle", 0);
+			animation.Parameters.SetIntParameter("Idle", 0);
 			isIdle = false;
 
 			// Only set run if moving
 			Run = Input.GetAxis("Vertical") > 0.5f;
-			animation.SetParameter("Run", Run);
+			animation.Parameters.SetBoolParameter("Run", Run);
 		}
 
 		if (Input.GetKeyDown(KeyCode.C))

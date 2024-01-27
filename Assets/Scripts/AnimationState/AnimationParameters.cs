@@ -4,22 +4,37 @@ using System.Collections.Generic;
 
 public class AnimationParameters
 {
-    private readonly Dictionary<string, object> animationParameters = new Dictionary<string, object>();
+    private readonly Dictionary<string, bool> boolParameters = new Dictionary<string, bool>();
+    private readonly Dictionary<string, int> intParameters = new Dictionary<string, int>();
+    private readonly Dictionary<string, float> floatParameters = new Dictionary<string, float>();
 
-    public T GetParameter<T>(string name)
+    public bool GetBoolParameter(string name)
     {
-        object value;
-        if (!animationParameters.TryGetValue(name, out value))
-        {
-            value = default(T);
-            animationParameters.Add(name, value);
-        }
-
-        return (T)value;
+        return boolParameters.TryGetValue(name, out var result) ? result : default;
     }
 
-    public void SetParameter<T>(string name, T value)
+    public int GetIntParameter(string name)
     {
-        animationParameters[name] = value;
+        return intParameters.TryGetValue(name, out var result) ? result : default;
+    }
+
+    public float GetFloatParameter(string name)
+    {
+        return floatParameters.TryGetValue(name, out var result) ? result : default;
+    }
+
+    public void SetBoolParameter(string name, bool value)
+    {
+        boolParameters[name] = value;
+    }
+
+    public void SetIntParameter(string name, int value)
+    {
+        intParameters[name] = value;
+    }
+
+    public void SetFloatParameter(string name, float value)
+    {
+        floatParameters[name] = value;
     }
 }

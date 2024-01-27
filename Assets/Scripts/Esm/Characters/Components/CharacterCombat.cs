@@ -91,12 +91,12 @@ public class CharacterCombat : MonoBehaviour
         if (!input.Attack)
         {
             attackStrength = AttackStrength.Small;
-            animation.SetParameter("AttackStrength", AttackStrength.Small);
+            animation.Parameters.SetIntParameter("AttackStrength", (int)AttackStrength.Small);
         }
 		else
 		{
 			attackStrength = AttackStrength.Medium;
-			animation.SetParameter("AttackStrength", AttackStrength.Medium);
+			animation.Parameters.SetIntParameter("AttackStrength", (int)AttackStrength.Medium);
 		}
     }
 
@@ -108,12 +108,12 @@ public class CharacterCombat : MonoBehaviour
         // If the attack key is still being held down, pause the animation until it's released
         if (input.Attack)
 		{
-			animation.SetParameter("AttackSpeed", 0f);
+			animation.Parameters.SetFloatParameter("AttackSpeed", 0f);
 			
 		}
 
 		attackStrength = AttackStrength.Large;
-		animation.SetParameter("AttackStrength", AttackStrength.Large);
+		animation.Parameters.SetIntParameter("AttackStrength", (int)AttackStrength.Large);
 	}
 
 	public void OnHit(float damage, GameObject attacker)
@@ -123,11 +123,11 @@ public class CharacterCombat : MonoBehaviour
 
 		if (currentHealth > 0)
 		{
-			animation.SetParameter("IsHit", true);
+			animation.Parameters.SetBoolParameter("IsHit", true);
 		}
 		else
 		{
-			animation.SetParameter("IsDead", true);
+			animation.Parameters.SetBoolParameter("IsDead", true);
 		}
 
 		OnHitEvent?.Invoke(attacker);

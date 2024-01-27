@@ -20,10 +20,6 @@ public class CharacterAnimation : MonoBehaviour
     public AnimationParameters Parameters { get; private set; } = new AnimationParameters();
 	public AnimationState CurrentState { get; private set; }
     
-    public T GetParameter<T>(string name) => Parameters.GetParameter<T>(name);
-
-    public void SetParameter<T>(string name, T value) => Parameters.SetParameter(name, value);
-
     public void Loop(AnimationEvent animationEvent)
 	{
 		animationEvent.animationState.time = animationEvent.floatParameter;

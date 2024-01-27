@@ -38,13 +38,13 @@ public class AttackCreatureState : NpcState
 			if (attacking)
 			{
 				input.Attack = false;
-				input.Animation.SetParameter("Attack", input.Attack);
+				input.Animation.Parameters.SetBoolParameter("Attack", input.Attack);
 				attacking = false;
 			}
 			else
 			{
 				input.Attack = true;
-				input.Animation.SetParameter("Attack", input.Attack);
+				input.Animation.Parameters.SetBoolParameter("Attack", input.Attack);
 
 				attacking = true;
 			}

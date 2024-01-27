@@ -18,7 +18,7 @@ public class AttackAIState : NpcState
 
 	public override void OnStateUpdate(NpcInput input)
 	{
-		if (!input.Animation.GetParameter<bool>("IsEquipped"))
+		if (!input.Animation.Parameters.GetBoolParameter("IsEquipped"))
 		{
 			input.NextState = null;
 		}
@@ -45,13 +45,13 @@ public class AttackAIState : NpcState
 			if (attacking)
 			{
 				input.Attack = false;
-				input.Animation.SetParameter("Attack", input.Attack);
+				input.Animation.Parameters.SetBoolParameter("Attack", input.Attack);
 				attacking = false;
 			}
 			else
 			{
 				input.Attack = true;
-				input.Animation.SetParameter("Attack", input.Attack);
+				input.Animation.Parameters.SetBoolParameter("Attack", input.Attack);
 
 				attacking = true;
 			}

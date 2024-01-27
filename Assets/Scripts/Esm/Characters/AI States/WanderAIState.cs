@@ -43,13 +43,13 @@ public class WanderAIState : NpcState
 		if(time > input.WanderData.Duration)
 		{
 			input.Forward = false;
-			input.Animation.SetParameter("Forward", false);
+			input.Animation.Parameters.SetBoolParameter("Forward", false);
 			input.NextState = new IdleAIState();
 			return;
 		}
 
 		input.Forward = true;
-		input.Animation.SetParameter("Forward", true);
+		input.Animation.Parameters.SetBoolParameter("Forward", true);
 
 		var targetVector = targetPos - input.transform.position;
 

@@ -24,8 +24,12 @@ public class Water : Singleton<Water>
 
 	private MeshFilter meshFilter;
 	private MeshRenderer meshRenderer;
+	private Mesh mesh;
 
 	private readonly int textureCount = 32;
+
+	private Vector3[] vertices;
+	private Vector2[] uvs;
 
 	private void Awake()
 	{
@@ -46,8 +50,8 @@ public class Water : Singleton<Water>
 		meshFilter = GetComponent<MeshFilter>();
 		meshRenderer = GetComponent<MeshRenderer>();
 
-		var vertices = new Vector3[resolution * resolution];
-		var texcoords = new Vector2[resolution * resolution];
+		vertices = new Vector3[resolution * resolution];
+		uvs = new Vector2[resolution * resolution];
 		var indices = new int[resolution * resolution * 6];
 
 		for (int x = 0; x < resolution; x++)
@@ -56,7 +60,7 @@ public class Water : Singleton<Water>
 			{
 				Vector2 uv = new Vector3(x / (resolution - 1.0f), y / (resolution - 1.0f));
 
-				texcoords[x + y * resolution] = uv;
+                uvs[x + y * resolution] = uv;
 				vertices[x + y * resolution] = new Vector3(uv.x, uv.y, 0.0f);
 			}
 		}
@@ -77,12 +81,11 @@ public class Water : Singleton<Water>
 		}
 
 		var bigNumber = 1e6f;
-		var mesh = new Mesh()
-		{
-			vertices = vertices,
-			uv = texcoords,
-			triangles = indices
-		};
+		mesh = new Mesh();
+
+		mesh.SetVertices(vertices);
+		mesh.SetUVs(0, uvs);
+		mesh.SetTriangles(indices, 0);
 
 		mesh.bounds = new Bounds(Vector3.zero, new Vector3(bigNumber, 20.0f, bigNumber));
 		mesh.MarkDynamic();
@@ -103,12 +106,11 @@ public class Water : Singleton<Water>
         interpolation = projection.Interpolation;
 
         // Update each vertex position
-        var vertices = meshFilter.sharedMesh.vertices;
         for (var i = 0; i < vertices.Length; i++)
         {
-            var uv = meshFilter.sharedMesh.uv[i];
-            Vector4 p;
+			var uv = uvs[i];
 
+            Vector4 p;
             p.x = Mathf.Lerp(Mathf.Lerp(interpolation[0, 0], interpolation[1, 0], uv.x), Mathf.Lerp(interpolation[3, 0], interpolation[2, 0], uv.x), uv.y);
             p.y = Mathf.Lerp(Mathf.Lerp(interpolation[0, 1], interpolation[1, 1], uv.x), Mathf.Lerp(interpolation[3, 1], interpolation[2, 1], uv.x), uv.y);
             p.z = Mathf.Lerp(Mathf.Lerp(interpolation[0, 2], interpolation[1, 2], uv.x), Mathf.Lerp(interpolation[3, 2], interpolation[2, 2], uv.x), uv.y);
@@ -117,7 +119,7 @@ public class Water : Singleton<Water>
             vertices[i] = p / p.w;
         }
 
-        meshFilter.sharedMesh.vertices = vertices;
+        mesh.SetVertices(vertices);
 
         if (Time.time > nextUpdateTime)
         {

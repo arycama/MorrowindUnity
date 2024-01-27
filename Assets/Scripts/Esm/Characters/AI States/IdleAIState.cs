@@ -18,7 +18,7 @@ public class IdleAIState : NpcState
 		idle = input.WanderData.GetIdle();
 		if (idle > 1)
 		{
-			input.Animation.SetParameter("Idle", idle);
+			input.Animation.Parameters.SetIntParameter("Idle", idle);
 		}
 		else
 		{
@@ -30,13 +30,13 @@ public class IdleAIState : NpcState
 	public override void OnStateExit(NpcInput input)
 	{
 		// Set idle back to 0 to clean it up
-		input.Animation.SetParameter("Idle", 0);
+		input.Animation.Parameters.SetIntParameter("Idle", 0);
 	}
 
 	public override void OnStateUpdate(NpcInput input)
 	{
 		// Idle is set to -1 while playing, or > 1 when that idle should be played
-		if(input.Animation.GetParameter<int>("Idle") == 0)
+		if(input.Animation.Parameters.GetIntParameter("Idle") == 0)
 		{
 			input.NextState = new IdleAIState();
 		}

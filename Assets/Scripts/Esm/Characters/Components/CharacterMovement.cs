@@ -1,6 +1,7 @@
 ﻿#pragma warning disable 0108
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using Esm;
 using UnityEditor;
@@ -25,6 +26,8 @@ public class CharacterMovement : MonoBehaviour
     private CharacterAnimation animation;
     private Vector3 movement;
 
+    private Collider[] colliders = new Collider[2];
+
     public void Initialize(CharacterAnimation animation, CharacterInput input)
     {
         this.animation = animation;
@@ -48,10 +51,10 @@ public class CharacterMovement : MonoBehaviour
 
         // Calculate movement direciton here from CharacterInput inputs.
         var movementDirection = GetMovementDirection();
-        animation.SetParameter("MovementDirection", movementDirection);
+        animation.Parameters.SetIntParameter("MovementDirection", (int)movementDirection);
 
         var moveSpeed = GetMovementSpeed();
-        animation.SetParameter("MovementSpeed", moveSpeed);
+        animation.Parameters.SetIntParameter("MovementSpeed", (int)moveSpeed);
 
         transform.eulerAngles += new Vector3(0, input.Yaw * rotateSpeed, 0);
         var movementSpeed = this.movementSpeed;
@@ -75,7 +78,7 @@ public class CharacterMovement : MonoBehaviour
         {
             //GetComponent<Rigidbody>().velocity += new Vector3(0, jumpHeight, 0);
             //isGrounded = false;
-            animation.SetParameter("IsGrounded", isGrounded);
+            animation.Parameters.SetBoolParameter("IsGrounded", isGrounded);
         }
 
         // Movement
@@ -125,23 +128,23 @@ public class CharacterMovement : MonoBehaviour
                 case MovementDirection.ForwardRight:
                 case MovementDirection.BackLeft:
                 case MovementDirection.BackRight:
-                    animation.SetParameter("AttackType", AttackType.Chop);
+                    animation.Parameters.SetIntParameter("AttackType", (int)AttackType.Chop);
                     break;
                 case MovementDirection.Forward:
                 case MovementDirection.Back:
                 case MovementDirection.ForwardLeftRight:
                 case MovementDirection.BackLeftRight:
-                    animation.SetParameter("AttackType", AttackType.Thrust);
+                    animation.Parameters.SetIntParameter("AttackType", (int)AttackType.Thrust);
                     break;
                 case MovementDirection.Left:
                 case MovementDirection.Right:
-                    animation.SetParameter("AttackType", AttackType.Slash);
+                    animation.Parameters.SetIntParameter("AttackType", (int)AttackType.Slash);
                     break;
             }
         }
         else
         {
-            animation.SetParameter("AttackType", AttackType.None);
+            animation.Parameters.SetIntParameter("AttackType", (int)AttackType.None);
         }
     }
 
@@ -163,11 +166,18 @@ public class CharacterMovement : MonoBehaviour
 
         var center = box.transform.position + finalMovement;
         var rotation = box.transform.rotation;
-        var boxHits = Physics.OverlapBox(center, box.size * 0.5f + Vector3.one * groundedThreshold, rotation, layerMask);
+
+        var length = Physics.OverlapBoxNonAlloc(center, box.size * 0.5f + Vector3.one * groundedThreshold, colliders, rotation, layerMask);
+        while (length == colliders.Length)
+        {
+            colliders = new Collider[length * 2];
+            length = Physics.OverlapBoxNonAlloc(center, box.size * 0.5f + Vector3.one * groundedThreshold, colliders, rotation, layerMask);
+        }
 
         isGrounded = false;
-        foreach (var boxHit in boxHits)
+        for(var i = 0; i < length; i++)
         {
+            var boxHit = colliders[i];
             if (boxHit == box)
                 continue;
 
@@ -183,7 +193,7 @@ public class CharacterMovement : MonoBehaviour
         }
 
         transform.position += finalMovement;
-        animation.SetParameter("IsGrounded", isGrounded);
+        animation.Parameters.SetBoolParameter("IsGrounded", isGrounded);
     }
 
     private void OnCollisionEnter(Collision collision)
@@ -194,7 +204,7 @@ public class CharacterMovement : MonoBehaviour
             if (direction > 0)
             {
                 isGrounded = true;
-                animation.SetParameter("IsGrounded", isGrounded);
+                animation.Parameters.SetBoolParameter("IsGrounded", isGrounded);
                 break;
             }
         }

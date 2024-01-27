@@ -52,7 +52,7 @@ public class CharacterEquipment : MonoBehaviour
 		{
 			EquippedWeapon.PickupSound.PlaySoundAtPoint(transform.position);
 			(EquippedWeapon as IEquippable).Equip(body.PartParts);
-			animation.SetParameter("WeaponType", EquippedWeapon.Data.type);
+			animation.Parameters.SetIntParameter("WeaponType", (int)EquippedWeapon.Data.type);
 		}
 
 		weaponEquipped = true;
@@ -66,7 +66,7 @@ public class CharacterEquipment : MonoBehaviour
 			(EquippedWeapon as IEquippable).Unequip(body.PartParts);
 		}
 
-		animation.SetParameter("WeaponType", WeaponType.HandToHand);
+		animation.Parameters.SetIntParameter("WeaponType", (int)WeaponType.HandToHand);
 		weaponEquipped = false;
 	}
 
@@ -94,7 +94,7 @@ public class CharacterEquipment : MonoBehaviour
 
 		EquippedWeapon = weapon;
 		equippedItems[EquipmentSlot.Weapon] = weapon;
-		animation.SetParameter("WeaponType", EquippedWeapon.Data.type);
+		animation.Parameters.SetIntParameter("WeaponType", (int)EquippedWeapon.Data.type);
 	}
 
 	public void Equip(IEquippable equipment, bool playSound = true)
@@ -134,7 +134,7 @@ public class CharacterEquipment : MonoBehaviour
 		EquippedWeapon.DropSound.PlaySoundAtPoint(transform.position);
 		equippedItems.Remove(EquipmentSlot.Weapon);
 		EquippedWeapon = null;
-		animation.SetParameter("WeaponType", WeaponType.HandToHand);
+		animation.Parameters.SetIntParameter("WeaponType", (int)WeaponType.HandToHand);
 	}
 
 	public void Unequip(IEquippable equipment)

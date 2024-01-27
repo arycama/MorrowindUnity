@@ -29,10 +29,10 @@ public class TransitionCondition
 			case TransitionType.None:
 				return true;
 			case TransitionType.Bool:
-				return animation.GetParameter<bool>(name) == boolValue;
+				return animation.Parameters.GetBoolParameter(name) == boolValue;
 			case TransitionType.Float:
 				{
-					var parameter = animation.GetParameter<float>(name);
+					var parameter = animation.Parameters.GetFloatParameter(name);
 					switch (compareOp)
 					{
 						case CompareOp.Equal:
@@ -53,7 +53,7 @@ public class TransitionCondition
 				}
 			case TransitionType.Int:
 				{
-					var parameter = animation.GetParameter<int>(name);
+					var parameter = animation.Parameters.GetIntParameter(name);
 					switch (compareOp)
 					{
 						case CompareOp.Equal:
