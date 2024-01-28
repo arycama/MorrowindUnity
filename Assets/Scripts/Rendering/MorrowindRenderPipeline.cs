@@ -135,7 +135,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         cullingParameters.cullingOptions = CullingOptions.NeedsLighting | CullingOptions.DisablePerObjectCulling | CullingOptions.ShadowCasters;
         var cullingResults = context.Cull(ref cullingParameters);
 
-        lightingSetup.Render(cullingResults, camera);
+        var lightingSetupResult = lightingSetup.Render(cullingResults, camera);
 
         // Camera setup
         var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(Time.renderedFrameCount % 64));
@@ -192,8 +192,8 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             data.camera = camera;
         }
 
-        clusteredLightCulling.Render(scaledWidth, scaledHeight, camera.nearClipPlane, camera.farClipPlane);
-        var volumetricLightingTexture = volumetricLighting.Render(scaledWidth, scaledHeight, camera.farClipPlane, camera);
+        var clusteredLightCullingResult = clusteredLightCulling.Render(scaledWidth, scaledHeight, camera.nearClipPlane, camera.farClipPlane, lightingSetupResult);
+        var volumetricLightingTexture = volumetricLighting.Render(scaledWidth, scaledHeight, camera.farClipPlane, camera, clusteredLightCullingResult, lightingSetupResult);
 
         // Opaque
         var cameraTarget = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
@@ -204,6 +204,35 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
             pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+
+            pass.ReadTexture("_LightClusterIndices", clusteredLightCullingResult.lightClusterIndices);
+            pass.ReadBuffer("_LightClusterList", clusteredLightCullingResult.lightList);
+
+            pass.ReadTexture("_DirectionalShadows", lightingSetupResult.directionalShadows);
+            pass.ReadTexture("_PointShadows", lightingSetupResult.pointShadows);
+            pass.ReadBuffer("_DirectionalMatrices", lightingSetupResult.directionalMatrices);
+            pass.ReadBuffer("_DirectionalLights", lightingSetupResult.directionalLights);
+            pass.ReadBuffer("_PointLights", lightingSetupResult.pointLights);
+            pass.ReadBuffer("_DirectionalShadowTexelSizes", lightingSetupResult.directionalShadowTexelSizes);
+
+            var data = pass.SetRenderFunction<ObjectPassData>((command, context, pass, data) =>
+            {
+                pass.SetFloat(command, "_ClusterScale", data.clusteredLightCullingResult.clusterScale);
+                pass.SetFloat(command, "_ClusterBias", data.clusteredLightCullingResult.clusterBias);
+                pass.SetInt(command, "_TileSize", data.clusteredLightCullingResult.tileSize);
+
+                pass.SetInt(command, "_DirectionalLightCount", data.lightingSetupResult.directionalLightCount);
+                pass.SetInt(command, "_PointLightCount", data.lightingSetupResult.pointLightCount);
+
+                pass.SetInt(command, "_PcfSamples", data.lightingSetupResult.pcfSamples);
+                pass.SetFloat(command, "_PcfRadius", data.lightingSetupResult.pcfRadius);
+                pass.SetInt(command, "_BlockerSamples", data.lightingSetupResult.blockerSamples);
+                pass.SetFloat(command, "_BlockerRadius", data.lightingSetupResult.blockerRadius);
+                pass.SetFloat(command, "_PcssSoftness", data.lightingSetupResult.pcssSoftness);
+            });
+
+            data.clusteredLightCullingResult = clusteredLightCullingResult;
+            data.lightingSetupResult = lightingSetupResult;
         }
 
         // Motion Vectors
@@ -215,6 +244,35 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             pass.WriteTexture("", motionVectors, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store, Color.clear);
             pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+
+            pass.ReadTexture("_LightClusterIndices", clusteredLightCullingResult.lightClusterIndices);
+            pass.ReadBuffer("_LightClusterList", clusteredLightCullingResult.lightList);
+
+            pass.ReadTexture("_DirectionalShadows", lightingSetupResult.directionalShadows);
+            pass.ReadTexture("_PointShadows", lightingSetupResult.pointShadows);
+            pass.ReadBuffer("_DirectionalMatrices", lightingSetupResult.directionalMatrices);
+            pass.ReadBuffer("_DirectionalLights", lightingSetupResult.directionalLights);
+            pass.ReadBuffer("_PointLights", lightingSetupResult.pointLights);
+            pass.ReadBuffer("_DirectionalShadowTexelSizes", lightingSetupResult.directionalShadowTexelSizes);
+
+            var data = pass.SetRenderFunction<ObjectPassData>((command, context, pass, data) =>
+            {
+                pass.SetFloat(command, "_ClusterScale", data.clusteredLightCullingResult.clusterScale);
+                pass.SetFloat(command, "_ClusterBias", data.clusteredLightCullingResult.clusterBias);
+                pass.SetInt(command, "_TileSize", data.clusteredLightCullingResult.tileSize);
+
+                pass.SetInt(command, "_DirectionalLightCount", data.lightingSetupResult.directionalLightCount);
+                pass.SetInt(command, "_PointLightCount", data.lightingSetupResult.pointLightCount);
+
+                pass.SetInt(command, "_PcfSamples", data.lightingSetupResult.pcfSamples);
+                pass.SetFloat(command, "_PcfRadius", data.lightingSetupResult.pcfRadius);
+                pass.SetInt(command, "_BlockerSamples", data.lightingSetupResult.blockerSamples);
+                pass.SetFloat(command, "_BlockerRadius", data.lightingSetupResult.blockerRadius);
+                pass.SetFloat(command, "_PcssSoftness", data.lightingSetupResult.pcssSoftness);
+            });
+
+            data.clusteredLightCullingResult = clusteredLightCullingResult;
+            data.lightingSetupResult = lightingSetupResult;
         }
 
         // Sky clear color
@@ -225,6 +283,11 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+
+            var data = pass.SetRenderFunction<SkyPassData>((command, context, pass, data) =>
+            {
+                // TODO: Volumetric params
+            });
         }
 
         // Sky
@@ -234,6 +297,11 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+
+            var data = pass.SetRenderFunction<SkyPassData>((command, context, pass, data) =>
+            {
+                // TODO: Volumetric params
+            });
         }
 
         // Before transparent post processing
@@ -258,7 +326,37 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             pass.ReadTexture("_SceneTexture", sceneTexture);
             pass.ReadTexture("_CameraDepth", cameraDepth);
+
             pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+
+            pass.ReadTexture("_LightClusterIndices", clusteredLightCullingResult.lightClusterIndices);
+            pass.ReadBuffer("_LightClusterList", clusteredLightCullingResult.lightList);
+
+            pass.ReadTexture("_DirectionalShadows", lightingSetupResult.directionalShadows);
+            pass.ReadTexture("_PointShadows", lightingSetupResult.pointShadows);
+            pass.ReadBuffer("_DirectionalMatrices", lightingSetupResult.directionalMatrices);
+            pass.ReadBuffer("_DirectionalLights", lightingSetupResult.directionalLights);
+            pass.ReadBuffer("_PointLights", lightingSetupResult.pointLights);
+            pass.ReadBuffer("_DirectionalShadowTexelSizes", lightingSetupResult.directionalShadowTexelSizes);
+
+            var data = pass.SetRenderFunction<ObjectPassData>((command, context, pass, data) =>
+            {
+                pass.SetFloat(command, "_ClusterScale", data.clusteredLightCullingResult.clusterScale);
+                pass.SetFloat(command, "_ClusterBias", data.clusteredLightCullingResult.clusterBias);
+                pass.SetInt(command, "_TileSize", data.clusteredLightCullingResult.tileSize);
+
+                pass.SetInt(command, "_DirectionalLightCount", data.lightingSetupResult.directionalLightCount);
+                pass.SetInt(command, "_PointLightCount", data.lightingSetupResult.pointLightCount);
+
+                pass.SetInt(command, "_PcfSamples", data.lightingSetupResult.pcfSamples);
+                pass.SetFloat(command, "_PcfRadius", data.lightingSetupResult.pcfRadius);
+                pass.SetInt(command, "_BlockerSamples", data.lightingSetupResult.blockerSamples);
+                pass.SetFloat(command, "_BlockerRadius", data.lightingSetupResult.blockerRadius);
+                pass.SetFloat(command, "_PcssSoftness", data.lightingSetupResult.pcssSoftness);
+            });
+
+            data.clusteredLightCullingResult = clusteredLightCullingResult;
+            data.lightingSetupResult = lightingSetupResult;
         }
 
         // After transparent post processing
@@ -321,5 +419,15 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
     private class Pass2Data
     {
         internal Camera camera;
+    }
+
+    private class ObjectPassData
+    {
+        internal ClusteredLightCulling.Result clusteredLightCullingResult;
+        internal LightingSetup.Result lightingSetupResult;
+    }
+
+    private class SkyPassData
+    {
     }
 }
