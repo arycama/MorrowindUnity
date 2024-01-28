@@ -8,6 +8,5 @@ float4 Vertex(uint id : SV_VertexID) : SV_Position
 
 float3 Fragment(float4 position : SV_Position) : SV_Target
 {
-	float3 volumeUv = float3(position.xy / floor(_ScreenParams.xy * _Scale), 1.0);
-	return _VolumetricLighting.Sample(_LinearClampSampler, volumeUv).rgb;
+	return SampleVolumetricLighting(position.xy, _ProjectionParams.z);
 }

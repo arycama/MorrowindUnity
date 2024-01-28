@@ -35,7 +35,6 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
     {
         this.renderPipelineAsset = renderPipelineAsset;
 
-        GraphicsSettings.useScriptableRenderPipelineBatching = renderPipelineAsset.EnableSrpBatcher;
         GraphicsSettings.lightsUseLinearIntensity = true;
         GraphicsSettings.lightsUseColorTemperature = true;
         GraphicsSettings.disableBuiltinCustomRenderTextureUpdate = true;
@@ -101,6 +100,8 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
     protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
     {
+        GraphicsSettings.useScriptableRenderPipelineBatching = renderPipelineAsset.EnableSrpBatcher;
+
         dynamicResolution.Update(frameTimeRecorder.gpuElapsedNanoseconds);
 
         foreach (var camera in cameras)
@@ -140,61 +141,20 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         // Camera setup
         var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(Time.renderedFrameCount % 64));
         var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds.GetString(Time.renderedFrameCount % 64));
+        var scaledResolution = new Vector4(scaledWidth, scaledHeight, 1.0f / scaledWidth, 1.0f / scaledHeight);
 
         using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>("Setup Globals"))
         {
-            var data = pass.SetRenderFunction<Pass0Data>((command, context, pass, data) =>
-            {
-                pass.SetTexture(command, "_BlueNoise1D", data.blueNoise1D);
-                pass.SetTexture(command, "_BlueNoise2D", data.blueNoise2D);
-
-                pass.SetVector(command, "_Jitter", data.jitter);
-                pass.SetVector(command, "_AmbientLightColor", data.ambientLightColor);
-                pass.SetVector(command, "_FogColor", data.fogColor);
-
-                pass.SetFloat(command, "_FogStartDistance", data.fogStartDistance);
-                pass.SetFloat(command, "_FogEndDistance", data.fogEndDistance);
-                pass.SetFloat(command, "_FogDensity", data.fogDensity);
-                pass.SetFloat(command, "_FogMode", data.fogMode);
-                pass.SetFloat(command, "_FogEnabled", data.fogEnabled);
-                pass.SetFloat(command, "_AoEnabled", data.aoEnabled);
-                pass.SetFloat(command, "_Scale", data.scale);
-
-                pass.SetVector(command, "_WaterAlbedo", data.waterAlbedo);
-                pass.SetVector(command, "_WaterExtinction", data.waterExtinction);
-
-                pass.SetMatrix(command, "_NonJitteredVPMatrix", data.nonJitteredVpMatrix);
-                pass.SetMatrix(command, "_PreviousVPMatrix", data.previousVpMatrix);
-                pass.SetMatrix(command, "_InvVPMatrix", data.invVpMatrix);
-                pass.SetInt(command, "_FrameCount", data.frameCount);
-
-                context.SetupCameraProperties(data.camera);
-            });
-
-            data.blueNoise1D = blueNoise1D;
-            data.blueNoise2D = blueNoise2D;
-            data.jitter = temporalAA.Jitter;
-            data.ambientLightColor = RenderSettings.ambientLight.linear;
-            data.fogColor = RenderSettings.fogColor.linear;
-            data.fogStartDistance = RenderSettings.fogStartDistance;
-            data.fogEndDistance = RenderSettings.fogEndDistance;
-            data.fogDensity = RenderSettings.fogDensity;
-            data.fogMode = (float)RenderSettings.fogMode;
-            data.fogEnabled = RenderSettings.fog ? 1.0f : 0.0f;
-            data.aoEnabled = renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f;
-            data.scale = dynamicResolution.ScaleFactor;
-            data.waterAlbedo = renderPipelineAsset.waterAlbedo.linear;
-            data.waterExtinction = renderPipelineAsset.waterExtinction.linear;
-            data.nonJitteredVpMatrix = camera.nonJitteredProjectionMatrix;
-            data.previousVpMatrix = previousMatrix;
-            data.invVpMatrix = (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse;
-            data.frameCount = Time.renderedFrameCount;
+            var data = pass.SetRenderFunction<Pass0Data>((command, context, pass, data) => { context.SetupCameraProperties(data.camera); });
             data.camera = camera;
         }
 
+        var invVpMatrix = (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse;
+        var ambientLightColor = RenderSettings.ambientLight.linear;
+
         var exposureBuffer = autoExposure.OnPreRender(camera);
-        var clusteredLightCullingResult = clusteredLightCulling.Render(scaledWidth, scaledHeight, camera.nearClipPlane, camera.farClipPlane, lightingSetupResult);
-        var volumetricLightingResult = volumetricLighting.Render(scaledWidth, scaledHeight, camera.farClipPlane, camera, clusteredLightCullingResult, lightingSetupResult, exposureBuffer);
+        var clusteredLightCullingResult = clusteredLightCulling.Render(scaledWidth, scaledHeight, camera.nearClipPlane, camera.farClipPlane, lightingSetupResult, invVpMatrix);
+        var volumetricLightingResult = volumetricLighting.Render(scaledWidth, scaledHeight, camera.farClipPlane, camera, clusteredLightCullingResult, lightingSetupResult, exposureBuffer, blueNoise1D, blueNoise2D, ambientLightColor, RenderSettings.fogColor.linear, RenderSettings.fogStartDistance, RenderSettings.fogEndDistance, RenderSettings.fogDensity, RenderSettings.fog ? (float)RenderSettings.fogMode : 0.0f, previousMatrix, invVpMatrix);
 
         // Opaque
         var cameraTarget = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
@@ -237,12 +197,23 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
                 pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
 
                 pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
+
+                pass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
+
+                pass.SetVector(command, "_Jitter", data.jitter);
+                pass.SetVector(command, "_AmbientLightColor", data.ambientLightColor);
+                pass.SetFloat(command, "_AoEnabled", data.aoEnabled);
+                pass.SetVector(command, "_ScaledResolution", data.scaledResolution);
             });
 
             data.clusteredLightCullingResult = clusteredLightCullingResult;
             data.lightingSetupResult = lightingSetupResult;
             data.volumetricLightingResult = volumetricLightingResult;
             data.exposureBuffer = exposureBuffer;
+            data.jitter = temporalAA.Jitter;
+            data.ambientLightColor = ambientLightColor;
+            data.aoEnabled = renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f;
+            data.scaledResolution = scaledResolution;
         }
 
         // Motion Vectors
@@ -265,33 +236,48 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.ReadBuffer("_PointLights", lightingSetupResult.pointLights);
             pass.ReadBuffer("_DirectionalShadowTexelSizes", lightingSetupResult.directionalShadowTexelSizes);
 
-            var data = pass.SetRenderFunction<ObjectPassData>((command, context, pass, data) =>
+            var data = pass.SetRenderFunction<MotionVectorsPassData>((command, context, pass, data) =>
             {
-                pass.SetFloat(command, "_ClusterScale", data.clusteredLightCullingResult.clusterScale);
-                pass.SetFloat(command, "_ClusterBias", data.clusteredLightCullingResult.clusterBias);
-                pass.SetInt(command, "_TileSize", data.clusteredLightCullingResult.tileSize);
+                pass.SetFloat(command, "_ClusterScale", data.objectPassData.clusteredLightCullingResult.clusterScale);
+                pass.SetFloat(command, "_ClusterBias", data.objectPassData.clusteredLightCullingResult.clusterBias);
+                pass.SetInt(command, "_TileSize", data.objectPassData.clusteredLightCullingResult.tileSize);
 
-                pass.SetInt(command, "_DirectionalLightCount", data.lightingSetupResult.directionalLightCount);
-                pass.SetInt(command, "_PointLightCount", data.lightingSetupResult.pointLightCount);
+                pass.SetInt(command, "_DirectionalLightCount", data.objectPassData.lightingSetupResult.directionalLightCount);
+                pass.SetInt(command, "_PointLightCount", data.objectPassData.lightingSetupResult.pointLightCount);
 
-                pass.SetInt(command, "_PcfSamples", data.lightingSetupResult.pcfSamples);
-                pass.SetFloat(command, "_PcfRadius", data.lightingSetupResult.pcfRadius);
-                pass.SetInt(command, "_BlockerSamples", data.lightingSetupResult.blockerSamples);
-                pass.SetFloat(command, "_BlockerRadius", data.lightingSetupResult.blockerRadius);
-                pass.SetFloat(command, "_PcssSoftness", data.lightingSetupResult.pcssSoftness);
+                pass.SetInt(command, "_PcfSamples", data.objectPassData.lightingSetupResult.pcfSamples);
+                pass.SetFloat(command, "_PcfRadius", data.objectPassData.lightingSetupResult.pcfRadius);
+                pass.SetInt(command, "_BlockerSamples", data.objectPassData.lightingSetupResult.blockerSamples);
+                pass.SetFloat(command, "_BlockerRadius", data.objectPassData.lightingSetupResult.blockerRadius);
+                pass.SetFloat(command, "_PcssSoftness", data.objectPassData.lightingSetupResult.pcssSoftness);
 
-                pass.SetFloat(command, "_NonLinearDepth", data.volumetricLightingResult.nonLinearDepth);
-                pass.SetFloat(command, "_VolumeWidth", data.volumetricLightingResult.volumeWidth);
-                pass.SetFloat(command, "_VolumeHeight", data.volumetricLightingResult.volumeHeight);
-                pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
+                pass.SetFloat(command, "_NonLinearDepth", data.objectPassData.volumetricLightingResult.nonLinearDepth);
+                pass.SetFloat(command, "_VolumeWidth", data.objectPassData.volumetricLightingResult.volumeWidth);
+                pass.SetFloat(command, "_VolumeHeight", data.objectPassData.volumetricLightingResult.volumeHeight);
+                pass.SetFloat(command, "_VolumeSlices", data.objectPassData.volumetricLightingResult.volumeSlices);
 
-                pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
+                pass.SetConstantBuffer(command, "Exposure", data.objectPassData.exposureBuffer);
+
+                pass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
+
+                pass.SetVector(command, "_Jitter", data.objectPassData.jitter);
+                pass.SetVector(command, "_AmbientLightColor", data.objectPassData.ambientLightColor);
+                pass.SetFloat(command, "_AoEnabled", data.objectPassData.aoEnabled);
+                pass.SetVector(command, "_ScaledResolution", data.objectPassData.scaledResolution);
+                pass.SetMatrix(command, "_NonJitteredVPMatrix", data.nonJitteredVpMatrix);
+                pass.SetMatrix(command, "_PreviousVPMatrix", data.previousVpMatrix);
             });
 
-            data.clusteredLightCullingResult = clusteredLightCullingResult;
-            data.lightingSetupResult = lightingSetupResult;
-            data.volumetricLightingResult = volumetricLightingResult;
-            data.exposureBuffer = exposureBuffer;
+            data.objectPassData.clusteredLightCullingResult = clusteredLightCullingResult;
+            data.objectPassData.lightingSetupResult = lightingSetupResult;
+            data.objectPassData.volumetricLightingResult = volumetricLightingResult;
+            data.objectPassData.exposureBuffer = exposureBuffer;
+            data.objectPassData.jitter = temporalAA.Jitter;
+            data.objectPassData.ambientLightColor = ambientLightColor;
+            data.objectPassData.aoEnabled = renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f;
+            data.objectPassData.scaledResolution = scaledResolution;
+            data.nonJitteredVpMatrix = camera.nonJitteredProjectionMatrix;
+            data.previousVpMatrix = previousMatrix;
         }
 
         // Sky clear color
@@ -309,9 +295,11 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
                 pass.SetFloat(command, "_VolumeWidth", data.volumetricLightingResult.volumeWidth);
                 pass.SetFloat(command, "_VolumeHeight", data.volumetricLightingResult.volumeHeight);
                 pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
+                pass.SetVector(command, "_ScaledResolution", data.scaledResolution);
             });
 
             data.volumetricLightingResult = volumetricLightingResult;
+            data.scaledResolution = scaledResolution;
         }
 
         // Sky
@@ -330,15 +318,17 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
                 pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
 
                 pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
+                pass.SetVector(command, "_ScaledResolution", data.scaledResolution);
             });
 
             data.volumetricLightingResult = volumetricLightingResult;
             data.exposureBuffer = exposureBuffer;
+            data.scaledResolution = scaledResolution;
         }
 
         // Before transparent post processing
-        cameraMotionVectors.Render(motionVectors, cameraDepth);
-        ambientOcclusion.Render(camera, cameraDepth, cameraTarget, dynamicResolution.ScaleFactor, volumetricLightingResult);
+        cameraMotionVectors.Render(motionVectors, cameraDepth, scaledWidth, scaledHeight, camera.nonJitteredProjectionMatrix, previousMatrix, invVpMatrix);
+        ambientOcclusion.Render(camera, cameraDepth, cameraTarget, dynamicResolution.ScaleFactor, volumetricLightingResult, blueNoise2D, invVpMatrix);
 
         // Copy scene texture
         var sceneTexture = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
@@ -392,12 +382,23 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
                 pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
 
                 pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
+
+                pass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
+
+                pass.SetVector(command, "_Jitter", data.jitter);
+                pass.SetVector(command, "_AmbientLightColor", data.ambientLightColor);
+                pass.SetFloat(command, "_AoEnabled", data.aoEnabled);
+                pass.SetVector(command, "_ScaledResolution", data.scaledResolution);
             });
 
             data.clusteredLightCullingResult = clusteredLightCullingResult;
             data.lightingSetupResult = lightingSetupResult;
             data.volumetricLightingResult = volumetricLightingResult;
             data.exposureBuffer = exposureBuffer;
+            data.jitter = temporalAA.Jitter;
+            data.ambientLightColor = ambientLightColor;
+            data.aoEnabled = renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f;
+            data.scaledResolution = scaledResolution;
         }
 
         // After transparent post processing
@@ -430,25 +431,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
     private class Pass0Data
     {
-        internal Texture2D blueNoise1D;
-        internal Texture2D blueNoise2D;
-        internal Vector2 jitter;
-        internal Color ambientLightColor;
-        internal Color fogColor;
-        internal float fogStartDistance;
-        internal float fogEndDistance;
-        internal float fogMode;
-        internal float aoEnabled;
-        internal float scale;
-        internal Color waterAlbedo;
-        internal Color waterExtinction;
-        internal Matrix4x4 nonJitteredVpMatrix;
-        internal Matrix4x4 previousVpMatrix;
-        internal Matrix4x4 invVpMatrix;
-        internal int frameCount;
         internal Camera camera;
-        internal float fogDensity;
-        internal float fogEnabled;
     }
 
     private class Pass1Data
@@ -468,11 +451,23 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         internal LightingSetup.Result lightingSetupResult;
         internal VolumetricLighting.Result volumetricLightingResult;
         internal BufferHandle exposureBuffer;
+        internal Vector2 jitter;
+        internal Color ambientLightColor;
+        internal float aoEnabled;
+        internal Vector4 scaledResolution;
+    }
+
+    private class MotionVectorsPassData
+    {
+        internal ObjectPassData objectPassData = new();
+        internal Matrix4x4 nonJitteredVpMatrix;
+        internal Matrix4x4 previousVpMatrix;
     }
 
     private class SkyPassData
     {
         internal VolumetricLighting.Result volumetricLightingResult;
         internal BufferHandle exposureBuffer;
+        internal Vector4 scaledResolution;
     }
 }

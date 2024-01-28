@@ -75,7 +75,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 	}
 	
 	float4 positionCS = PerspectiveDivide(WorldToClip(P));
-	positionCS.xy = (positionCS.xy * 0.5 + 0.5) * floor(_ScreenParams.xy * _Scale);
+	positionCS.xy = (positionCS.xy * 0.5 + 0.5) * _ScaledResolution.xy;
 	
 	uint3 clusterIndex;
 	clusterIndex.xy = floor(positionCS.xy) / _TileSize;
@@ -108,7 +108,6 @@ float3 Fragment(FragmentInput input) : SV_Target
 		if (!shadow)
 			continue;
 		
-		
 		float rcpLightDist = rsqrt(sqrLightDist);
 		float attenuation = Remap(light.range * rcp(3.0) * rcpLightDist, rcp(3.0));
 		
@@ -128,13 +127,9 @@ float3 Fragment(FragmentInput input) : SV_Target
 	float3 scene = _SceneTexture[input.position.xy];
 	
 	// Need to remove fog from background
-	if (_FogEnabled)
-	{
-		float4 backgroundFog = SampleVolumetricLighting(input.position.xy, underwaterDepth);
-		
-		if (backgroundFog.a)
-			scene = saturate((scene - backgroundFog.rgb) * rcp(backgroundFog.a));
-	}
+	float4 backgroundFog = SampleVolumetricLighting(input.position.xy, underwaterDepth);
+	if (backgroundFog.a)
+		scene = saturate((scene - backgroundFog.rgb) * rcp(backgroundFog.a));
 	
 	luminance += scene * exp(-_Extinction * underwaterDistance);
 	

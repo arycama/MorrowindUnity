@@ -29,10 +29,6 @@ public class MorrowindRenderPipelineAsset : CustomRenderPipelineAsset
     public Tonemapping.Settings TonemappingSettings => tonemappingSettings;
     public LensSettings LensSettings => lensSettings;
 
-    [Header("Water Settings")]
-    public Color waterAlbedo = Color.white;
-    [ColorUsage(false, true)] public Color waterExtinction = Color.grey;
-
     protected override RenderPipeline CreatePipeline()
     {
         return new MorrowindRenderPipeline(this);

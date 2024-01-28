@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 05bf43dfe18873a45a11eabb90c6ccee, type: 3}
   m_Name: Render Pipeline
   m_EditorClassIdentifier: 
-  enableSrpBatcher: 0
+  enableSrpBatcher: 1
   defaultMaterials:
     defaultMaterial: {fileID: 0}
     defaultUIMaterial: {fileID: 0}
@@ -75,6 +75,8 @@ MonoBehaviour:
     shadowBias: 128
     shadowSlopeBias: 1
     pointShadowResolution: 256
+    pointShadowBias: 128
+    pointShadowSlopeBias: 1
     pcfSamples: 4
     pcfRadius: 1
     blockerSamples: 8
@@ -99,16 +101,16 @@ MonoBehaviour:
     tint: {r: 0.15, g: 0.15, b: 0.15, a: 1}
     radius: 128
     falloff: 0.75
-    directionCount: 4
-    sampleCount: 8
+    directionCount: 2
+    sampleCount: 6
   volumetricLightingSettings:
     tileSize: 8
-    depthSlices: 128
+    depthSlices: 64
     blurSigma: 1
     nonLinearDepth: 0
   depthOfFieldSettings:
-    sampleRadius: 0.5
-    sampleCount: 16
+    sampleRadius: 2
+    sampleCount: 8
   dynamicResolutionSettings:
     targetFrameRate: 60
     minScaleFactor: 1
@@ -182,7 +184,7 @@ MonoBehaviour:
       m_PostInfinity: 2
       m_RotationOrder: 4
   tonemappingSettings:
-    noiseIntensity: 0.001953125
+    noiseIntensity: 0.086
     noiseResponse: 0.234
     filmGrainTexture: {fileID: 2800000, guid: 17c8cfeea9f5af84fa19cdb7a3b585a7, type: 3}
     toeStrength: 0.5
@@ -191,10 +193,8 @@ MonoBehaviour:
     shoulderLength: 0.5
     shoulderAngle: 1
   lensSettings:
-    aperture: 8
-    shutterSpeed: 18
-    iso: 76000
-    sensorHeight: 40000
-    focalDistance: 64
-  waterAlbedo: {r: 0.050543994, g: 0.13698289, b: 0.21599996, a: 1}
-  waterExtinction: {r: 0.01, g: 0.0035, b: 0.003, a: 1}
+    aperture: 2
+    shutterSpeed: 120
+    iso: 611111
+    sensorSize: 1727.3789
+    focalDistance: 4
