@@ -163,9 +163,9 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
                 pass.SetVector(command, "_WaterAlbedo", data.waterAlbedo);
                 pass.SetVector(command, "_WaterExtinction", data.waterExtinction);
 
-                command.SetGlobalMatrix("_NonJitteredVPMatrix", data.nonJitteredVpMatrix);
-                command.SetGlobalMatrix("_PreviousVPMatrix", data.previousVpMatrix);
-                command.SetGlobalMatrix("_InvVPMatrix", data.invVpMatrix);
+                pass.SetMatrix(command, "_NonJitteredVPMatrix", data.nonJitteredVpMatrix);
+                pass.SetMatrix(command, "_PreviousVPMatrix", data.previousVpMatrix);
+                pass.SetMatrix(command, "_InvVPMatrix", data.invVpMatrix);
                 pass.SetInt(command, "_FrameCount", data.frameCount);
 
                 context.SetupCameraProperties(data.camera);
@@ -192,8 +192,9 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             data.camera = camera;
         }
 
+        var exposureBuffer = autoExposure.OnPreRender(camera);
         var clusteredLightCullingResult = clusteredLightCulling.Render(scaledWidth, scaledHeight, camera.nearClipPlane, camera.farClipPlane, lightingSetupResult);
-        var volumetricLightingTexture = volumetricLighting.Render(scaledWidth, scaledHeight, camera.farClipPlane, camera, clusteredLightCullingResult, lightingSetupResult);
+        var volumetricLightingResult = volumetricLighting.Render(scaledWidth, scaledHeight, camera.farClipPlane, camera, clusteredLightCullingResult, lightingSetupResult, exposureBuffer);
 
         // Opaque
         var cameraTarget = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
@@ -203,7 +204,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.opaque, SortingCriteria.CommonOpaque, PerObjectData.None, true);
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
-            pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+            pass.ReadTexture("_VolumetricLighting", volumetricLightingResult.volumetricLighting);
 
             pass.ReadTexture("_LightClusterIndices", clusteredLightCullingResult.lightClusterIndices);
             pass.ReadBuffer("_LightClusterList", clusteredLightCullingResult.lightList);
@@ -229,10 +230,19 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
                 pass.SetInt(command, "_BlockerSamples", data.lightingSetupResult.blockerSamples);
                 pass.SetFloat(command, "_BlockerRadius", data.lightingSetupResult.blockerRadius);
                 pass.SetFloat(command, "_PcssSoftness", data.lightingSetupResult.pcssSoftness);
+
+                pass.SetFloat(command, "_NonLinearDepth", data.volumetricLightingResult.nonLinearDepth);
+                pass.SetFloat(command, "_VolumeWidth", data.volumetricLightingResult.volumeWidth);
+                pass.SetFloat(command, "_VolumeHeight", data.volumetricLightingResult.volumeHeight);
+                pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
+
+                pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
             });
 
             data.clusteredLightCullingResult = clusteredLightCullingResult;
             data.lightingSetupResult = lightingSetupResult;
+            data.volumetricLightingResult = volumetricLightingResult;
+            data.exposureBuffer = exposureBuffer;
         }
 
         // Motion Vectors
@@ -243,7 +253,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             pass.WriteTexture("", motionVectors, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store, Color.clear);
-            pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+            pass.ReadTexture("_VolumetricLighting", volumetricLightingResult.volumetricLighting);
 
             pass.ReadTexture("_LightClusterIndices", clusteredLightCullingResult.lightClusterIndices);
             pass.ReadBuffer("_LightClusterList", clusteredLightCullingResult.lightList);
@@ -269,10 +279,19 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
                 pass.SetInt(command, "_BlockerSamples", data.lightingSetupResult.blockerSamples);
                 pass.SetFloat(command, "_BlockerRadius", data.lightingSetupResult.blockerRadius);
                 pass.SetFloat(command, "_PcssSoftness", data.lightingSetupResult.pcssSoftness);
+
+                pass.SetFloat(command, "_NonLinearDepth", data.volumetricLightingResult.nonLinearDepth);
+                pass.SetFloat(command, "_VolumeWidth", data.volumetricLightingResult.volumeWidth);
+                pass.SetFloat(command, "_VolumeHeight", data.volumetricLightingResult.volumeHeight);
+                pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
+
+                pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
             });
 
             data.clusteredLightCullingResult = clusteredLightCullingResult;
             data.lightingSetupResult = lightingSetupResult;
+            data.volumetricLightingResult = volumetricLightingResult;
+            data.exposureBuffer = exposureBuffer;
         }
 
         // Sky clear color
@@ -282,12 +301,17 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.Index = 0;
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+            pass.ReadTexture("_VolumetricLighting", volumetricLightingResult.volumetricLighting);
 
             var data = pass.SetRenderFunction<SkyPassData>((command, context, pass, data) =>
             {
-                // TODO: Volumetric params
+                pass.SetFloat(command, "_NonLinearDepth", data.volumetricLightingResult.nonLinearDepth);
+                pass.SetFloat(command, "_VolumeWidth", data.volumetricLightingResult.volumeWidth);
+                pass.SetFloat(command, "_VolumeHeight", data.volumetricLightingResult.volumeHeight);
+                pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
             });
+
+            data.volumetricLightingResult = volumetricLightingResult;
         }
 
         // Sky
@@ -296,17 +320,25 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.Initialize("Sky", context, cullingResults, camera, RenderQueueRange.all);
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+            pass.ReadTexture("_VolumetricLighting", volumetricLightingResult.volumetricLighting);
 
             var data = pass.SetRenderFunction<SkyPassData>((command, context, pass, data) =>
             {
-                // TODO: Volumetric params
+                pass.SetFloat(command, "_NonLinearDepth", data.volumetricLightingResult.nonLinearDepth);
+                pass.SetFloat(command, "_VolumeWidth", data.volumetricLightingResult.volumeWidth);
+                pass.SetFloat(command, "_VolumeHeight", data.volumetricLightingResult.volumeHeight);
+                pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
+
+                pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
             });
+
+            data.volumetricLightingResult = volumetricLightingResult;
+            data.exposureBuffer = exposureBuffer;
         }
 
         // Before transparent post processing
         cameraMotionVectors.Render(motionVectors, cameraDepth);
-        ambientOcclusion.Render(camera, cameraDepth, cameraTarget, dynamicResolution.ScaleFactor, volumetricLightingTexture);
+        ambientOcclusion.Render(camera, cameraDepth, cameraTarget, dynamicResolution.ScaleFactor, volumetricLightingResult);
 
         // Copy scene texture
         var sceneTexture = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
@@ -327,7 +359,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.ReadTexture("_SceneTexture", sceneTexture);
             pass.ReadTexture("_CameraDepth", cameraDepth);
 
-            pass.ReadTexture("_VolumetricLighting", volumetricLightingTexture);
+            pass.ReadTexture("_VolumetricLighting", volumetricLightingResult.volumetricLighting);
 
             pass.ReadTexture("_LightClusterIndices", clusteredLightCullingResult.lightClusterIndices);
             pass.ReadBuffer("_LightClusterList", clusteredLightCullingResult.lightList);
@@ -353,14 +385,23 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
                 pass.SetInt(command, "_BlockerSamples", data.lightingSetupResult.blockerSamples);
                 pass.SetFloat(command, "_BlockerRadius", data.lightingSetupResult.blockerRadius);
                 pass.SetFloat(command, "_PcssSoftness", data.lightingSetupResult.pcssSoftness);
+
+                pass.SetFloat(command, "_NonLinearDepth", data.volumetricLightingResult.nonLinearDepth);
+                pass.SetFloat(command, "_VolumeWidth", data.volumetricLightingResult.volumeWidth);
+                pass.SetFloat(command, "_VolumeHeight", data.volumetricLightingResult.volumeHeight);
+                pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
+
+                pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
             });
 
             data.clusteredLightCullingResult = clusteredLightCullingResult;
             data.lightingSetupResult = lightingSetupResult;
+            data.volumetricLightingResult = volumetricLightingResult;
+            data.exposureBuffer = exposureBuffer;
         }
 
         // After transparent post processing
-        autoExposure.Render(cameraTarget, scaledWidth, scaledHeight);
+        autoExposure.Render(cameraTarget, scaledWidth, scaledHeight, camera);
 
         var dofResult = depthOfField.Render(scaledWidth, scaledHeight, camera.fieldOfView, cameraTarget, cameraDepth);
         var taa = temporalAA.Render(camera, dofResult, motionVectors, dynamicResolution.ScaleFactor);
@@ -425,9 +466,13 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
     {
         internal ClusteredLightCulling.Result clusteredLightCullingResult;
         internal LightingSetup.Result lightingSetupResult;
+        internal VolumetricLighting.Result volumetricLightingResult;
+        internal BufferHandle exposureBuffer;
     }
 
     private class SkyPassData
     {
+        internal VolumetricLighting.Result volumetricLightingResult;
+        internal BufferHandle exposureBuffer;
     }
 }
