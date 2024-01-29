@@ -339,7 +339,10 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.ReadTexture("", cameraTarget);
             pass.WriteTexture("", sceneTexture);
 
-            var data = pass.SetRenderFunction<Pass1Data>((command, context, pass, data) => { command.CopyTexture(data.cameraTarget, data.sceneTexture); });
+            var data = pass.SetRenderFunction<Pass1Data>((command, context, pass, data) => 
+            { 
+                command.CopyTexture(data.cameraTarget, 0, 0, 0, 0, data.cameraTarget.Width, data.cameraTarget.Height, data.sceneTexture, 0, 0, 0, 0); 
+            });
 
             data.cameraTarget = cameraTarget;
             data.sceneTexture = sceneTexture;
