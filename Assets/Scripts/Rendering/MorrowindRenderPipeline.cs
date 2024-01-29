@@ -198,7 +198,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
                 pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
 
-                pass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
+                pass.SetTexture(command, "_BlueNoise2D", data.blueNoise2D);
 
                 pass.SetVector(command, "_Jitter", data.jitter);
                 pass.SetVector(command, "_AmbientLightColor", data.ambientLightColor);
@@ -214,6 +214,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             data.ambientLightColor = ambientLightColor;
             data.aoEnabled = renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f;
             data.scaledResolution = scaledResolution;
+            data.blueNoise2D = blueNoise2D;
         }
 
         // Motion Vectors
@@ -258,7 +259,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
                 pass.SetConstantBuffer(command, "Exposure", data.objectPassData.exposureBuffer);
 
-                pass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
+                pass.SetTexture(command, "_BlueNoise2D", data.objectPassData.blueNoise2D);
 
                 pass.SetVector(command, "_Jitter", data.objectPassData.jitter);
                 pass.SetVector(command, "_AmbientLightColor", data.objectPassData.ambientLightColor);
@@ -278,6 +279,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             data.objectPassData.scaledResolution = scaledResolution;
             data.nonJitteredVpMatrix = camera.nonJitteredProjectionMatrix;
             data.previousVpMatrix = previousMatrix;
+            data.objectPassData.blueNoise2D = blueNoise2D;
         }
 
         // Sky clear color
@@ -334,6 +336,9 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var sceneTexture = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32);
         using (var pass = renderGraph.AddRenderPass<GlobalRenderPass>("Copy Scene Texture"))
         {
+            pass.ReadTexture("", cameraTarget);
+            pass.WriteTexture("", sceneTexture);
+
             var data = pass.SetRenderFunction<Pass1Data>((command, context, pass, data) => { command.CopyTexture(data.cameraTarget, data.sceneTexture); });
 
             data.cameraTarget = cameraTarget;
@@ -383,7 +388,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
                 pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
 
-                pass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
+                pass.SetTexture(command, "_BlueNoise2D", data.blueNoise2D);
 
                 pass.SetVector(command, "_Jitter", data.jitter);
                 pass.SetVector(command, "_AmbientLightColor", data.ambientLightColor);
@@ -399,6 +404,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             data.ambientLightColor = ambientLightColor;
             data.aoEnabled = renderPipelineAsset.AmbientOcclusionSettings.Strength > 0.0f ? 1.0f : 0.0f;
             data.scaledResolution = scaledResolution;
+            data.blueNoise2D = blueNoise2D;
         }
 
         // After transparent post processing
@@ -455,6 +461,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         internal Color ambientLightColor;
         internal float aoEnabled;
         internal Vector4 scaledResolution;
+        internal Texture2D blueNoise2D;
     }
 
     private class MotionVectorsPassData
