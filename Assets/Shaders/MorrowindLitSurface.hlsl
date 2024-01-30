@@ -99,7 +99,7 @@ FragmentOutput Fragment(FragmentInput input)
 	#endif
 	
 	#if !defined(UNITY_PASS_SHADOWCASTER) || defined(_ALPHATEST_ON) || defined(_ALPHABLEND_ON)
-		float4 color = _MainTex.Sample(_TrilinearRepeatAniso16Sampler, input.uv);
+		float4 color = _MainTex.SampleBias(_TrilinearRepeatAniso16Sampler, input.uv, _MipBias);
 	#endif
 	
 	#ifdef _ALPHATEST_ON

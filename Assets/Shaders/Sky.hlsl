@@ -32,8 +32,8 @@ FragmentInput Vertex(VertexInput input)
 
 float3 Fragment(FragmentInput input) : SV_Target
 {
-	float4 color = _MainTex.Sample(_LinearRepeatSampler, input.uv);
-	float4 fadeTex = _FadeTexture.Sample(_LinearRepeatSampler, input.uv);
+	float4 color = _MainTex.SampleBias(_LinearRepeatSampler, input.uv, _MipBias);
+	float4 fadeTex = _FadeTexture.SampleBias(_LinearRepeatSampler, input.uv, _MipBias);
 
 	// Fade between the two textures based on transition factor
 	color = lerp(color, fadeTex, _LerpFactor);

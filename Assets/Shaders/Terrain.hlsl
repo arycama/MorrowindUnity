@@ -69,10 +69,10 @@ float3 Fragment(FragmentInput input) : SV_Target
 	float4 terrainData = _Control.Gather(_PointClampSampler, UnjitterTextureUV(input.uv.xy)) * 255.0;
 	float4 weights = BilinearWeights(UnjitterTextureUV(input.uv.xy), _Control_TexelSize.zw);
 	
-	float3 color = _MainTex.Sample(_TrilinearRepeatAniso16Sampler, float3(UnjitterTextureUV(input.uv.zw), terrainData.x)) * weights.x;
-	color += _MainTex.Sample(_TrilinearRepeatAniso16Sampler, float3(UnjitterTextureUV(input.uv.zw), terrainData.y)) * weights.y;
-	color += _MainTex.Sample(_TrilinearRepeatAniso16Sampler, float3(UnjitterTextureUV(input.uv.zw), terrainData.z)) * weights.z;
-	color += _MainTex.Sample(_TrilinearRepeatAniso16Sampler, float3(UnjitterTextureUV(input.uv.zw), terrainData.w)) * weights.w;
+	float3 color = _MainTex.SampleBias(_TrilinearRepeatAniso16Sampler, float3(UnjitterTextureUV(input.uv.zw), terrainData.x), _MipBias) * weights.x;
+	color += _MainTex.SampleBias(_TrilinearRepeatAniso16Sampler, float3(UnjitterTextureUV(input.uv.zw), terrainData.y), _MipBias) * weights.y;
+	color += _MainTex.SampleBias(_TrilinearRepeatAniso16Sampler, float3(UnjitterTextureUV(input.uv.zw), terrainData.z), _MipBias) * weights.z;
+	color += _MainTex.SampleBias(_TrilinearRepeatAniso16Sampler, float3(UnjitterTextureUV(input.uv.zw), terrainData.w), _MipBias) * weights.w;
 	
 	float3 normal = normalize(input.normal);
 	float3 lighting = GetLighting(normal, input.worldPosition, input.position.xy, input.position.w, color, 0.0, 1.0);

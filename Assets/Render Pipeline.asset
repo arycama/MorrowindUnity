@@ -109,11 +109,11 @@ MonoBehaviour:
     blurSigma: 1
     nonLinearDepth: 0
   depthOfFieldSettings:
-    sampleRadius: 2
-    sampleCount: 8
+    sampleRadius: 1.5
+    sampleCount: 12
   dynamicResolutionSettings:
     targetFrameRate: 60
-    minScaleFactor: 1
+    minScaleFactor: 0.5
     maxScaleFactor: 1
     damping: 0.05
   autoExposureSettings:
@@ -195,6 +195,6 @@ MonoBehaviour:
   lensSettings:
     aperture: 2
     shutterSpeed: 120
-    iso: 611111
+    iso: 60000
     sensorSize: 1727.3789
     focalDistance: 4
