@@ -1,10 +1,11 @@
+using System;
+using System.Collections.Generic;
+using Arycama.CustomRenderPipeline;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
-using Arycama.CustomRenderPipeline;
-using UnityEngine.Experimental.Rendering;
 using CommandBufferPool = Arycama.CustomRenderPipeline.CommandBufferPool;
-using System.Collections.Generic;
 
 public class MorrowindRenderPipeline : CustomRenderPipeline
 {
@@ -170,49 +171,14 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.Initialize("SRPDefaultUnlit", context, cullingResults, camera, RenderQueueRange.opaque, SortingCriteria.CommonOpaque, PerObjectData.None, true);
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store);
-            pass.ReadTexture("_VolumetricLighting", volumetricLightingResult.volumetricLighting);
 
-            pass.ReadTexture("_LightClusterIndices", clusteredLightCullingResult.lightClusterIndices);
-            pass.ReadBuffer("_LightClusterList", clusteredLightCullingResult.lightList);
-
-            pass.ReadTexture("_DirectionalShadows", lightingSetupResult.directionalShadows);
-            pass.ReadTexture("_PointShadows", lightingSetupResult.pointShadows);
-            pass.ReadBuffer("_DirectionalMatrices", lightingSetupResult.directionalMatrices);
-            pass.ReadBuffer("_DirectionalLights", lightingSetupResult.directionalLights);
-            pass.ReadBuffer("_PointLights", lightingSetupResult.pointLights);
-            pass.ReadBuffer("_DirectionalShadowTexelSizes", lightingSetupResult.directionalShadowTexelSizes);
+            volumetricLightingResult.SetInputs(pass);
+            clusteredLightCullingResult.SetInputs(pass);
+            lightingSetupResult.SetInputs(pass);
 
             var data = pass.SetRenderFunction<ObjectPassData>((command, context, pass, data) =>
             {
-                pass.SetFloat(command, "_ClusterScale", data.clusteredLightCullingResult.clusterScale);
-                pass.SetFloat(command, "_ClusterBias", data.clusteredLightCullingResult.clusterBias);
-                pass.SetInt(command, "_TileSize", data.clusteredLightCullingResult.tileSize);
-
-                pass.SetInt(command, "_DirectionalLightCount", data.lightingSetupResult.directionalLightCount);
-                pass.SetInt(command, "_PointLightCount", data.lightingSetupResult.pointLightCount);
-
-                pass.SetInt(command, "_PcfSamples", data.lightingSetupResult.pcfSamples);
-                pass.SetFloat(command, "_PcfRadius", data.lightingSetupResult.pcfRadius);
-                pass.SetInt(command, "_BlockerSamples", data.lightingSetupResult.blockerSamples);
-                pass.SetFloat(command, "_BlockerRadius", data.lightingSetupResult.blockerRadius);
-                pass.SetFloat(command, "_PcssSoftness", data.lightingSetupResult.pcssSoftness);
-
-                pass.SetFloat(command, "_NonLinearDepth", data.volumetricLightingResult.nonLinearDepth);
-                pass.SetFloat(command, "_VolumeWidth", data.volumetricLightingResult.volumeWidth);
-                pass.SetFloat(command, "_VolumeHeight", data.volumetricLightingResult.volumeHeight);
-                pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
-
-                pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
-
-                pass.SetTexture(command, "_BlueNoise2D", data.blueNoise2D);
-
-                pass.SetVector(command, "_Jitter", data.jitter);
-                pass.SetVector(command, "_AmbientLightColor", data.ambientLightColor);
-                pass.SetFloat(command, "_AoEnabled", data.aoEnabled);
-                pass.SetVector(command, "_ScaledResolution", data.scaledResolution);
-
-                pass.SetFloat(command, "_ClusterBias", data.clusteredLightCullingResult.clusterBias);
-                pass.SetFloat(command, "_MipBias", data.mipBias);
+                data.SetProperties(pass, command);
             });
 
             data.clusteredLightCullingResult = clusteredLightCullingResult;
@@ -235,37 +201,17 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
             pass.WriteTexture("", motionVectors, RenderBufferLoadAction.Clear, RenderBufferStoreAction.Store, Color.clear);
-            pass.ReadTexture("_VolumetricLighting", volumetricLightingResult.volumetricLighting);
 
-            pass.ReadTexture("_LightClusterIndices", clusteredLightCullingResult.lightClusterIndices);
-            pass.ReadBuffer("_LightClusterList", clusteredLightCullingResult.lightList);
-
-            pass.ReadTexture("_DirectionalShadows", lightingSetupResult.directionalShadows);
-            pass.ReadTexture("_PointShadows", lightingSetupResult.pointShadows);
-            pass.ReadBuffer("_DirectionalMatrices", lightingSetupResult.directionalMatrices);
-            pass.ReadBuffer("_DirectionalLights", lightingSetupResult.directionalLights);
-            pass.ReadBuffer("_PointLights", lightingSetupResult.pointLights);
-            pass.ReadBuffer("_DirectionalShadowTexelSizes", lightingSetupResult.directionalShadowTexelSizes);
+            volumetricLightingResult.SetInputs(pass);
+            clusteredLightCullingResult.SetInputs(pass);
+            lightingSetupResult.SetInputs(pass);
 
             var data = pass.SetRenderFunction<MotionVectorsPassData>((command, context, pass, data) =>
             {
-                pass.SetFloat(command, "_ClusterScale", data.objectPassData.clusteredLightCullingResult.clusterScale);
-                pass.SetFloat(command, "_ClusterBias", data.objectPassData.clusteredLightCullingResult.clusterBias);
-                pass.SetInt(command, "_TileSize", data.objectPassData.clusteredLightCullingResult.tileSize);
+                data.objectPassData.clusteredLightCullingResult.SetProperties(pass, command);
+                data.objectPassData.lightingSetupResult.SetProperties(pass, command);
 
-                pass.SetInt(command, "_DirectionalLightCount", data.objectPassData.lightingSetupResult.directionalLightCount);
-                pass.SetInt(command, "_PointLightCount", data.objectPassData.lightingSetupResult.pointLightCount);
-
-                pass.SetInt(command, "_PcfSamples", data.objectPassData.lightingSetupResult.pcfSamples);
-                pass.SetFloat(command, "_PcfRadius", data.objectPassData.lightingSetupResult.pcfRadius);
-                pass.SetInt(command, "_BlockerSamples", data.objectPassData.lightingSetupResult.blockerSamples);
-                pass.SetFloat(command, "_BlockerRadius", data.objectPassData.lightingSetupResult.blockerRadius);
-                pass.SetFloat(command, "_PcssSoftness", data.objectPassData.lightingSetupResult.pcssSoftness);
-
-                pass.SetFloat(command, "_NonLinearDepth", data.objectPassData.volumetricLightingResult.nonLinearDepth);
-                pass.SetFloat(command, "_VolumeWidth", data.objectPassData.volumetricLightingResult.volumeWidth);
-                pass.SetFloat(command, "_VolumeHeight", data.objectPassData.volumetricLightingResult.volumeHeight);
-                pass.SetFloat(command, "_VolumeSlices", data.objectPassData.volumetricLightingResult.volumeSlices);
+                data.objectPassData.volumetricLightingResult.SetProperties(pass, command);
 
                 pass.SetConstantBuffer(command, "Exposure", data.objectPassData.exposureBuffer);
 
@@ -275,9 +221,10 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
                 pass.SetVector(command, "_AmbientLightColor", data.objectPassData.ambientLightColor);
                 pass.SetFloat(command, "_AoEnabled", data.objectPassData.aoEnabled);
                 pass.SetVector(command, "_ScaledResolution", data.objectPassData.scaledResolution);
+                pass.SetFloat(command, "_MipBias", data.objectPassData.mipBias);
+
                 pass.SetMatrix(command, "_NonJitteredVPMatrix", data.nonJitteredVpMatrix);
                 pass.SetMatrix(command, "_PreviousVPMatrix", data.previousVpMatrix);
-                pass.SetFloat(command, "_MipBias", data.objectPassData.mipBias);
             });
 
             data.objectPassData.clusteredLightCullingResult = clusteredLightCullingResult;
@@ -301,14 +248,12 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.Index = 0;
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            pass.ReadTexture("_VolumetricLighting", volumetricLightingResult.volumetricLighting);
+
+            volumetricLightingResult.SetInputs(pass);
 
             var data = pass.SetRenderFunction<SkyPassData>((command, context, pass, data) =>
             {
-                pass.SetFloat(command, "_NonLinearDepth", data.volumetricLightingResult.nonLinearDepth);
-                pass.SetFloat(command, "_VolumeWidth", data.volumetricLightingResult.volumeWidth);
-                pass.SetFloat(command, "_VolumeHeight", data.volumetricLightingResult.volumeHeight);
-                pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
+                data.volumetricLightingResult.SetProperties(pass, command);
                 pass.SetVector(command, "_ScaledResolution", data.scaledResolution);
             });
 
@@ -322,15 +267,12 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.Initialize("Sky", context, cullingResults, camera, RenderQueueRange.all);
             pass.WriteDepth("", cameraDepth, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store, 1.0f, RenderTargetFlags.ReadOnlyDepth);
             pass.WriteTexture("", cameraTarget, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
-            pass.ReadTexture("_VolumetricLighting", volumetricLightingResult.volumetricLighting);
+
+            volumetricLightingResult.SetInputs(pass);
 
             var data = pass.SetRenderFunction<SkyPassData>((command, context, pass, data) =>
             {
-                pass.SetFloat(command, "_NonLinearDepth", data.volumetricLightingResult.nonLinearDepth);
-                pass.SetFloat(command, "_VolumeWidth", data.volumetricLightingResult.volumeWidth);
-                pass.SetFloat(command, "_VolumeHeight", data.volumetricLightingResult.volumeHeight);
-                pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
-
+                data.volumetricLightingResult.SetProperties(pass, command);
                 pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
                 pass.SetVector(command, "_ScaledResolution", data.scaledResolution);
             });
@@ -369,47 +311,13 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.ReadTexture("_SceneTexture", sceneTexture);
             pass.ReadTexture("_CameraDepth", cameraDepth);
 
-            pass.ReadTexture("_VolumetricLighting", volumetricLightingResult.volumetricLighting);
-
-            pass.ReadTexture("_LightClusterIndices", clusteredLightCullingResult.lightClusterIndices);
-            pass.ReadBuffer("_LightClusterList", clusteredLightCullingResult.lightList);
-
-            pass.ReadTexture("_DirectionalShadows", lightingSetupResult.directionalShadows);
-            pass.ReadTexture("_PointShadows", lightingSetupResult.pointShadows);
-            pass.ReadBuffer("_DirectionalMatrices", lightingSetupResult.directionalMatrices);
-            pass.ReadBuffer("_DirectionalLights", lightingSetupResult.directionalLights);
-            pass.ReadBuffer("_PointLights", lightingSetupResult.pointLights);
-            pass.ReadBuffer("_DirectionalShadowTexelSizes", lightingSetupResult.directionalShadowTexelSizes);
+            volumetricLightingResult.SetInputs(pass);
+            clusteredLightCullingResult.SetInputs(pass);
+            lightingSetupResult.SetInputs(pass);
 
             var data = pass.SetRenderFunction<ObjectPassData>((command, context, pass, data) =>
             {
-                pass.SetFloat(command, "_ClusterScale", data.clusteredLightCullingResult.clusterScale);
-                pass.SetFloat(command, "_ClusterBias", data.clusteredLightCullingResult.clusterBias);
-                pass.SetInt(command, "_TileSize", data.clusteredLightCullingResult.tileSize);
-
-                pass.SetInt(command, "_DirectionalLightCount", data.lightingSetupResult.directionalLightCount);
-                pass.SetInt(command, "_PointLightCount", data.lightingSetupResult.pointLightCount);
-
-                pass.SetInt(command, "_PcfSamples", data.lightingSetupResult.pcfSamples);
-                pass.SetFloat(command, "_PcfRadius", data.lightingSetupResult.pcfRadius);
-                pass.SetInt(command, "_BlockerSamples", data.lightingSetupResult.blockerSamples);
-                pass.SetFloat(command, "_BlockerRadius", data.lightingSetupResult.blockerRadius);
-                pass.SetFloat(command, "_PcssSoftness", data.lightingSetupResult.pcssSoftness);
-
-                pass.SetFloat(command, "_NonLinearDepth", data.volumetricLightingResult.nonLinearDepth);
-                pass.SetFloat(command, "_VolumeWidth", data.volumetricLightingResult.volumeWidth);
-                pass.SetFloat(command, "_VolumeHeight", data.volumetricLightingResult.volumeHeight);
-                pass.SetFloat(command, "_VolumeSlices", data.volumetricLightingResult.volumeSlices);
-
-                pass.SetConstantBuffer(command, "Exposure", data.exposureBuffer);
-
-                pass.SetTexture(command, "_BlueNoise2D", data.blueNoise2D);
-
-                pass.SetVector(command, "_Jitter", data.jitter);
-                pass.SetVector(command, "_AmbientLightColor", data.ambientLightColor);
-                pass.SetFloat(command, "_AoEnabled", data.aoEnabled);
-                pass.SetVector(command, "_ScaledResolution", data.scaledResolution);
-                pass.SetFloat(command, "_MipBias", data.mipBias);
+                data.SetProperties(pass, command);
             });
 
             data.clusteredLightCullingResult = clusteredLightCullingResult;
@@ -470,16 +378,33 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
     private class ObjectPassData
     {
-        internal ClusteredLightCulling.Result clusteredLightCullingResult;
-        internal LightingSetup.Result lightingSetupResult;
-        internal VolumetricLighting.Result volumetricLightingResult;
-        internal BufferHandle exposureBuffer;
-        internal Vector2 jitter;
-        internal Color ambientLightColor;
-        internal float aoEnabled;
-        internal Vector4 scaledResolution;
-        internal Texture2D blueNoise2D;
-        internal float mipBias;
+        public ClusteredLightCulling.Result clusteredLightCullingResult;
+        public LightingSetup.Result lightingSetupResult;
+        public VolumetricLighting.Result volumetricLightingResult;
+        public BufferHandle exposureBuffer;
+        public Vector2 jitter;
+        public Color ambientLightColor;
+        public float aoEnabled;
+        public Vector4 scaledResolution;
+        public Texture2D blueNoise2D;
+        public float mipBias;
+
+        public void SetProperties(RenderPass pass, CommandBuffer command)
+        {
+            pass.SetConstantBuffer(command, "Exposure", exposureBuffer);
+
+            pass.SetTexture(command, "_BlueNoise2D", blueNoise2D);
+
+            pass.SetVector(command, "_Jitter", jitter);
+            pass.SetVector(command, "_AmbientLightColor", ambientLightColor);
+            pass.SetVector(command, "_ScaledResolution", scaledResolution);
+            pass.SetFloat(command, "_AoEnabled", aoEnabled);
+            pass.SetFloat(command, "_MipBias", mipBias);
+
+            clusteredLightCullingResult.SetProperties(pass, command);
+            lightingSetupResult.SetProperties(pass, command);
+            volumetricLightingResult.SetProperties(pass, command);
+        }
     }
 
     private class MotionVectorsPassData
