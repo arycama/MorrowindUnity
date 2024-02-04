@@ -17,6 +17,8 @@ Texture2D<float3> _SceneTexture;
 Texture2D<float> _DepthTexture;
 Texture2D _MainTex, _EmissionMap;
 
+matrix unity_MatrixV;
+
 cbuffer UnityPerMaterial
 {
 	float4 _MainTex_ST;
@@ -35,21 +37,18 @@ FragmentInput Vertex(VertexInput input)
 
 float3 Fragment(FragmentInput input) : SV_Target
 {
-	float3 positionWS = input.worldPosition;
-	float linearWaterDepth = input.position.w;
-
-	float underwaterDepth = LinearEyeDepth(_CameraDepth[input.position.xy], _ZBufferParams);
-	float underwaterDistance = underwaterDepth - linearWaterDepth;
+	float underwaterDepth = LinearEyeDepth(_CameraDepth[input.position.xy]);
+	float underwaterDistance = underwaterDepth - input.position.w;
 	
 	// Clamp underwater depth if sampling a non-underwater pixel
 	//if (underwaterDistance <= 0.0)
 	//{
 	//	underwaterDepth = _CameraDepth[input.position.xy];
-	//	underwaterDistance = max(0.0, LinearEyeDepth(underwaterDepth, _ZBufferParams) - linearWaterDepth);
+	//	underwaterDistance = max(0.0, LinearEyeDepth(underwaterDepth) - input.position.w);
 	//}
 	
-	float3 V = normalize(positionWS - _WorldSpaceCameraPos);
-	underwaterDistance /= dot(V, -unity_MatrixV._m20_m21_m22);
+	float3 V = normalize(input.worldPosition - _WorldSpaceCameraPos);
+	//underwaterDistance /= dot(V, _ViewToWorld._m02_m12_m22 * float3(-1, 1, -1));
 	
 	float2 noise = _BlueNoise2D[input.position.xy % 128];
 	float3 channelMask = floor(noise.y * 3.0) == float3(0.0, 1.0, 2.0);
