@@ -38,7 +38,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 	float3 positionWS = input.worldPosition;
 	float linearWaterDepth = input.position.w;
 
-	float underwaterDepth = LinearEyeDepth(_CameraDepth[input.position.xy], _ZBufferParams);
+	float underwaterDepth = LinearEyeDepth(_CameraDepth[input.position.xy]);
 	float underwaterDistance = underwaterDepth - linearWaterDepth;
 	
 	// Clamp underwater depth if sampling a non-underwater pixel
@@ -48,7 +48,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 	//	underwaterDistance = max(0.0, LinearEyeDepth(underwaterDepth, _ZBufferParams) - linearWaterDepth);
 	//}
 	
-	float3 V = normalize(positionWS - _WorldSpaceCameraPos);
+	float3 V = normalize(positionWS - _ViewPosition);
 	underwaterDistance /= dot(V, -_WorldToView._m20_m21_m22);
 	
 	float2 noise = _BlueNoise2D[input.position.xy % 128];

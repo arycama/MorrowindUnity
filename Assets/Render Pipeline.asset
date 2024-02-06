@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 05bf43dfe18873a45a11eabb90c6ccee, type: 3}
   m_Name: Render Pipeline
   m_EditorClassIdentifier: 
-  enableSrpBatcher: 0
+  enableSrpBatcher: 1
   defaultMaterials:
     defaultMaterial: {fileID: 0}
     defaultUIMaterial: {fileID: 0}
@@ -97,7 +97,7 @@ MonoBehaviour:
     strength: 0.1875
     maxMips: 6
   ambientOcclusionSettings:
-    strength: 1
+    strength: 2
     tint: {r: 0.15, g: 0.15, b: 0.15, a: 1}
     radius: 128
     falloff: 0.75

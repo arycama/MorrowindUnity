@@ -14,7 +14,7 @@ public class CharacterMovement : MonoBehaviour
 {
     [SerializeField] private float movementSpeed;
     [SerializeField] private float strafeSpeed = 0.75f;
-    [SerializeField] private float rotateSpeed = 3;
+    [SerializeField] private float rotateSpeed = 0.5f;
     [SerializeField] private float jumpHeight = 250;
     [SerializeField] private LayerMask layerMask = ~0;
     [SerializeField] private float groundedThreshold = 10f;

@@ -8,5 +8,5 @@ float4 Vertex(uint id : SV_VertexID) : SV_Position
 
 float3 Fragment(float4 position : SV_Position) : SV_Target
 {
-	return SampleVolumetricLighting(position.xy, _ProjectionParams.z);
+	return SampleVolumetricLighting(position.xy, _Far);
 }
