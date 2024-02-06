@@ -26,7 +26,7 @@ FragmentInput Vertex(VertexInput input)
 {
 	FragmentInput output;
 	output.position = ObjectToClip(input.position, input.instanceID);
-	output.uv = ApplyScaleOffset(input.uv, _MainTex_ST) + _CloudSpeed * _Time * 0.003;
+	output.uv = ApplyScaleOffset(input.uv, _MainTex_ST) + _CloudSpeed * _Time.y * 0.003;
 	return output;
 }
 
