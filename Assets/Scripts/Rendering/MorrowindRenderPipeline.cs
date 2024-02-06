@@ -33,6 +33,8 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
     private readonly RenderGraph renderGraph = new();
 
+    private Dictionary<Camera, (Vector3, Quaternion)> previousCameraTransform = new();
+
     public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset)
     {
         this.renderPipelineAsset = renderPipelineAsset;
@@ -128,12 +130,16 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         temporalAA.OnPreRender();
 
+        if(!previousCameraTransform.TryGetValue(camera, out var previousTransform))
+            previousTransform = (camera.transform.position, camera.transform.rotation);
+        previousCameraTransform[camera] = (camera.transform.position, camera.transform.rotation);
+
         var scaledWidth = (int)(camera.pixelWidth * dynamicResolution.ScaleFactor);
         var scaledHeight = (int)(camera.pixelHeight * dynamicResolution.ScaleFactor);
 
         var worldToPreviousNonJitteredClip = camera.nonJitteredProjectionMatrix;
-        var viewToWorld = camera.transform.localToWorldMatrix;
-        var worldToView = camera.transform.worldToLocalMatrix;
+        var viewToWorld = Matrix4x4.Rotate(camera.transform.rotation);
+        var worldToView = Matrix4x4.Rotate(Quaternion.Inverse(camera.transform.rotation));
 
         var cotangent = 1.0f / Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f);
         var viewToNonJitteredClip = new Matrix4x4
@@ -145,48 +151,20 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             m32 = 1.0f
         };
 
-        var viewToClip = new Matrix4x4
-        {
-            m00 = cotangent / camera.aspect,
-            m02 = 2.0f * temporalAA.Jitter.x / scaledWidth,
-            m11 = cotangent,
-            m12 = 2.0f * temporalAA.Jitter.y / scaledHeight,
-            m22 = -camera.nearClipPlane / (camera.farClipPlane - camera.nearClipPlane),
-            m23 = camera.farClipPlane * camera.nearClipPlane / (camera.farClipPlane - camera.nearClipPlane),
-            m32 = 1.0f
-        };
+        var viewToClip = viewToNonJitteredClip;
+        viewToClip.m02 = 2.0f * temporalAA.Jitter.x / scaledWidth;
+        viewToClip.m12 = 2.0f * temporalAA.Jitter.y / scaledHeight;
+
+        var viewToFlippedClip = viewToClip;
+        viewToFlippedClip.m11 = -viewToFlippedClip.m11;
+        viewToFlippedClip.m02 = -viewToFlippedClip.m02;
 
         var worldToNonJitteredClip = viewToNonJitteredClip * worldToView;
-
-        // Almost same as view to clip, except 02 and 11 are inverted..
-        var gpuProjectionMatrix = new Matrix4x4
-        {
-            m00 = cotangent / camera.aspect,
-            m02 = -2.0f * temporalAA.Jitter.x / scaledWidth,
-            m11 = -cotangent,
-            m12 = 2.0f * temporalAA.Jitter.y / scaledHeight,
-            m22 = -camera.nearClipPlane / (camera.farClipPlane - camera.nearClipPlane),
-            m23 = camera.farClipPlane * camera.nearClipPlane / (camera.farClipPlane - camera.nearClipPlane),
-            m32 = 1.0f
-        };
-
-        var worldToClip = gpuProjectionMatrix * worldToView;
-        var clipToWorld = (viewToClip * worldToView).inverse;
-
         camera.nonJitteredProjectionMatrix = worldToNonJitteredClip;
 
-        var projectionMatrix = new Matrix4x4
-        {
-            m00 = cotangent / camera.aspect,
-            m02 = 2.0f * temporalAA.Jitter.x / scaledWidth,
-            m11 = cotangent,
-            m12 = 2.0f * temporalAA.Jitter.y / scaledHeight,
-            m22 = (camera.farClipPlane + camera.nearClipPlane) / (camera.nearClipPlane - camera.farClipPlane),
-            m23 = 2.0f * camera.nearClipPlane * camera.farClipPlane / (camera.nearClipPlane - camera.farClipPlane),
-            m32 = -1.0f
-        };
+        var worldToFlippedClip = viewToFlippedClip * worldToView;
+        var clipToWorld = (viewToClip * worldToView).inverse;
 
-        camera.projectionMatrix = projectionMatrix;
         if (!camera.TryGetCullingParameters(out var cullingParameters))
             return;
 
@@ -199,7 +177,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         cullingParameters.cullingOptions = CullingOptions.NeedsLighting | CullingOptions.DisablePerObjectCulling | CullingOptions.ShadowCasters;
         var cullingResults = context.Cull(ref cullingParameters);
 
-        var lightingSetupResult = lightingSetup.Render(cullingResults, clipToWorld, camera.nearClipPlane, camera.farClipPlane, camera);
+        var lightingSetupResult = lightingSetup.Render(cullingResults, (viewToClip * camera.transform.worldToLocalMatrix).inverse, camera.nearClipPlane, camera.farClipPlane, camera);
 
         // Camera setup
         var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds.GetString(Time.renderedFrameCount % 64));
@@ -219,10 +197,12 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             time = Time.time,
             near = camera.nearClipPlane,
             far = camera.farClipPlane,
-            worldToClip = worldToClip,
+            worldToClip = worldToFlippedClip,
             worldToView = worldToView,
             viewToWorld = viewToWorld,
-            cameraPosition = camera.transform.position
+            cameraPosition = camera.transform.position,
+            previousCameraPosition = previousTransform.Item1,
+            cameraForward = camera.transform.forward,
         };
 
         var mipBias = Mathf.Log(dynamicResolution.ScaleFactor, 2.0f);
@@ -441,6 +421,8 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             pass.SetMatrix(command, "_ViewToWorld", data.viewToWorld);
 
             pass.SetVector(command, "_ViewPosition", data.cameraPosition);
+            pass.SetVector(command, "_PreviousViewPosition", data.previousCameraPosition);
+            pass.SetVector(command, "_CameraForward", data.cameraForward);
 
             clusteredLightCullingResult.SetProperties(pass, command);
             lightingSetupResult.SetProperties(pass, command);
@@ -464,6 +446,8 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         internal Matrix4x4 worldToView;
         internal Matrix4x4 viewToWorld;
         internal Vector3 cameraPosition;
+        internal Vector3 cameraForward;
+        internal Vector3 previousCameraPosition;
     }
 
     private class MotionVectorsPassData

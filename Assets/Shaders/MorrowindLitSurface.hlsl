@@ -86,7 +86,7 @@ FragmentInput Vertex(VertexInput input)
 	
 	#ifdef MOTION_VECTORS_ON
 		output.nonJitteredPositionCS = WorldToClipNonJittered(worldPosition);
-		output.previousPositionCS = WorldToClipPrevious(MultiplyPoint3x4(unity_MatrixPreviousM, unity_MotionVectorsParams.x ? input.previousPosition : input.position));
+		output.previousPositionCS = WorldToClipPrevious(PreviousObjectToWorld(unity_MotionVectorsParams.x ? input.previousPosition : input.position));
 	#endif
 	
 	return output;

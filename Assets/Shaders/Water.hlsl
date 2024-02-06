@@ -48,8 +48,8 @@ float3 Fragment(FragmentInput input) : SV_Target
 	//	underwaterDistance = max(0.0, LinearEyeDepth(underwaterDepth, _ZBufferParams) - linearWaterDepth);
 	//}
 	
-	float3 V = normalize(positionWS - _ViewPosition);
-	underwaterDistance /= dot(V, _WorldToView._m20_m21_m22);
+	float3 V = normalize(-positionWS);
+	underwaterDistance /= dot(V, -_CameraForward);
 	
 	float2 noise = _BlueNoise2D[input.position.xy % 128];
 	float3 channelMask = floor(noise.y * 3.0) == float3(0.0, 1.0, 2.0);
@@ -58,7 +58,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 	float t = -log(1.0 - xi * (1.0 - exp(-dot(_Extinction, channelMask) * underwaterDistance))) / dot(_Extinction, channelMask);
 	float3 tr = exp(_Extinction * t) / _Extinction - rcp(_Extinction * exp(_Extinction * (underwaterDistance - t)));
 	float weight = rcp(dot(rcp(tr), 1.0 / 3.0));
-	float3 P = input.worldPosition + V * t;
+	float3 P = input.worldPosition - V * t;
 	
 	float3 luminance = 0.0;
 	
