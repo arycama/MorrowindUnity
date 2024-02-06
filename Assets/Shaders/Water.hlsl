@@ -49,7 +49,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 	//}
 	
 	float3 V = normalize(positionWS - _ViewPosition);
-	underwaterDistance /= dot(V, -_WorldToView._m20_m21_m22);
+	underwaterDistance /= dot(V, _WorldToView._m20_m21_m22);
 	
 	float2 noise = _BlueNoise2D[input.position.xy % 128];
 	float3 channelMask = floor(noise.y * 3.0) == float3(0.0, 1.0, 2.0);
