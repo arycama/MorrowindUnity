@@ -131,27 +131,20 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var scaledWidth = (int)(camera.pixelWidth * dynamicResolution.ScaleFactor);
         var scaledHeight = (int)(camera.pixelHeight * dynamicResolution.ScaleFactor);
 
-        var worldToView = camera.transform.worldToLocalMatrix;
         var previousMatrix = camera.nonJitteredProjectionMatrix;
-        var cotangent = 1.0f / Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f);
 
-        var cullingViewToClip = new Matrix4x4
-        {
-            m00 = cotangent / camera.aspect,
-            m02 = 2.0f * temporalAA.Jitter.x / scaledWidth,
-            m11 = cotangent,
-             m12 = 2.0f * temporalAA.Jitter.y / scaledHeight,
-            m22 = (camera.farClipPlane + camera.nearClipPlane) / (camera.nearClipPlane - camera.farClipPlane),
-            m23 = 2.0f * camera.nearClipPlane * camera.farClipPlane / (camera.nearClipPlane - camera.farClipPlane),
-            m32 = -1.0f
-        };
+        camera.ResetProjectionMatrix();
+        camera.nonJitteredProjectionMatrix = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix;
 
-        camera.projectionMatrix = cullingViewToClip;
+        var projectionMatrix = camera.projectionMatrix;
+        projectionMatrix[0, 2] = 2.0f * temporalAA.Jitter.x / scaledWidth;
+        projectionMatrix[1, 2] = 2.0f * temporalAA.Jitter.y / scaledHeight;
+        camera.projectionMatrix = projectionMatrix;
 
-        // Um
-        cullingViewToClip.m11 = -cullingViewToClip.m11;
-
-        camera.nonJitteredProjectionMatrix = cullingViewToClip;
+        var worldToClip = GL.GetGPUProjectionMatrix(camera.projectionMatrix, true) * camera.worldToCameraMatrix;
+        var worldToView = camera.worldToCameraMatrix;
+        var viewToWorld = camera.cameraToWorldMatrix;
+        var clipToWorld = (GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix).inverse;
 
         if (!camera.TryGetCullingParameters(out var cullingParameters))
             return;
@@ -172,23 +165,6 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds.GetString(Time.renderedFrameCount % 64));
         var scaledResolution = new Vector4(scaledWidth, scaledHeight, 1.0f / scaledWidth, 1.0f / scaledHeight);
         var exposureBuffer = autoExposure.OnPreRender(camera);
-
-        var nonJitteredViewToClip = new Matrix4x4
-        {
-            m00 = cotangent / camera.aspect,
-            m11 = -cotangent,
-            m22 = -camera.nearClipPlane / (camera.farClipPlane - camera.nearClipPlane),
-            m23 = camera.farClipPlane * camera.nearClipPlane / (camera.farClipPlane - camera.nearClipPlane),
-            m32 = 1.0f
-        };
-
-        var viewToWorld = camera.transform.localToWorldMatrix;
-        var viewToClip = nonJitteredViewToClip;
-        viewToClip.m02 = 2.0f * temporalAA.Jitter.x / scaledWidth;
-        viewToClip.m12 = 2.0f * temporalAA.Jitter.y / scaledHeight;
-
-        var worldToClip = viewToClip * worldToView;
-        var clipToWorld = worldToClip.inverse;
 
         var objectPassData = new ObjectPassData
         {
