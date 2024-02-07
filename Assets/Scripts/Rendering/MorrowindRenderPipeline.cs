@@ -33,7 +33,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
     private readonly RenderGraph renderGraph = new();
 
-    private Dictionary<Camera, (Vector3, Quaternion)> previousCameraTransform = new();
+    private Dictionary<Camera, (Vector3, Quaternion, Matrix4x4)> previousCameraTransform = new();
 
     public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset)
     {
@@ -130,14 +130,9 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
 
         temporalAA.OnPreRender();
 
-        if(!previousCameraTransform.TryGetValue(camera, out var previousTransform))
-            previousTransform = (camera.transform.position, camera.transform.rotation);
-        previousCameraTransform[camera] = (camera.transform.position, camera.transform.rotation);
-
         var scaledWidth = (int)(camera.pixelWidth * dynamicResolution.ScaleFactor);
         var scaledHeight = (int)(camera.pixelHeight * dynamicResolution.ScaleFactor);
 
-        var worldToPreviousNonJitteredClip = camera.nonJitteredProjectionMatrix;
         var viewToWorld = Matrix4x4.Rotate(camera.transform.rotation);
         var worldToView = Matrix4x4.Rotate(Quaternion.Inverse(camera.transform.rotation));
 
@@ -160,7 +155,14 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         viewToFlippedClip.m02 = -viewToFlippedClip.m02;
 
         var worldToNonJitteredClip = viewToNonJitteredClip * worldToView;
-        camera.nonJitteredProjectionMatrix = worldToNonJitteredClip;
+
+        if (!previousCameraTransform.TryGetValue(camera, out var previousTransform))
+            previousTransform = (camera.transform.position, camera.transform.rotation, viewToNonJitteredClip);
+        previousCameraTransform[camera] = (camera.transform.position, camera.transform.rotation, viewToNonJitteredClip);
+
+        var viewToPreviousClip = previousTransform.Item3;
+        var worldToPreviousView = Matrix4x4.TRS(previousTransform.Item1 - camera.transform.position, previousTransform.Item2, Vector3.one).inverse;
+        var worldToPreviousClip = viewToPreviousClip * worldToPreviousView;
 
         var worldToFlippedClip = viewToFlippedClip * worldToView;
         var clipToWorld = (viewToClip * worldToView).inverse;
@@ -209,7 +211,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         var ambientLightColor = RenderSettings.ambientLight.linear;
 
         var clusteredLightCullingResult = clusteredLightCulling.Render(scaledWidth, scaledHeight, camera.nearClipPlane, camera.farClipPlane, lightingSetupResult, clipToWorld);
-        var volumetricLightingResult = volumetricLighting.Render(scaledWidth, scaledHeight, camera.farClipPlane, camera, clusteredLightCullingResult, lightingSetupResult, exposureBuffer, blueNoise1D, blueNoise2D, ambientLightColor, RenderSettings.fogColor.linear, RenderSettings.fogStartDistance, RenderSettings.fogEndDistance, RenderSettings.fogDensity, RenderSettings.fog ? (float)RenderSettings.fogMode : 0.0f, worldToPreviousNonJitteredClip, clipToWorld);
+        var volumetricLightingResult = volumetricLighting.Render(scaledWidth, scaledHeight, camera.farClipPlane, camera, clusteredLightCullingResult, lightingSetupResult, exposureBuffer, blueNoise1D, blueNoise2D, ambientLightColor, RenderSettings.fogColor.linear, RenderSettings.fogStartDistance, RenderSettings.fogEndDistance, RenderSettings.fogDensity, RenderSettings.fog ? (float)RenderSettings.fogMode : 0.0f, worldToPreviousClip, clipToWorld);
 
         // Opaque
         var cameraTarget = renderGraph.GetTexture(scaledWidth, scaledHeight, GraphicsFormat.B10G11R11_UFloatPack32, isScreenTexture: true);
@@ -261,7 +263,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
             data.objectPassData.volumetricLightingResult = volumetricLightingResult;
             data.objectPassData.data = objectPassData;
             data.nonJitteredVpMatrix = worldToNonJitteredClip;
-            data.previousVpMatrix = worldToPreviousNonJitteredClip;
+            data.previousVpMatrix = worldToPreviousClip;
         }
 
         // Sky clear color
@@ -306,7 +308,7 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         }
 
         // Before transparent post processing
-        cameraMotionVectors.Render(motionVectors, cameraDepth, scaledWidth, scaledHeight, worldToNonJitteredClip, worldToPreviousNonJitteredClip, clipToWorld);
+        cameraMotionVectors.Render(motionVectors, cameraDepth, scaledWidth, scaledHeight, worldToNonJitteredClip, worldToPreviousClip, clipToWorld);
         ambientOcclusion.Render(camera, cameraDepth, cameraTarget, dynamicResolution.ScaleFactor, volumetricLightingResult, blueNoise2D, clipToWorld);
 
         // Copy scene texture
@@ -363,11 +365,12 @@ public class MorrowindRenderPipeline : CustomRenderPipeline
         {
             var data = pass.SetRenderFunction<Pass2Data>((command, context, pass, data) =>
             {
-                context.ExecuteCommandBuffer(command);
-                command.Clear();
-
                 if (UnityEditor.Handles.ShouldRenderGizmos())
                 {
+                    context.ExecuteCommandBuffer(command);
+                    command.Clear();
+                    context.SetupCameraProperties(camera);
+
                     context.DrawGizmos(data.camera, GizmoSubset.PreImageEffects);
                     context.DrawGizmos(data.camera, GizmoSubset.PostImageEffects);
                 }
