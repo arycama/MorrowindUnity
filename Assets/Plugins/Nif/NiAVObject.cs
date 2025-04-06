@@ -71,9 +71,9 @@ namespace Nif
 				}
 
 				var shader = MaterialManager.Instance.DefaultShader;
-                Material = new Material(shader);
+                Material = new Material(shader) { enableInstancing = true };
             }
-		}
+        }
 
 		// If true, child NiTriShapes will be created with Mesh Colliders and no Mesh Renderers
 		public bool IsCollisionNode { get; set; }

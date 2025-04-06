@@ -3,26 +3,56 @@
 
 SamplerComparisonState sampler_DirectionalShadows;
 Texture2D<float> _DirectionalShadows;
-Buffer<uint> _LightClusterList;
-Texture3D<uint2> _LightClusterIndices;
 
-cbuffer UnityPerFrame
+cbuffer PerFrameData
 {
-	float3 _AmbientLight, _FogColor, _SunDirection, _SunColor;
-	float _FogStartDistance, _FogEndDistance, _FogEnabled, _Time;
+	float3 _AmbientLight;
+	float _FogScale;
+	
+	float3 _SunDirection;
+	float _FogOffset;
+	
+	float3 _SunColor;
+	float _Time;
+	
+	float3 _FogColor;
+	float _PerFrameDataPadding;
 };
 
-cbuffer UnityPerCamera
+cbuffer PerViewData
 {
-	matrix unity_MatrixVP, _WorldToShadow;
+	matrix _WorldToClip;
+	matrix _WorldToShadow;
 };
 
-cbuffer UnityPerDraw
+cbuffer PerCascadeData
 {
-	float3x4 unity_ObjectToWorld, unity_WorldToObject;
-	float4 unity_LODFade; // x is the fade value ranging within [0,1]. y is x quantized into 16 levels
-	float4 unity_WorldTransformParams; // w is usually 1.0, or -1.0 for odd-negative scale transforms
+	matrix _WorldToShadowClip;
 };
+
+#ifdef INSTANCING_ON
+	cbuffer UnityDrawCallInfo
+	{
+		uint unity_BaseInstanceID;
+	};
+
+	cbuffer UnityInstancing_PerDraw0
+	{
+		struct
+		{
+			matrix unity_ObjectToWorldArray;
+		}
+	
+		unity_Builtins0Array[2];
+	};
+#else
+	cbuffer UnityPerDraw
+	{
+		float3x4 unity_ObjectToWorld, unity_WorldToObject;
+		float4 unity_LODFade; // x is the fade value ranging within [0,1]. y is x quantized into 16 levels
+		float4 unity_WorldTransformParams; // w is usually 1.0, or -1.0 for odd-negative scale transforms
+	};
+#endif
 
 float3 MultiplyPoint3x4(float3x4 mat, float3 p)
 {
@@ -34,26 +64,41 @@ float4 MultiplyPoint(float4x4 mat, float3 p)
 	return p.x * mat._m00_m10_m20_m30 + (p.y * mat._m01_m11_m21_m31 + (p.z * mat._m02_m12_m22_m32 + mat._m03_m13_m23_m33));
 }
 
-float3 ObjectToWorld(float3 position)
+float3 ObjectToWorld(float3 position, uint instanceId)
 {
-	return MultiplyPoint3x4(unity_ObjectToWorld, position);
+	#ifdef INSTANCING_ON
+		float3x4 objectToWorld = (float3x4)unity_Builtins0Array[unity_BaseInstanceID + instanceId].unity_ObjectToWorldArray;
+	#else
+		float3x4 objectToWorld = unity_ObjectToWorld;
+	#endif
+	
+	return MultiplyPoint3x4(objectToWorld, position);
 }
 
 float4 WorldToClip(float3 position)
 {
-	return MultiplyPoint(unity_MatrixVP, position);
+	#ifdef UNITY_PASS_SHADOWCASTER
+		return MultiplyPoint(_WorldToShadowClip, position);
+	#else
+		return MultiplyPoint(_WorldToClip, position);
+	#endif
 }
 
-float4 ObjectToClip(float3 position)
+float4 ObjectToClip(float3 position, uint instanceId)
 {
-	return WorldToClip(ObjectToWorld(position));
+	return WorldToClip(ObjectToWorld(position, instanceId));
 }
 
-float3 ObjectToWorldNormal(float3 normal)
+float3 ObjectToWorldNormal(float3 normal, uint instanceId)
 {
 	// Source: https://www.shadertoy.com/view/3s33zj
-	float3x4 m = unity_ObjectToWorld;
-	float3x3 adjoint = float3x3(cross(m[1].xyz, m[2].xyz), cross(m[2].xyz, m[0].xyz), cross(m[0].xyz, m[1].xyz));
+	#ifdef INSTANCING_ON
+		float3x4 objectToWorld = (float3x4)unity_Builtins0Array[unity_BaseInstanceID + instanceId].unity_ObjectToWorldArray;
+	#else
+		float3x4 objectToWorld = unity_ObjectToWorld;
+	#endif
+	
+	float3x3 adjoint = float3x3(cross(objectToWorld[1].xyz, objectToWorld[2].xyz), cross(objectToWorld[2].xyz, objectToWorld[0].xyz), cross(objectToWorld[0].xyz, objectToWorld[1].xyz));
 	return normalize(mul(adjoint, normal));
 }
 

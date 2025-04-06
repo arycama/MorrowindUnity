@@ -22,7 +22,7 @@
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
-
+			#pragma multi_compile_instancing
 			#include "Water.hlsl"
 			ENDHLSL
 		}

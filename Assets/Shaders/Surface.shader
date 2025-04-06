@@ -35,7 +35,7 @@
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
-
+			#pragma multi_compile_instancing
 			#include "Surface.hlsl"
 			ENDHLSL
 		}
@@ -52,7 +52,7 @@
             HLSLPROGRAM
             #pragma vertex Vertex
             #pragma fragment Fragment
-
+			#pragma multi_compile_instancing
 			#include "Surface.hlsl"
 			ENDHLSL
 		}

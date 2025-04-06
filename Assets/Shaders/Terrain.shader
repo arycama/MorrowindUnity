@@ -16,7 +16,7 @@ Shader "Terrain"
 			#pragma vertex Vertex
 			#pragma fragment Fragment
 			#pragma target 5.0
-
+			#pragma multi_compile_instancing
 			#include "Terrain.hlsl"
 			ENDHLSL
 		}
@@ -26,15 +26,14 @@ Shader "Terrain"
 			Name "Shadow"
 
 			Colormask 0
-			ZClip[_ZClip]
+			ZClip [_ZClip]
 
 			Tags { "LightMode" = "ShadowCaster" }
 
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
-			#pragma target 5.0
-
+			#pragma multi_compile_instancing
 			#include "Terrain.hlsl"
 			ENDHLSL
 		}

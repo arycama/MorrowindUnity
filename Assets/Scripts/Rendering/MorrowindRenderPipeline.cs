@@ -1,21 +1,64 @@
 using System.Collections.Generic;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
+using UnityEngine.Pool;
 using UnityEngine.Rendering;
 
-public class MorrowindRenderPipeline : RenderPipeline
+public partial class MorrowindRenderPipeline : RenderPipeline
 {
     private MorrowindRenderPipelineAsset renderPipelineAsset;
     private CommandBuffer command;
+    private GraphicsBuffer perFrameBuffer, perViewBuffer, perCascadeData;
 
     public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset)
     {
         this.renderPipelineAsset = renderPipelineAsset;
         command = new CommandBuffer() { name = "Render Camera" };
+
+        SupportedRenderingFeatures.active = new SupportedRenderingFeatures()
+        {
+            defaultMixedLightingModes = SupportedRenderingFeatures.LightmapMixedBakeModes.None,
+            editableMaterialRenderQueue = false,
+            enlighten = false,
+            lightmapBakeTypes = LightmapBakeType.Realtime,
+            lightmapsModes = LightmapsMode.NonDirectional,
+            lightProbeProxyVolumes = false,
+            mixedLightingModes = SupportedRenderingFeatures.LightmapMixedBakeModes.None,
+            motionVectors = true,
+            overridesEnvironmentLighting = false,
+            overridesFog = false,
+            overridesLODBias = false,
+            overridesMaximumLODLevel = false,
+            overridesOtherLightingSettings = true,
+            overridesRealtimeReflectionProbes = true,
+            overridesShadowmask = true,
+            particleSystemInstancing = true,
+            receiveShadows = true,
+            reflectionProbeModes = SupportedRenderingFeatures.ReflectionProbeModes.None,
+            reflectionProbes = false,
+            rendererPriority = false,
+            rendererProbes = false,
+            rendersUIOverlay = false,
+            autoAmbientProbeBaking = false,
+            autoDefaultReflectionProbeBaking = false,
+            reflectionProbesBlendDistance = false,
+            overridesEnableLODCrossFade = false,
+            overridesLightProbeSystem = true,
+            overridesLightProbeSystemWarningMessage = default,
+            supportsHDR = false,
+        };
+
+        perFrameBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Constant, 1, UnsafeUtility.SizeOf<PerFrameData>());
+        perViewBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Constant, 1, UnsafeUtility.SizeOf<PerViewData>());
+        perCascadeData = new GraphicsBuffer(GraphicsBuffer.Target.Constant, 1, UnsafeUtility.SizeOf<PerCascadeData>());
     }
 
     protected override void Dispose(bool disposing)
     {
         command.Release();
+        perFrameBuffer.Release();
+        perViewBuffer.Release();
+        perCascadeData.Release();
     }
 
     protected override void Render(ScriptableRenderContext context, Camera[] cameras) => Render(context, cameras);
@@ -31,6 +74,58 @@ public class MorrowindRenderPipeline : RenderPipeline
         m.SetRow(1, 0.5f * (m.GetRow(1) + m.GetRow(3)));
         m.SetRow(2, 0.5f * (m.GetRow(2) + m.GetRow(3)));
         return m;
+    }
+
+    struct PerFrameData
+    {
+        public Vector3 ambientLight;
+        public float fogScale;
+        public Vector3 sunDirection;
+        public float fogOffset;
+        public Vector3 sunColor;
+        public float time;
+        public Vector3 fogColor;
+        public float padding;
+
+        public PerFrameData(Vector3 ambientLight, float fogScale, Vector3 sunDirection, float fogOffset, Vector3 sunColor, float time, Vector3 fogColor)
+        {
+            this.ambientLight = ambientLight;
+            this.fogScale = fogScale;
+            this.sunDirection = sunDirection;
+            this.fogOffset = fogOffset;
+            this.sunColor = sunColor;
+            this.time = time;
+            this.fogColor = fogColor;
+            this.padding = 0;
+        }
+    }
+
+    struct PerViewData
+    {
+        public Matrix4x4 worldToClip;
+        public Matrix4x4 worldToShadow;
+
+        public PerViewData(Matrix4x4 worldToClip, Matrix4x4 worldToShadow)
+        {
+            this.worldToClip = worldToClip;
+            this.worldToShadow = worldToShadow;
+        }
+    }
+
+    struct PerCascadeData
+    {
+        public Matrix4x4 worldToShadowClip;
+
+        public PerCascadeData(Matrix4x4 worldToShadowClip) => this.worldToShadowClip = worldToShadowClip;
+    }
+
+    private void SetConstantBufferData<T>(GraphicsBuffer buffer, CommandBuffer command, T data) where T : struct
+    {
+        using (ListPool<T>.Get(out var list))
+        {
+            list.Add(data);
+            command.SetBufferData(buffer, list);
+        }
     }
 
     protected void Render(ScriptableRenderContext context, IList<Camera> cameras)
@@ -49,37 +144,41 @@ public class MorrowindRenderPipeline : RenderPipeline
             var cullingResults = context.Cull(ref cullingParameters);
 
             // Setup lights
+            var sunDirection = Vector3.up;
+            var sunColor = Color.white;
+            var worldToShadow = Matrix4x4.identity;
+            var directionalShadowsId = Shader.PropertyToID("_DirectionalShadows");
+                var shadowResolution = renderPipelineAsset.ShadowResolution;
+            command.GetTemporaryRT(directionalShadowsId, shadowResolution, shadowResolution, 16, FilterMode.Bilinear, RenderTextureFormat.Shadowmap);
+            command.SetRenderTarget(directionalShadowsId);
+            command.ClearRenderTarget(true, false, Color.clear);
+
             for (var i = 0; i < cullingResults.visibleLights.Length; i++)
             {
                 var visibleLight = cullingResults.visibleLights[i];
                 if (visibleLight.lightType != LightType.Directional)
                     continue;
 
-                var shadowResolution = renderPipelineAsset.ShadowResolution;
+                sunDirection = -visibleLight.light.transform.forward;
+                sunColor = visibleLight.finalColor.linear;
+
                 if (!cullingResults.ComputeDirectionalShadowMatricesAndCullingPrimitives(i, 0, 1, Vector3.zero, shadowResolution, visibleLight.light.shadowNearPlane, out var viewMatrix, out var projectionMatrix, out var shadowSplitData))
                     continue;
 
-                command.SetGlobalVector("_SunDirection", -visibleLight.light.transform.forward);
-                command.SetGlobalColor("_SunColor", visibleLight.finalColor.linear);
-
-                command.SetViewProjectionMatrices(viewMatrix, projectionMatrix);
                 command.SetGlobalFloat("_ZClip", 0);
                 command.SetGlobalDepthBias(renderPipelineAsset.ShadowBias, renderPipelineAsset.ShadowSlopeBias);
 
-                var directionalShadowsId = Shader.PropertyToID("_DirectionalShadows");
-                command.GetTemporaryRT(directionalShadowsId, shadowResolution, shadowResolution, 16, FilterMode.Bilinear, RenderTextureFormat.Shadowmap);
-                command.SetRenderTarget(directionalShadowsId);
-                command.ClearRenderTarget(true, false, Color.clear);
+                SetConstantBufferData(perCascadeData, command, new PerCascadeData(GL.GetGPUProjectionMatrix(projectionMatrix, true) * viewMatrix));
+                command.SetGlobalConstantBuffer(perCascadeData, "PerCascadeData", 0, perCascadeData.stride);
 
                 var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, i, BatchCullingProjectionType.Perspective) { splitData = shadowSplitData };
                 var shadowRendererList = context.CreateShadowRendererList(ref shadowDrawingSettings);
                 command.DrawRendererList(shadowRendererList);
 
-                var worldToShadow = ConvertToAtlasMatrix(projectionMatrix * viewMatrix);
-                command.SetGlobalMatrix("_WorldToShadow", worldToShadow);
-                command.SetGlobalFloat("_ZClip", 1);
                 command.SetGlobalDepthBias(0f, 0f);
-                command.SetGlobalTexture("_DirectionalShadows", directionalShadowsId);
+                command.SetGlobalFloat("_ZClip", 1);
+
+                worldToShadow = ConvertToAtlasMatrix(projectionMatrix * viewMatrix);
             }
 
             // Setup globals
@@ -89,13 +188,26 @@ public class MorrowindRenderPipeline : RenderPipeline
                 fogEnabled &= UnityEditor.SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
-            command.SetGlobalColor("_AmbientLight", RenderSettings.ambientLight.linear);
-            command.SetGlobalColor("_FogColor", RenderSettings.fogColor.linear);
-            command.SetGlobalFloat("_FogStartDistance", RenderSettings.fogStartDistance);
-            command.SetGlobalFloat("_FogEndDistance", RenderSettings.fogEndDistance);
-            command.SetGlobalFloat("_FogEnabled", fogEnabled ? 1.0f : 0.0f);
-            command.SetGlobalFloat("_Time", Time.time);
-            command.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
+            var fogStart = RenderSettings.fogStartDistance;
+            var fogEnd = RenderSettings.fogEndDistance;
+            var fogScale = fogEnabled ? 1 / (fogEnd - fogStart) : 0;
+            var fogOffset = fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
+
+            SetConstantBufferData(perFrameBuffer, command, new PerFrameData
+            (
+                (Vector4)RenderSettings.ambientLight.linear,
+                fogScale,
+                sunDirection,
+                fogOffset,
+                (Vector4)sunColor,
+                Time.time,
+                (Vector4)RenderSettings.fogColor.linear
+            ));
+            command.SetGlobalConstantBuffer(perFrameBuffer, "PerFrameData", 0, perFrameBuffer.stride);
+
+            SetConstantBufferData(perViewBuffer, command, new PerViewData(GL.GetGPUProjectionMatrix(camera.projectionMatrix, camera.cameraType != CameraType.Game) * camera.worldToCameraMatrix, worldToShadow));
+            command.SetGlobalConstantBuffer(perViewBuffer, "PerViewData", 0, perViewBuffer.stride);
+            command.SetGlobalTexture("_DirectionalShadows", directionalShadowsId);
 
             command.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
             command.ClearRenderTarget(true, true, camera.backgroundColor.linear);
@@ -103,17 +215,17 @@ public class MorrowindRenderPipeline : RenderPipeline
             var srpDefaultUnlitShaderPassName = new ShaderTagId("SRPDefaultUnlit");
 
             // Opaque
-            var opaqueSortingSettings = new SortingSettings(camera) { criteria = SortingCriteria.CommonOpaque };
-            var opaqueDrawingSettings = new DrawingSettings(srpDefaultUnlitShaderPassName, opaqueSortingSettings);
-            var opaqueFilteringSettings = new FilteringSettings(RenderQueueRange.opaque) { };
+            var opaqueSortingSettings = new SortingSettings(camera) { criteria = SortingCriteria.OptimizeStateChanges };
+            var opaqueDrawingSettings = new DrawingSettings(srpDefaultUnlitShaderPassName, opaqueSortingSettings) { enableInstancing = true };
+            var opaqueFilteringSettings = new FilteringSettings(RenderQueueRange.opaque);
             var opaqueRenderListParams = new RendererListParams(cullingResults, opaqueDrawingSettings, opaqueFilteringSettings);
             var opaqueRendererList = context.CreateRendererList(ref opaqueRenderListParams);
             command.DrawRendererList(opaqueRendererList);
 
             // Transparent
             var transparentSortingSettings = new SortingSettings(camera) { criteria = SortingCriteria.CommonTransparent };
-            var transparentDrawingSettings = new DrawingSettings(srpDefaultUnlitShaderPassName, transparentSortingSettings);
-            var transparentFilteringSettings = new FilteringSettings(RenderQueueRange.transparent) { };
+            var transparentDrawingSettings = new DrawingSettings(srpDefaultUnlitShaderPassName, transparentSortingSettings) { enableInstancing = true };
+            var transparentFilteringSettings = new FilteringSettings(RenderQueueRange.transparent);
             var transparentRenderListParams = new RendererListParams(cullingResults, transparentDrawingSettings, transparentFilteringSettings);
             var transparentRendererList = context.CreateRendererList(ref transparentRenderListParams);
             command.DrawRendererList(transparentRendererList);

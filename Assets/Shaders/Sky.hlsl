@@ -25,7 +25,7 @@ cbuffer UnityPerMaterial
 FragmentInput Vertex(VertexInput input)
 {
 	FragmentInput output;
-	output.position = mul(unity_MatrixVP, float4(mul(unity_ObjectToWorld, float4(input.position, 1.0)).xyz, 1.0));
+	output.position = mul(_WorldToClip, float4(mul(unity_ObjectToWorld, float4(input.position, 1.0)).xyz, 1.0));
 	output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw + _CloudSpeed * _Time * 0.003;
 	output.position.z /= output.position.w;
 

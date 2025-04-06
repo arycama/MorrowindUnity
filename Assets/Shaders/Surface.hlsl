@@ -2,20 +2,33 @@
 
 struct VertexInput
 {
-	uint instanceID : SV_InstanceID;
+	uint instanceId : SV_InstanceID;
 	float3 position : POSITION;
-	float3 normal : NORMAL;
-	float2 uv : TEXCOORD;
-	float3 color : COLOR;
+	
+	#ifndef UNITY_PASS_SHADOWCASTER
+		float3 normal : NORMAL;
+		float2 uv : TEXCOORD;
+		float3 color : COLOR;
+	#endif
 };
 
 struct FragmentInput
 {
 	float4 position : SV_Position;
-	float3 worldPosition : POSITION1;
-	float2 uv : TEXCOORD;
-	float3 normal : NORMAL;
-	float3 color : COLOR;
+	
+	#ifndef UNITY_PASS_SHADOWCASTER
+		float3 worldPosition : POSITION1;
+		float2 uv : TEXCOORD;
+		float3 normal : NORMAL;
+		float3 color : COLOR;
+	#endif
+};
+
+struct FragmentOutput
+{
+	#ifndef UNITY_PASS_SHADOWCASTER
+		float4 color : SV_Target;
+	#endif
 };
 
 Texture2D _MainTex, _EmissionMap;
@@ -30,33 +43,43 @@ cbuffer UnityPerMaterial
 
 FragmentInput Vertex(VertexInput input)
 {
+	float3 worldPosition = ObjectToWorld(input.position, input.instanceId);
+	
 	FragmentInput output;
-	output.worldPosition = ObjectToWorld(input.position);
-	output.position = WorldToClip(output.worldPosition);
-	output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
-	output.normal = ObjectToWorldNormal(input.normal);
-	output.color = _AmbientLight * input.color + _EmissionColor;
+	output.position = WorldToClip(worldPosition);
+	
+	#ifndef UNITY_PASS_SHADOWCASTER
+		output.worldPosition = worldPosition;
+		output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
+		output.normal = ObjectToWorldNormal(input.normal, input.instanceId);
+		output.color = _AmbientLight * input.color + _EmissionColor;
+	#endif
+	
 	return output;
 }
 
-float4 Fragment(FragmentInput input) : SV_Target
+FragmentOutput Fragment(FragmentInput input)
 {
-	float4 color = _MainTex.Sample(sampler_MainTex, input.uv);
+	FragmentOutput output;
 	
-	float3 normal = normalize(input.normal);
-	float3 lighting = saturate(dot(normal, _SunDirection)) * _SunColor;
+	#ifndef UNITY_PASS_SHADOWCASTER
+		float4 color = _MainTex.Sample(sampler_MainTex, input.uv);
 	
-	float4 shadowPosition = mul(_WorldToShadow, float4(input.worldPosition, 1.0));
-	lighting *= _DirectionalShadows.SampleCmpLevelZero(sampler_DirectionalShadows, shadowPosition.xy, shadowPosition.z);
+		float3 normal = normalize(input.normal);
+		float3 lighting = saturate(dot(normal, _SunDirection)) * _SunColor;
 	
-	lighting += input.color;
-	color.rgb *= lighting;
+		float3 shadowPosition = MultiplyPoint3x4((float3x4) _WorldToShadow, input.worldPosition);
+		if (all(saturate(shadowPosition.xy) == shadowPosition.xy))
+			lighting *= _DirectionalShadows.SampleCmpLevelZero(sampler_DirectionalShadows, shadowPosition.xy, shadowPosition.z);
 	
-	if (_FogEnabled)
-	{
-		float fogFactor = saturate((input.position.w - _FogStartDistance) / (_FogEndDistance - _FogStartDistance));
+		lighting += input.color;
+		color.rgb *= lighting;
+	
+		float fogFactor = saturate(input.position.w * _FogScale + _FogOffset);
 		color.rgb = lerp(color.rgb, _FogColor, fogFactor);
-	}
+		
+		output.color = color;
+	#endif
 	
-	return color;
+	return output;
 }
