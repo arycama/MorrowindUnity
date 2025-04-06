@@ -71,7 +71,7 @@ namespace Nif
 				}
 
 				var shader = MaterialManager.Instance.DefaultShader;
-                Material = new Material(shader) { enableInstancing = true };
+                Material = new Material(shader);
             }
 		}
 

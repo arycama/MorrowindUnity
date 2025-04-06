@@ -43,7 +43,7 @@ public class WeatherManager : Singleton<WeatherManager>
     [SerializeField]
     private WeatherSettings currentWeatherSettings;
 
-    private TimeOfDay timeOfDay = TimeOfDay.Day;
+    private readonly TimeOfDay timeOfDay = TimeOfDay.Day;
     private WeatherType weatherType = WeatherType.Cloudy;
 
     [SerializeField, Repeat(60)]
@@ -65,14 +65,16 @@ public class WeatherManager : Singleton<WeatherManager>
     private Material skyboxMaterial;
 
     private Mesh skyboxMesh;
-    private Dictionary<Camera, CommandBuffer> cameraBuffers = new Dictionary<Camera, CommandBuffer>();
+    private bool shouldUpdate;
 
     private float SecondsOfDay => seconds + minute * SecondsPerMinute + hour * SecondsPerHour;
 
-    private void Awake()
+    private void OnEnable()
     {
-        Camera.onPreCull += OnCameraPreCull;
+        RenderPipelineManager.beginCameraRendering += OnCameraPreCull;
         CellManager.OnFinishedLoadingCells += SwitchCell;
+
+        shouldUpdate = true;
 
         // Night Sky
         //var nightNif = new Nif.NiFile(nightSkyPath);
@@ -122,40 +124,24 @@ public class WeatherManager : Singleton<WeatherManager>
         maximumTimeBetweenEnvironmentalSounds = IniManager.GetFloat("Weather", "Maximum Time Between Environmental Sounds");
     }
 
-    private void OnCameraPreCull(Camera camera)
+    private void OnCameraPreCull(ScriptableRenderContext context, Camera camera)
     {
-        if (!cameraBuffers.TryGetValue(camera, out var buffer))
-        {
-            buffer = new CommandBuffer() { name = "Camera Skybox Buffer" };
-            cameraBuffers.Add(camera, buffer);
-            camera.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, buffer);
-        }
+        if (!shouldUpdate)
+            return;
 
-        var localMatrix = Matrix4x4.TRS(new Vector3(0, -15, 0) + camera.transform.position, Quaternion.identity, Vector3.one);
-
-        buffer.Clear();
-        buffer.DrawMesh(skyboxMesh, localMatrix, skyboxMaterial);
+        var localMatrix = Matrix4x4.TRS(camera.transform.position, Quaternion.identity, Vector3.one * camera.farClipPlane / 1000f);
+        Graphics.DrawMesh(skyboxMesh, localMatrix, skyboxMaterial, 0, camera);
     }
 
-    private void OnDestroy()
+    private void OnDisable()
     {
-        Camera.onPreCull -= OnCameraPreCull;
+        RenderPipelineManager.beginCameraRendering -= OnCameraPreCull;
         CellManager.OnFinishedLoadingCells -= SwitchCell;
-
-        foreach (var buffer in cameraBuffers)
-        {
-            if (buffer.Key != null)
-            {
-                buffer.Key.RemoveCommandBuffer(CameraEvent.BeforeForwardAlpha, buffer.Value);
-            }
-        }
-
-        cameraBuffers.Clear();
     }
 
     private void SwitchCell(CellRecord cell)
     {
-        enabled = !cell.CellData.IsInterior;
+        shouldUpdate = !cell.CellData.IsInterior;
 
         if (cell.CellData.IsInterior)
         {
@@ -193,6 +179,9 @@ public class WeatherManager : Singleton<WeatherManager>
 
     private void Update()
     {
+        if (!shouldUpdate)
+            return;
+
         //if(Random.value > 0.9999f)
         //{
         //	weatherType = (WeatherType)Random.Range(1, 8);
@@ -255,6 +244,7 @@ public class WeatherManager : Singleton<WeatherManager>
     private void SetWeatherSettings(WeatherType weatherType)
     {
         currentWeatherSettings = ScriptableObject.CreateInstance<WeatherSettings>();
+        currentWeatherSettings.name = weatherType.ToString();
         currentWeatherSettings.Create(weatherType, skyboxMaterial);
 
         currentWeatherSettings.UpdateWeather(SecondsOfDay / SecondsPerDay);

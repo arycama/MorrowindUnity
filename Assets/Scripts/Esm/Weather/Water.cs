@@ -1,6 +1,4 @@
-﻿#pragma warning disable 0108
-
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.Rendering;
 
 public class Water : Singleton<Water>
@@ -89,16 +87,19 @@ public class Water : Singleton<Water>
         mesh.bounds = new Bounds(Vector3.zero, new Vector3(bigNumber, 20.0f, bigNumber));
         mesh.MarkDynamic();
         meshFilter.sharedMesh = mesh;
+
+        RenderPipelineManager.beginCameraRendering += OnCameraPreCull;
     }
 
     private void OnDestroy()
     {
+        RenderPipelineManager.beginCameraRendering -= OnCameraPreCull;
         CellManager.OnFinishedLoadingCells -= SetupWater;
     }
 
-    private void Update()
+    private void OnCameraPreCull(ScriptableRenderContext context, Camera camera)
     {
-        projection.UpdateProjection(Camera.main);
+        projection.UpdateProjection(camera);
         interpolation = projection.Interpolation;
 
         // Update each vertex position

@@ -29,7 +29,7 @@ public class TerrainFactory
 
         var meshRenderer = gameObject.AddComponent<MeshRenderer>();
         meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.TwoSided;
-        meshRenderer.sharedMaterial = new Material(MaterialManager.Instance.TerrainShader) { enableInstancing = true };
+        meshRenderer.sharedMaterial = new Material(MaterialManager.Instance.TerrainShader);
         meshRenderer.sharedMaterial.mainTextureScale = new Vector2(16, 16);
 
         // Generate the mesh
