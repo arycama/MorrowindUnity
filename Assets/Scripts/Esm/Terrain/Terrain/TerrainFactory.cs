@@ -29,7 +29,7 @@ public class TerrainFactory
 
         var meshRenderer = gameObject.AddComponent<MeshRenderer>();
         meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.TwoSided;
-        meshRenderer.sharedMaterial = new Material(MaterialManager.Instance.TerrainShader);
+        meshRenderer.sharedMaterial = new Material(MaterialManager.Instance.TerrainShader) { enableInstancing = true };
         meshRenderer.sharedMaterial.mainTextureScale = new Vector2(16, 16);
 
         // Generate the mesh
@@ -37,7 +37,7 @@ public class TerrainFactory
 
         // Generate vertices and appropriate heights
         var vertices = new Vector3[65 * 65];
-        var uvs = new Vector2[vertices.Length];
+        var uvs = new Vector4[vertices.Length];
         var nextColHeight = record.HeightData.ReferenceHeight;
 
         var triangles = new int[64 * 64 * 6];
@@ -61,8 +61,10 @@ public class TerrainFactory
                 // Generate UV too ( every 4 patches should be one UV)
                 var uvX = Mathf.Lerp(1f / 18f, 1 - 1f / 18f, x / 64f);
                 var uvY = Mathf.Lerp(1f / 18f, 1 - 1f / 18f, y / 64f);
+                var uvZ = x / 64f;
+                var uvW = y / 64f;
 
-                uvs[x + y * 65] = new Vector2(uvX, uvY);
+                uvs[x + y * 65] = new Vector4(uvX, uvY, uvZ, uvW);
             }
         }
 
@@ -89,10 +91,13 @@ public class TerrainFactory
         {
             vertices = vertices,
             triangles = triangles,
-            uv = uvs,
-            normals = normals,
-            colors32 = record.ColorData.Colors
+            normals = normals
         };
+
+        mesh.SetUVs(0, uvs);
+
+        if (record.ColorData != null)
+            mesh.colors32 = record.ColorData.Colors;
 
         meshFilter.sharedMesh = mesh;
 
@@ -127,7 +132,7 @@ public class TerrainFactory
         var currentIndices = record.TextureData.TextureIndices;
         var borderIndices = GetBorderIndices(cellDirections, borderCells); // Get an 18x18 array, which includes the surrounding textures
 
-        var control = new Texture2D(18, 18, TextureFormat.Alpha8, false, true)
+        var control = new Texture2D(18, 18, TextureFormat.R8, false, true)
         {
             filterMode = FilterMode.Point
         };
@@ -137,7 +142,7 @@ public class TerrainFactory
             for (var x = 0; x < control.width; x++)
             {
                 var textureIndex = borderIndices[x, y];
-                var color = new Color32(0, 0, 0, (byte)textureIndex);
+                var color = new Color32((byte)textureIndex, 0, 0, 0);
                 control.SetPixel(x, y, color);
             }
         }
@@ -227,7 +232,7 @@ public class TerrainFactory
         {
             for (var i = 0; i < 16; i++)
             {
-                borderIndices[17, i + 1] = borderCells[2, 1].TextureIndices[15, i];
+                borderIndices[17, i + 1] = borderCells[2, 1].TextureIndices[0, i];
             }
         }
         else

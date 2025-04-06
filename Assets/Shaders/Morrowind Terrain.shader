@@ -15,11 +15,11 @@ Shader"Morrowind/Terrain"
 			Tags{"LightMode"="Vertex"}
 
 			CGPROGRAM
+			#pragma target 5.0
 			#pragma multi_compile_fog
 			#pragma multi_compile_instancing
 
 			#pragma vertex vert
-			#pragma geometry geom
 			#pragma fragment frag
 
 			#include "MorrowindTerrainVertex.cginc"
@@ -32,8 +32,8 @@ Shader"Morrowind/Terrain"
 			Tags{"LightMode" = "ForwardBase"}
 
 			CGPROGRAM
+			#pragma target 5.0
 			#pragma vertex vert
-			#pragma geometry geom
 			#pragma fragment frag
 
 			#pragma multi_compile_fog
@@ -52,8 +52,8 @@ Shader"Morrowind/Terrain"
 			ZWrite Off
 
 			CGPROGRAM
+			#pragma target 5.0
 			#pragma vertex vert
-			#pragma geometry geom
 			#pragma fragment frag
 
 			#pragma multi_compile_fog
