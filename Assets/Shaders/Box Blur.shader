@@ -23,14 +23,10 @@
 			
 			#include "UnityCG.cginc"
 
+			float _Recip, _Offset;
+			uint _Blur;
 			sampler2D _GrabTexture;
 			float2 _GrabTexture_TexelSize;
-	
-			cbuffer UnityPerMaterial
-			{
-				float _Recip, _Offset;
-				uint _Blur;
-			};
 
 			struct v2f
 			{
@@ -73,14 +69,10 @@
 			
 			#include "UnityCG.cginc"
 
+			float _Recip, _Offset;
+			uint _Blur;
 			sampler2D _GrabTexture;
 			float2 _GrabTexture_TexelSize;
-	
-			cbuffer UnityPerMaterial
-			{
-				float _Recip, _Offset;
-				uint _Blur;
-			};
 
 			struct v2f
 			{

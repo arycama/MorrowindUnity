@@ -18,13 +18,9 @@
 			
 			#include "UnityCG.cginc"
 
+			uint _Blur, _Sigma;
 			sampler2D _GrabTexture;
 			float2 _GrabTexture_TexelSize;
-
-			cbuffer UnityPerMaterial
-			{
-				uint _Blur, _Sigma;
-			};
 
 			struct v2f
 			{
@@ -73,13 +69,9 @@
 			
 			#include "UnityCG.cginc"
 
+			uint _Blur, _Sigma;
 			sampler2D _GrabTexture;
 			float2 _GrabTexture_TexelSize;
-
-			cbuffer UnityPerMaterial
-			{
-				uint _Blur, _Sigma;
-			};
 
 			struct v2f
 			{
