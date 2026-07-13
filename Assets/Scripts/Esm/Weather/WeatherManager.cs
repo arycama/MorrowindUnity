@@ -129,7 +129,7 @@ public class WeatherManager : Singleton<WeatherManager>
         if (!shouldUpdate)
             return;
 
-        var localMatrix = Matrix4x4.TRS(camera.transform.position, Quaternion.identity, Vector3.one * camera.farClipPlane / 1000f);
+        var localMatrix = Matrix4x4.TRS(camera.transform.position, Quaternion.identity, Vector3.one);
         Graphics.DrawMesh(skyboxMesh, localMatrix, skyboxMaterial, 0, camera);
     }
 

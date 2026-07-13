@@ -16,19 +16,21 @@ struct FragmentInput
 	float3 normal : NORMAL;
 };
 
-Texture2D<float3>  _MainTex;
+Texture2D<float> CameraDepth;
+Texture2D<float3> _MainTex, CameraColor;
 SamplerState sampler_MainTex;
 
 cbuffer UnityPerMaterial
 {
 	float _Alpha, _Tiling;
+	float3 Extinction, Albedo;
 };
 
 FragmentInput Vertex(VertexInput input)
 {
 	FragmentInput output;
 	output.worldPosition = ObjectToWorld(input.position, input.instanceId);
-	output.position = WorldToClip(output.worldPosition);
+	output.position = WorldToClipPosition(output.worldPosition);
 	output.uv = output.worldPosition.xz * _Tiling;
 	output.normal = ObjectToWorldNormal(input.normal, input.instanceId);
 	return output;
@@ -37,19 +39,35 @@ FragmentInput Vertex(VertexInput input)
 float4 Fragment(FragmentInput input) : SV_Target
 {
 	float4 color = float4(_MainTex.Sample(sampler_MainTex, input.uv), _Alpha);
+		
+	float backgroundDepth = rcp(CameraDepth[input.position.xy] * LinearDepthScale + LinearDepthOffset);
+	float depthDistance = backgroundDepth - input.position.w;
+	float3 backgroundColor = CameraColor[input.position.xy];
+	float3 transmittance = exp(-depthDistance * Extinction);
+	color.rgb = lerp(color.rgb, 0.0, transmittance);
 	
 	float3 normal = normalize(input.normal);
-	float3 lighting = saturate(dot(normal, _SunDirection)) * _SunColor;
+	float3 lighting = saturate(dot(normal, SunDirection)) * SunColor;
 	
-	float3 shadowPosition = MultiplyPoint3x4((float3x4) _WorldToShadow, input.worldPosition);
+	float3 shadowPosition = MultiplyPoint3x4((float3x4) WorldToSunShadow, input.worldPosition);
 	if (all(saturate(shadowPosition.xy) == shadowPosition.xy))
-		lighting *= _DirectionalShadows.SampleCmpLevelZero(sampler_DirectionalShadows, shadowPosition.xy, shadowPosition.z);
+		lighting *= SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z);
 	
-	lighting += _AmbientLight;
+	lighting += AmbientLight;
 	color.rgb *= lighting;
 	
-	float fogFactor = saturate(input.position.w * _FogScale + _FogOffset);
-	color.rgb = lerp(color.rgb, _FogColor, fogFactor);
+	// Need to remove fog from background
+	//if (_FogEnabled)
+	{
+		float fogFactor = saturate(backgroundDepth * FogScale + FogOffset);
+		float3 backgroundFog = lerp(0.0, FogColor, fogFactor);
+		backgroundColor = max(0.0, backgroundColor - backgroundFog.rgb);
+	}
+	
+	color.rgb += backgroundColor * transmittance;
+	
+	float fogFactor = saturate(input.position.w * FogScale + FogOffset);
+	color.rgb = lerp(color.rgb, FogColor, fogFactor);
 	
 	return color;
 }

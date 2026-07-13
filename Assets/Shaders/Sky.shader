@@ -15,6 +15,7 @@
 	{
 		//Blend SrcAlpha OneMinusSrcAlpha
 		ZWrite Off
+		//ZClip Off
 
 		Tags { "Queue"="Background" "PreviewType"="Skybox" }
 

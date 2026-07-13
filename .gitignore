@@ -13,3 +13,4 @@
 /UserSettings
 *.vsconfig
 /Assembly-CSharp.csproj.user
+*.slnx

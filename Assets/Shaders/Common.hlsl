@@ -1,34 +1,65 @@
 #ifndef COMMON_INCLUDED
 #define COMMON_INCLUDED
 
-SamplerComparisonState sampler_DirectionalShadows;
-Texture2D<float> _DirectionalShadows;
-
-cbuffer PerFrameData
+cbuffer EnvironmentData
 {
-	float3 _AmbientLight;
-	float _FogScale;
+	float3 AmbientLight;
+	float FogScale;
 	
-	float3 _SunDirection;
-	float _FogOffset;
+	float3 FogColor;
+	float FogOffset;
 	
-	float3 _SunColor;
-	float _Time;
-	
-	float3 _FogColor;
-	float _PerFrameDataPadding;
+	float Time;
+	float3 FrameDataPadding;
 };
 
-cbuffer PerViewData
+cbuffer ViewData
 {
-	matrix _WorldToClip;
-	matrix _WorldToShadow;
+	matrix WorldToClip;
+	float LinearDepthScale, LinearDepthOffset, Near, Far;
 };
 
-cbuffer PerCascadeData
+cbuffer CascadeData
 {
-	matrix _WorldToShadowClip;
+	matrix WorldToShadowClip;
 };
+
+struct Light
+{
+	float3 position;
+	float rcpRangeSquared;
+	float3 forward;
+	float angleScale;
+	float3 color;
+	float angleOffset;
+};
+
+const static uint MaxLightsPerTile = 32;
+
+cbuffer LightingData
+{
+	float3 SunDirection;
+	float SunShadowFadeScale;
+	float3 SunColor;
+	float SunShadowFadeOffset;
+	
+	float4x4 WorldToSunShadow;
+	
+	float SunShadowRcpResolution;
+	float SunShadowResolution;
+	float2 LightingDataPadding;
+	
+	float TileSize;
+	uint LightCount;
+	uint TileCountX;
+	uint TileViewOffset;
+};
+
+Texture2D<float> SunShadow;
+StructuredBuffer<Light> PointLights, LightList;
+Texture2DArray<uint> LightCounts;
+
+SamplerComparisonState LinearClampCompareSampler;
 
 #ifdef INSTANCING_ON
 	cbuffer UnityDrawCallInfo
@@ -75,18 +106,18 @@ float3 ObjectToWorld(float3 position, uint instanceId)
 	return MultiplyPoint3x4(objectToWorld, position);
 }
 
-float4 WorldToClip(float3 position)
+float4 WorldToClipPosition(float3 position)
 {
 	#ifdef UNITY_PASS_SHADOWCASTER
-		return MultiplyPoint(_WorldToShadowClip, position);
+		return MultiplyPoint(WorldToShadowClip, position);
 	#else
-		return MultiplyPoint(_WorldToClip, position);
+		return MultiplyPoint(WorldToClip, position);
 	#endif
 }
 
 float4 ObjectToClip(float3 position, uint instanceId)
 {
-	return WorldToClip(ObjectToWorld(position, instanceId));
+	return WorldToClipPosition(ObjectToWorld(position, instanceId));
 }
 
 float3 ObjectToWorldNormal(float3 normal, uint instanceId)
@@ -107,6 +138,41 @@ float4 BilinearWeights(float2 uv, float2 textureSize)
 	float2 localUv = frac(uv * textureSize - 0.5 + rcp(512.0));
 	float4 weights = localUv.xxyy * float4(-1, 1, 1, -1) + float4(1, 0, 0, 1);
 	return weights.zzww * weights.xyyx;
+}
+
+float3 GetLighting(float3 normal, float3 worldPosition, float viewDepth)
+{
+	// Directional light
+	float NdotL = saturate(dot(normal, SunDirection));
+	float3 lighting = NdotL * SunColor;
+	float fade = saturate(viewDepth * SunShadowFadeScale + SunShadowFadeOffset);
+	float3 shadowPosition = MultiplyPoint3x4((float3x4) WorldToSunShadow, worldPosition);
+	
+	// Shadow
+	if (NdotL && fade && all(saturate(shadowPosition.xy) == shadowPosition.xy))
+		lighting *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
+	
+	// Point Lights
+	for (uint i = 0; i < LightCount; i++)
+	{
+		Light light = PointLights[i];
+	
+		float3 lightVector = light.position - worldPosition;
+		float distanceSquared = dot(lightVector, lightVector);
+		
+		// Range attenuation
+		float attenuation = saturate(1.0h - pow(distanceSquared * light.rcpRangeSquared, 2.0));
+		
+		// Angle attenuation
+		float rcpDistance = rsqrt(distanceSquared);
+		float3 L = lightVector * rcpDistance;
+		attenuation *= saturate(dot(light.forward, L) * light.angleScale + light.angleOffset);
+		attenuation *= attenuation;
+		
+		lighting += saturate(dot(normal, L)) * light.color * attenuation;
+	}
+	
+	return lighting;
 }
 
 #endif

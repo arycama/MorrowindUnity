@@ -26,7 +26,7 @@ Shader "Terrain"
 			Name "Shadow"
 
 			Colormask 0
-			ZClip [_ZClip]
+			ZClip [ZClip]
 
 			Tags { "LightMode" = "ShadowCaster" }
 

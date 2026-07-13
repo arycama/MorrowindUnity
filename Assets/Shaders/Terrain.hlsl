@@ -38,7 +38,7 @@ FragmentInput Vertex(VertexInput input)
 	float3 worldPosition = ObjectToWorld(input.position, input.instanceId);
 	
 	FragmentInput output;
-	output.position = WorldToClip(worldPosition);
+	output.position = WorldToClipPosition(worldPosition);
 	
 	#ifndef UNITY_PASS_SHADOWCASTER
 		output.worldPosition = worldPosition;
@@ -64,17 +64,13 @@ FragmentInput Vertex(VertexInput input)
 		color += _MainTex.Sample(sampler_MainTex, float3(input.uv.zw, terrainData.w)) * weights.w;
 	
 		float3 normal = normalize(input.normal);
-		float3 lighting = saturate(dot(normal, _SunDirection)) * _SunColor;
-	
-		float3 shadowPosition =  MultiplyPoint3x4((float3x4)_WorldToShadow, input.worldPosition);
-		if (all(saturate(shadowPosition.xy) == shadowPosition.xy))
-			lighting *= _DirectionalShadows.SampleCmpLevelZero(sampler_DirectionalShadows, shadowPosition.xy, shadowPosition.z);
-	
-		lighting += _AmbientLight;
+		
+		float3 lighting = GetLighting(normal, input.worldPosition, input.position.w);
+		lighting += AmbientLight;
 		color *= lighting * input.color;
 	
-		float fogFactor = saturate(input.position.w * _FogScale + _FogOffset);
-		color = lerp(color, _FogColor, fogFactor);
+		float fogFactor = saturate(input.position.w * FogScale + FogOffset);
+		color = lerp(color, FogColor, fogFactor);
 	
 		return color;
 	}
