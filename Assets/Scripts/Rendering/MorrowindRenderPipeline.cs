@@ -26,6 +26,10 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 	private readonly NativeList<LightShadowCasterCullingInfo> perLightInfos = new(1, Allocator.Persistent);
 	private readonly NativeList<ShadowSplitData> splitBuffer = new(1, Allocator.Persistent);
 
+	private LightData[] pointLights = new LightData[8];
+	private float[] pointLightDepths = new float[8];
+	private int[] lightDepthBins, lightDepthMinMax;
+
 	public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset) : base(renderPipelineAsset)
 	{
 		tonemap = new Material(Shader.Find("Hidden/Morrowind Tonemap")) { hideFlags = HideFlags.HideAndDontSave };
@@ -104,7 +108,6 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
 		{
 			var cullingResults = renderGraph.GetResource<CullingResultsData>().cullingResults;
-			var lightList = ListPool<LightData>.Get();
 
 			var sunDirection = Float3.Up;
 			var sunColor = Float3.One * Pi;
@@ -113,7 +116,13 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			var worldToSunShadow = Float4x4.Identity;
 			var sunShadowsEnabled = false;
 
-			for (var i = 0; i < cullingResults.visibleLights.Length; i++)
+			var lightCount = cullingResults.visibleLights.Length;
+
+			Array.Resize(ref pointLights, Max(pointLights.Length, lightCount));
+			Array.Resize(ref pointLightDepths, Max(pointLightDepths.Length, lightCount));
+			var pointLightCount = 0;
+
+			for (var i = 0; i < lightCount; i++)
 			{
 				var visibleLight = cullingResults.visibleLights[i];
 				var lightToWorld = (Float4x4)visibleLight.localToWorldMatrix;
@@ -165,20 +174,44 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 					}
 				}
 
-				if (visibleLight.lightType == LightType.Spot || visibleLight.lightType == LightType.Point)
-				{
-					var cosHalfAngle = Cos(0.5f * Radians(visibleLight.spotAngle));
-					var angleScale = visibleLight.lightType == LightType.Spot ? Rcp(1.0f - cosHalfAngle) : 0.0f;
-					var angleOffset = visibleLight.lightType == LightType.Spot ? -cosHalfAngle * angleScale : 1.0f;
-					lightList.Add(new(lightToWorld.Translation, Sq(Rcp(visibleLight.range)), lightDirection, angleScale, lightColor, angleOffset));
-				}
-
 				perLightInfos.Add(new LightShadowCasterCullingInfo
 				{
 					projectionType = visibleLight.lightType == LightType.Directional ? BatchCullingProjectionType.Orthographic : BatchCullingProjectionType.Perspective,
 					splitExclusionMask = 0,
 					splitRange = splitRange
 				});
+
+				// Calculate view depth
+				if (visibleLight.lightType == LightType.Spot || visibleLight.lightType == LightType.Point)
+				{
+					var radius = visibleLight.range;
+					var position = lightToWorld.Translation;
+					var distanceScale = Flip(Sq(Rcp(radius)), !visibleLight.light.enableSpotReflector);
+					var forward = lightToWorld.Forward;
+					var halfAngle = 0.5f * Radians(visibleLight.spotAngle);
+					var outerCosHalfAngle = Cos(halfAngle);
+					var innerCosHalfAngle = 1.0f;
+					var isSpot = visibleLight.lightType == LightType.Spot;
+					var angleScale = isSpot ? Rcp(outerCosHalfAngle - innerCosHalfAngle) : 0.0f;
+					var angleOffset = isSpot ? outerCosHalfAngle * angleScale : 1.0f;
+					pointLights[pointLightCount] = new(position, distanceScale, forward, angleScale, visibleLight.finalColor.Float3(), angleOffset);
+
+					// Calcualte center of spot light cone
+					if(visibleLight.lightType == LightType.Spot)
+					{
+						if(outerCosHalfAngle < Sqrt(0.5f))
+						{
+							position += outerCosHalfAngle * radius * forward;
+						}
+						else
+						{
+							position += radius / (2.0f * outerCosHalfAngle) * forward;
+						}
+					}
+
+					pointLightDepths[pointLightCount] = viewPassData.rotation.InverseRotate(position - viewPassData.position).z;
+					pointLightCount++;
+				}
 			}
 
 			context.CullShadowCasters(cullingResults, new ShadowCastersCullingInfos
@@ -189,7 +222,6 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 			perLightInfos.Clear();
 			splitBuffer.Clear();
-
 
 			var sunShadowFadeScale = -1.0f / asset.ShadowFadeDistance;
 			var sunShadowFadeOffset = asset.ShadowDistance / asset.ShadowFadeDistance;
@@ -211,31 +243,103 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 			renderGraph.SetResource(new LightingData(sunShadows, lightingDataBuffer, sunShadowsEnabled));
 
-			var pointLightBuffer = lightList.Count == 0 ? renderGraph.EmptyBuffer : renderGraph.GetBuffer(lightList.Count, UnsafeUtility.SizeOf<LightData>());
-			using (var pass = renderGraph.AddGenericRenderPass("Set Light Data", (lightList, pointLightBuffer)))
+			// Sort lights by view depth
+			Array.Sort(pointLightDepths, pointLights);
+
+			// Resize Z bins if needed and clear
+			Array.Resize(ref lightDepthBins, asset.LightCullDepthSlices);
+			Array.Clear(lightDepthBins, 0, lightDepthBins.Length);
+
+			Array.Resize(ref lightDepthMinMax, asset.LightCullDepthSlices);
+			for(var i = 0; i < lightDepthMinMax.Length; i++)
+				lightDepthMinMax[i] = BitPack(ushort.MaxValue, 16, 0) | BitPack(0, 16, 16);
+
+			// Add sorted lights to list
+			var binWidth = viewPassData.far / asset.LightCullDepthSlices;
+			for(var i = 0; i < pointLightCount; i++)
+			{
+				var light = pointLights[i];
+				
+				// Calculate view min and max depth
+				var position = light.position;
+				var radius = Rsqrt(light.rcpRangeSq);
+
+				var viewPosition = viewPassData.rotation.InverseRotate(position);
+
+				if(light.angleScale > 0.0f)
+				{
+					var cosHalfAngle = light.angleOffset / light.angleScale;
+					if(cosHalfAngle < Sqrt(0.5f))
+					{
+						position += cosHalfAngle * radius * light.forward;
+						radius *= SinFromCos(cosHalfAngle);
+					}
+					else
+					{
+						position += radius / (2.0f * cosHalfAngle) * light.forward;
+						radius /= 2.0f * cosHalfAngle;
+					}
+				}
+
+				var viewZ = pointLightDepths[i];
+				var minZ = viewZ - radius;
+				var maxZ = viewZ + radius;
+
+				// BitOr with covered Z bins
+				var minBin = Max(0, (int)(minZ / binWidth));
+				var maxBin = Min(asset.LightCullDepthSlices - 1, (int)(maxZ / binWidth));
+
+				for(var j = minBin; j <= maxBin; j++)
+				{
+					lightDepthBins[j] |= i;
+
+					var currentMinMax = lightDepthMinMax[j];
+
+					var currentMin = BitUnpack(currentMinMax, 16, 0);
+					var currentMax = BitUnpack(currentMinMax, 16, 16);
+
+					currentMin = Min(currentMin, i);
+					currentMax = Max(currentMax, i);
+
+					lightDepthMinMax[j] = BitPack(currentMin, 16, 0) | BitPack(currentMax, 16, 16);
+				}
+			}
+
+			var pointLightBuffer = pointLightCount == 0 ? renderGraph.EmptyBuffer : renderGraph.GetBuffer(pointLightCount, UnsafeUtility.SizeOf<LightData>());
+			var lightDepthBinBuffer = renderGraph.GetBuffer(asset.LightCullDepthSlices);
+			var lightDepthMinMaxBuffer = renderGraph.GetBuffer(asset.LightCullDepthSlices);
+
+			using (var pass = renderGraph.AddGenericRenderPass("Set Light Data", (pointLights, pointLightCount, pointLightBuffer, lightDepthBinBuffer, lightDepthBins, lightDepthMinMaxBuffer, lightDepthMinMax)))
 			{
 				pass.WriteBuffer("", pointLightBuffer);
+				pass.WriteBuffer("", lightDepthBinBuffer);
+				pass.WriteBuffer("", lightDepthMinMaxBuffer);
 				pass.SetRenderFunction(static (command, pass, data) =>
 				{
-					command.SetBufferData(pass.GetBuffer(data.pointLightBuffer), data.lightList);
-					ListPool<LightData>.Release(data.lightList);
+					command.SetBufferData(pass.GetBuffer(data.pointLightBuffer), data.pointLights, 0, 0, data.pointLightCount);
+					command.SetBufferData(pass.GetBuffer(data.lightDepthBinBuffer), data.lightDepthBins);
+					command.SetBufferData(pass.GetBuffer(data.lightDepthMinMaxBuffer), data.lightDepthMinMax);
 				});
 			}
 
 			var tileCountX = DivRoundUp(viewPassData.viewSize.x, asset.LightCulling.TileSize);
 			var tileCountY = DivRoundUp(viewPassData.viewSize.y, asset.LightCulling.TileSize);
 			var tileViewOffset = tileCountX * tileCountY * LightCulling.maxLightsPerTile;
-			var lightIndexCount = DivRoundUp(lightList.Count, 32);
+			var lightIndexCount = DivRoundUp(pointLightCount, 32);
 
 			var pointLightData = renderGraph.SetConstantBuffer
 			((
 				(float)asset.LightCulling.TileSize,
-				lightList.Count,
+				pointLightCount,
 				DivRoundUp(viewPassData.viewSize.x, asset.LightCulling.TileSize),
-				lightIndexCount
+				lightIndexCount,
+				asset.LightCullDepthSlices,
+				binWidth,
+				0,
+				0
 			));
 
-			renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, lightList.Count));
+			renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, pointLightCount, lightDepthBinBuffer, lightDepthMinMaxBuffer));
 		}),
 
 		new LightCulling(asset.LightCulling, renderGraph),

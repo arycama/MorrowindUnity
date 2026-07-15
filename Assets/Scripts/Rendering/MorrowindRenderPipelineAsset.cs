@@ -11,6 +11,7 @@ public class MorrowindRenderPipelineAsset : CustomRenderPipelineAssetBase
 	[SerializeField] private bool useSrpBatching = true;
 	[field: SerializeField] public float ShadowFadeDistance { get; private set; } = 8f;
 
+	[field: SerializeField, Pow2(8192)] public int LightCullDepthSlices { get; private set; } = 8192;
 	[field: SerializeField] public LightCulling.Settings LightCulling { get; private set; }
 
 	public float ShadowDistance => shadowDistance;

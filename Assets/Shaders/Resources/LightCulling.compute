@@ -78,16 +78,15 @@ void LightCulling(uint3 id : SV_DispatchThreadId, uint2 groupId : SV_GroupID)
 		
 			if (light.angleScale)
 			{
-				float cosHalfAngle = -light.angleOffset / light.angleScale;
-			
+				float cosHalfAngle = light.angleOffset / light.angleScale;
 				if (cosHalfAngle < sqrt(0.5))
 				{
-					lightPosition -= cosHalfAngle * radius * light.forward;
+					lightPosition += cosHalfAngle * radius * light.forward;
 					radius *= SinFromCos(cosHalfAngle);
 				}
 				else
 				{
-					lightPosition -= radius / (2 * cosHalfAngle) * light.forward;
+					lightPosition += radius / (2 * cosHalfAngle) * light.forward;
 					radius /= 2.0 * cosHalfAngle;
 				}
 			}
@@ -135,10 +134,9 @@ void LightCulling(uint3 id : SV_DispatchThreadId, uint2 groupId : SV_GroupID)
 			}
 		}
 			
-		uint visibleBit = (isVisible ? 1u : 0u) << laneIndex;
-		uint visibleBitAll = WaveActiveBitOr(visibleBit);
+		uint visibleBits = WaveActiveBallot(isVisible).x;
 		
 		if(!laneIndex)
-			VisibleLightBitsWrite[tileIndex * LightIndexCount + i] = visibleBitAll;
+			VisibleLightBitsWrite[tileIndex * LightIndexCount + i] = visibleBits;
 	}
 }

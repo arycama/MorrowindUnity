@@ -2,6 +2,7 @@
 #define COMMON_INCLUDED
 
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/MatrixUtils.hlsl"
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Packing.hlsl"
 
 cbuffer EnvironmentData
 {
@@ -61,11 +62,15 @@ cbuffer PointLightData
 	uint LightCount;
 	uint TileCountX;
 	uint LightIndexCount;
+	
+	uint LightCullDepthSlices;
+	float LightBinWidth;
+	float2 PointLightDataPadding;
 };
 
 Texture2D<float> SunShadow;
 StructuredBuffer<Light> PointLights;
-StructuredBuffer<uint> VisibleLightBits;
+StructuredBuffer<uint> VisibleLightBits, LightDepthMinMax;
 
 SamplerComparisonState LinearClampCompareSampler;
 
@@ -138,6 +143,18 @@ float4 BilinearWeights(float2 uv, float2 textureSize)
 	return weights.zzww * weights.xyyx;
 }
 
+uint ClusterMaskRange(uint mask, uint2 range, uint start_index)
+{
+	range.x = clamp(range.x, start_index, start_index + 32u);
+	range.y = clamp(range.y + 1u, range.x, start_index + 32u);
+
+	uint num_bits = range.y - range.x;
+	uint range_mask = num_bits == 32 ?
+		0xffffffffu :
+		((1u << num_bits) - 1u) << (range.x - start_index);
+	return mask & uint(range_mask);
+}
+
 float3 GetLighting(float3 normal, float3 worldPosition, float4 screenPosition)
 {
 	// Directional light
@@ -152,19 +169,29 @@ float3 GetLighting(float3 normal, float3 worldPosition, float4 screenPosition)
 	
 	// Point Lights
 	float lightCount = 0;
-	uint2 tile = (uint2) (screenPosition.xy / TileSize);
-	uint tileIndex = tile.y * TileCountX + tile.x;
-	uint tileLightOffset = tileIndex * MaxLightsPerTile;
-	for (uint i = 0; i < LightIndexCount; i++)
-	{
-		uint visibleLightBits = VisibleLightBits[tileIndex * LightIndexCount + i];
+	int2 clusterCoord = (int2) (screenPosition.xy / TileSize);
+	int linearClusterCoord = clusterCoord.y * TileCountX + clusterCoord.x;
+	int tileDepth = (int) (screenPosition.w / LightBinWidth);
 	
-		for (uint j = 0; j < 32; j++)
+	uint2 zRange = BitUnpack(LightDepthMinMax[tileDepth], 16, uint2(0, 16));
+	
+	// Find min/max light we need to consider when shading slice Z
+	int zStart = (int) (WaveActiveMin(zRange.x) >> 5u);
+	int zEnd = (int) (WaveActiveMax(zRange.y) >> 5u);
+	
+	for (uint i = zStart; i <= zEnd; i++)
+	{
+		uint mask = VisibleLightBits[linearClusterCoord * LightIndexCount + i];
+		
+		// Restrict to lights within Z-range
+		mask = ClusterMaskRange(mask, zRange, 32u * i);
+	
+		while (mask != 0u)
 		{
-			if (((visibleLightBits >> j) & 1) == 0)
-				continue;
-
-			Light light = PointLights[i * 32 + j];
+			uint bitIndex = firstbitlow(mask);
+			uint lightIndex = 32u * i + bitIndex;
+			
+			Light light = PointLights[lightIndex];
 	
 			float3 lightVector = light.position - worldPosition;
 			float distanceSquared = dot(lightVector, lightVector);
@@ -180,10 +207,12 @@ float3 GetLighting(float3 normal, float3 worldPosition, float4 screenPosition)
 		
 			lighting += saturate(dot(normal, L)) * light.color * attenuation;
 			lightCount++;
+			
+			mask &= ~(1u << bitIndex);
 		}
 	}
 	
-	lighting += lightCount;
+	//lighting += lightCount;
 	
 	return lighting;
 }
