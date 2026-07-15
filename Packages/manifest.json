@@ -3,6 +3,7 @@
     "com.arycama.customrenderpipeline": "https://github.com/arycama/customrenderpipeline.git",
     "com.arycama.unmath": "https://github.com/arycama/unmath.git",
     "com.arycama.webglnoiseunity": "https://github.com/arycama/WebGLNoiseUnity.git",
+    "com.hecomi.hlsltoolsforvisualstudioconfiggenerator": "https://github.com/hecomi/HLSLToolsForVisualStudioConfigGenerator.git#upm",
     "com.unity.collections": "2.6.7",
     "com.unity.ide.visualstudio": "2.0.27",
     "com.unity.ugui": "2.0.0",

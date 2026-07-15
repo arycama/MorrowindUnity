@@ -66,7 +66,7 @@ FragmentOutput Fragment(FragmentInput input)
 		float4 color = _MainTex.Sample(sampler_MainTex, input.uv);
 		float3 normal = normalize(input.normal);
 		
-		float3 lighting = GetLighting(normal, input.worldPosition, input.position.w);
+		float3 lighting = GetLighting(normal, input.worldPosition, input.position);
 		lighting += input.color;
 		color.rgb *= lighting;
 	

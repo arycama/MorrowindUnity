@@ -1,9 +1,1 @@
-{
-  "hlsl.preprocessorDefinitions": {
-    "SHADER_API_D3D11": ""
-  },
-  "hlsl.additionalIncludeDirectories": [
-    ".",
-    "C:/Program Files/Unity/Hub/Editor/2022.3.10f1/Editor/Data/CGIncludes"
-  ]
-}
+﻿{"hlsl.preprocessorDefinitions":{},"hlsl.additionalIncludeDirectories":[".","C:\\Program Files\\Unity\\Hub\\Editor\\6000.3.9f1\\Editor\\Data\\CGIncludes","ShaderIncludes"]}

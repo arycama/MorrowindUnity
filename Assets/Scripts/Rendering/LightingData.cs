@@ -5,14 +5,13 @@ using CustomRenderPipeline;
 public readonly struct LightingData : IRenderPassData
 {
 	private readonly ResourceHandle<RenderTexture> sunShadow;
-	private readonly ResourceHandle<GraphicsBuffer> lightingDataBuffer, pointLightBuffer;
+	private readonly ResourceHandle<GraphicsBuffer> lightingDataBuffer;
 	private readonly bool sunShadowEnabled;
 
-	public LightingData(ResourceHandle<RenderTexture> sunShadow, ResourceHandle<GraphicsBuffer> lightingDataBuffer, ResourceHandle<GraphicsBuffer> pointLightBuffer, bool sunShadowEnabled)
+	public LightingData(ResourceHandle<RenderTexture> sunShadow, ResourceHandle<GraphicsBuffer> lightingDataBuffer, bool sunShadowEnabled)
 	{
 		this.sunShadow = sunShadow;
 		this.lightingDataBuffer = lightingDataBuffer;
-		this.pointLightBuffer = pointLightBuffer;
 		this.sunShadowEnabled = sunShadowEnabled;
 	}
 
@@ -20,7 +19,6 @@ public readonly struct LightingData : IRenderPassData
 	{
 		pass.ReadTexture("SunShadow", sunShadow);
 		pass.ReadBuffer("LightingData", lightingDataBuffer);
-		pass.ReadBuffer("PointLights", pointLightBuffer);
 
 		if (sunShadowEnabled)
 			pass.AddKeyword("SHADOWS_ON");

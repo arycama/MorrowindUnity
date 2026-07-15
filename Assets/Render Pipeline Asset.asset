@@ -53,7 +53,9 @@ MonoBehaviour:
     <TerrainDetailLitShader>k__BackingField: {fileID: 4800000, guid: 3ccccb8a788d20845becb2c612e8b454,
       type: 3}
   shadowDistance: 4096
-  shadowResolution: 2048
+  shadowResolution: 4096
   shadowBias: 5
   shadowSlopeBias: 1
-  useSrpBatching: 0
+  useSrpBatching: 1
+  <ShadowFadeDistance>k__BackingField: 32
+  <TileSize>k__BackingField: 32

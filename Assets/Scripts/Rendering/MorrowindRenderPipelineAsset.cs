@@ -10,7 +10,8 @@ public class MorrowindRenderPipelineAsset : CustomRenderPipelineAssetBase
 	[SerializeField] private float shadowSlopeBias = 0.0f;
 	[SerializeField] private bool useSrpBatching = true;
 	[field: SerializeField] public float ShadowFadeDistance { get; private set; } = 8f;
-	[field: SerializeField, Pow2(128)] public int TileSize { get; private set; } = 32;
+
+	[field: SerializeField] public LightCulling.Settings LightCulling { get; private set; }
 
 	public float ShadowDistance => shadowDistance;
 	public int ShadowResolution => shadowResolution;

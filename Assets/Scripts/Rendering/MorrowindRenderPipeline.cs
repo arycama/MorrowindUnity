@@ -28,7 +28,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 	public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset) : base(renderPipelineAsset)
 	{
-		tonemap = new Material(Shader.Find("Hidden/Tonemap")) { hideFlags = HideFlags.HideAndDontSave };
+		tonemap = new Material(Shader.Find("Hidden/Morrowind Tonemap")) { hideFlags = HideFlags.HideAndDontSave };
 	}
 
 	protected override List<FrameRenderFeature> InitializePerFrameRenderFeatures() => new()
@@ -49,6 +49,56 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 			var cullingResults = context.Cull(ref cullingParameters);
 			renderGraph.SetResource(new CullingResultsData(cullingResults));
+
+			// Setup globals
+			var fogEnabled = RenderSettings.fog;
+	#if UNITY_EDITOR
+			if (SceneView.currentDrawingSceneView != null)
+				fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
+	#endif
+
+			var fogStart = RenderSettings.fogStartDistance;
+			var fogEnd = RenderSettings.fogEndDistance;
+			var fogScale = fogEnabled ? 1 / (fogEnd - fogStart) : 0;
+			var fogOffset = fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
+
+			var environmentDataBuffer = renderGraph.SetConstantBuffer(
+			(
+				RenderSettings.ambientLight.LinearFloat3(),
+				fogScale,
+				RenderSettings.fogColor.LinearFloat3(),
+				fogOffset,
+				Time.time,
+				Float3.Zero
+			));
+
+			renderGraph.SetResource(new EnvironmentData(environmentDataBuffer));
+
+			// Screen
+            var screenToPixel = Float4x4.Scale(new Float3((Float2)viewPassData.viewSize, 1));
+			var pixelToScreen = Float4x4.Scale(new Float3(1 / (Float2)viewPassData.viewSize, 1));
+
+			// Clip
+			var clipToScreen = Float4x4.ScaleOffset(new Float3(0.5f, viewPassData.isFlipped ? -0.5f : 0.5f, 1), new Float2(0.5f, 0).xxy);
+			var screenToClip = Float4x4.ScaleOffset(new Float3(2, viewPassData.isFlipped ? -2 : 2, 1), new Float3(-1, viewPassData.isFlipped ? 1 : -1, 0));
+			var clipToPixel = screenToPixel.Mul(clipToScreen);
+			var pixelToClip = screenToClip.Mul(pixelToScreen);
+
+			// View
+			var viewToClip = Float4x4.PerspectiveReverseZ(viewPassData.tanHalfFov, viewPassData.near, viewPassData.far, 0, viewPassData.isFlipped);
+			var worldToView = Float4x4.WorldToLocal(viewPassData.position, viewPassData.rotation);
+
+			// World
+			var worldToClip = viewToClip.Mul(worldToView);
+
+			renderGraph.SetResource(new ViewData(renderGraph.SetConstantBuffer
+			((
+				worldToClip,
+				viewToClip,
+				worldToView,
+				pixelToClip,
+				(viewPassData.far - viewPassData.near) * Rcp(viewPassData.near * viewPassData.far), Rcp(viewPassData.far), viewPassData.near, viewPassData.far
+			))));
 		}),
 
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
@@ -140,22 +190,9 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			perLightInfos.Clear();
 			splitBuffer.Clear();
 
-			var pointLightBuffer = lightList.Count == 0 ? renderGraph.EmptyBuffer : renderGraph.GetBuffer(lightList.Count, UnsafeUtility.SizeOf<LightData>());
-			using (var pass = renderGraph.AddGenericRenderPass("Set Light Data", (lightList, pointLightBuffer)))
-			{
-				pass.WriteBuffer("", pointLightBuffer);
-				pass.SetRenderFunction(static (command, pass, data) =>
-				{
-					command.SetBufferData(pass.GetBuffer(data.pointLightBuffer), data.lightList);
-					ListPool<LightData>.Release(data.lightList);
-				});
-			}
 
 			var sunShadowFadeScale = -1.0f / asset.ShadowFadeDistance;
 			var sunShadowFadeOffset = asset.ShadowDistance / asset.ShadowFadeDistance;
-			var tileCountX = DivRoundUp(viewPassData.viewSize.x, asset.TileSize);
-			var tileCountY = DivRoundUp(viewPassData.viewSize.y, asset.TileSize);
-			var tileViewOffset = tileCountX * tileCountY * maxLightsPerTile;
 
 			var lightingDataBuffer = renderGraph.SetConstantBuffer
 			((
@@ -169,54 +206,43 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 				Rcp(asset.ShadowResolution),
 				(float)asset.ShadowResolution,
-				0f, 0f,
-
-				(float)asset.TileSize,
-				lightList.Count,
-				DivRoundUp(viewPassData.viewSize.x, asset.TileSize),
-				tileViewOffset
+				0f, 0f
 			));
 
-			renderGraph.SetResource(new LightingData(sunShadows, lightingDataBuffer, pointLightBuffer, sunShadowsEnabled));
+			renderGraph.SetResource(new LightingData(sunShadows, lightingDataBuffer, sunShadowsEnabled));
+
+			var pointLightBuffer = lightList.Count == 0 ? renderGraph.EmptyBuffer : renderGraph.GetBuffer(lightList.Count, UnsafeUtility.SizeOf<LightData>());
+			using (var pass = renderGraph.AddGenericRenderPass("Set Light Data", (lightList, pointLightBuffer)))
+			{
+				pass.WriteBuffer("", pointLightBuffer);
+				pass.SetRenderFunction(static (command, pass, data) =>
+				{
+					command.SetBufferData(pass.GetBuffer(data.pointLightBuffer), data.lightList);
+					ListPool<LightData>.Release(data.lightList);
+				});
+			}
+
+			var tileCountX = DivRoundUp(viewPassData.viewSize.x, asset.LightCulling.TileSize);
+			var tileCountY = DivRoundUp(viewPassData.viewSize.y, asset.LightCulling.TileSize);
+			var tileViewOffset = tileCountX * tileCountY * LightCulling.maxLightsPerTile;
+
+			var pointLightData = renderGraph.SetConstantBuffer
+			(
+				((float)asset.LightCulling.TileSize,
+				lightList.Count,
+				DivRoundUp(viewPassData.viewSize.x, asset.LightCulling.TileSize),
+				tileViewOffset)
+			);
+
+			renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer));
 		}),
+
+		new LightCulling(asset.LightCulling, renderGraph),
 
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
 		{
-			var camera = viewPassData.camera;
-
-			// Setup globals
-			var fogEnabled = RenderSettings.fog;
-	#if UNITY_EDITOR
-			if (SceneView.currentDrawingSceneView != null)
-				fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
-	#endif
-
-			var fogStart = RenderSettings.fogStartDistance;
-			var fogEnd = RenderSettings.fogEndDistance;
-			var fogScale = fogEnabled ? 1 / (fogEnd - fogStart) : 0;
-			var fogOffset = fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
-
-			renderGraph.SetResource(new EnvironmentData(renderGraph.SetConstantBuffer(
-			(
-				RenderSettings.ambientLight.LinearFloat3(),
-				fogScale,
-				RenderSettings.fogColor.LinearFloat3(),
-				fogOffset,
-				Time.time,
-				Float3.Zero
-			))));
-
-			var isFlipped = camera.cameraType != CameraType.Game;
-			renderGraph.SetResource(new ViewData(renderGraph.SetConstantBuffer
-			((
-				Float4x4.PerspectiveReverseZ(viewPassData.tanHalfFov, viewPassData.near, viewPassData.far, 0, isFlipped).Mul(Float4x4.WorldToLocal(viewPassData.position, viewPassData.rotation)),
-				(viewPassData.far - viewPassData.near) * Rcp(viewPassData.near * viewPassData.far), Rcp(viewPassData.far), viewPassData.near, viewPassData.far
-			))));
-
-			var cameraDepth = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.D32_SFloat_S8_UInt, clear: true, isCcw: isFlipped);
-			var cameraTarget = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.B10G11R11_UFloatPack32, clear: true, clearColor: viewPassData.camera.backgroundColor.linear, isCcw: isFlipped);
-
-			var srpDefaultUnlitShaderPassName = new ShaderTagId("SRPDefaultUnlit");
+			var cameraDepth = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.D32_SFloat_S8_UInt, clear: true, isCcw: viewPassData.isFlipped);
+			var cameraTarget = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.B10G11R11_UFloatPack32, clear: true, clearColor: viewPassData.camera.backgroundColor.linear, isCcw: viewPassData.isFlipped);
 
 			// Opaque
 			var cullingResults = renderGraph.GetResource<CullingResultsData>().cullingResults;
@@ -230,6 +256,8 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 				pass.ReadResource<ViewData>();
 				pass.ReadResource<EnvironmentData>();
 				pass.ReadResource<LightingData>();
+				pass.ReadResource<PointLightData>();
+				pass.ReadResource<LightCulling.Result>();
 			}
 
 			// Opaque copy
@@ -262,6 +290,8 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 				pass.ReadResource<ViewData>();
 				pass.ReadResource<EnvironmentData>();
 				pass.ReadResource<LightingData>();
+				pass.ReadResource<PointLightData>();
+				pass.ReadResource<LightCulling.Result>();
 			}
 
 			// Tonemap

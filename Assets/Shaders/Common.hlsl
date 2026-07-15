@@ -1,6 +1,8 @@
 #ifndef COMMON_INCLUDED
 #define COMMON_INCLUDED
 
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/MatrixUtils.hlsl"
+
 cbuffer EnvironmentData
 {
 	float3 AmbientLight;
@@ -16,6 +18,9 @@ cbuffer EnvironmentData
 cbuffer ViewData
 {
 	matrix WorldToClip;
+	matrix ViewToClip;
+	matrix WorldToView;
+	matrix PixelToClip;
 	float LinearDepthScale, LinearDepthOffset, Near, Far;
 };
 
@@ -48,7 +53,10 @@ cbuffer LightingData
 	float SunShadowRcpResolution;
 	float SunShadowResolution;
 	float2 LightingDataPadding;
-	
+};
+
+cbuffer PointLightData
+{
 	float TileSize;
 	uint LightCount;
 	uint TileCountX;
@@ -84,16 +92,6 @@ SamplerComparisonState LinearClampCompareSampler;
 		float4 unity_WorldTransformParams; // w is usually 1.0, or -1.0 for odd-negative scale transforms
 	};
 #endif
-
-float3 MultiplyPoint3x4(float3x4 mat, float3 p)
-{
-	return p.x * mat._m00_m10_m20 + (p.y * mat._m01_m11_m21 + (p.z * mat._m02_m12_m22 + mat._m03_m13_m23));
-}
-
-float4 MultiplyPoint(float4x4 mat, float3 p)
-{
-	return p.x * mat._m00_m10_m20_m30 + (p.y * mat._m01_m11_m21_m31 + (p.z * mat._m02_m12_m22_m32 + mat._m03_m13_m23_m33));
-}
 
 float3 ObjectToWorld(float3 position, uint instanceId)
 {
@@ -140,12 +138,12 @@ float4 BilinearWeights(float2 uv, float2 textureSize)
 	return weights.zzww * weights.xyyx;
 }
 
-float3 GetLighting(float3 normal, float3 worldPosition, float viewDepth)
+float3 GetLighting(float3 normal, float3 worldPosition, float4 screenPosition)
 {
 	// Directional light
 	float NdotL = saturate(dot(normal, SunDirection));
 	float3 lighting = NdotL * SunColor;
-	float fade = saturate(viewDepth * SunShadowFadeScale + SunShadowFadeOffset);
+	float fade = saturate(screenPosition.w * SunShadowFadeScale + SunShadowFadeOffset);
 	float3 shadowPosition = MultiplyPoint3x4((float3x4) WorldToSunShadow, worldPosition);
 	
 	// Shadow
@@ -153,9 +151,13 @@ float3 GetLighting(float3 normal, float3 worldPosition, float viewDepth)
 		lighting *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
 	
 	// Point Lights
-	for (uint i = 0; i < LightCount; i++)
+	uint2 tile = (uint2) (screenPosition.xy / TileSize);
+	uint lightCount = LightCounts[uint3(tile, 0)];
+	uint tileIndex = tile.y * TileCountX + tile.x;
+	uint tileLightOffset = tileIndex * MaxLightsPerTile;
+	for (uint i = 0; i < lightCount; i++)
 	{
-		Light light = PointLights[i];
+		Light light = LightList[tileLightOffset + i];
 	
 		float3 lightVector = light.position - worldPosition;
 		float distanceSquared = dot(lightVector, lightVector);
@@ -171,6 +173,8 @@ float3 GetLighting(float3 normal, float3 worldPosition, float viewDepth)
 		
 		lighting += saturate(dot(normal, L)) * light.color * attenuation;
 	}
+	
+	lighting += lightCount;
 	
 	return lighting;
 }

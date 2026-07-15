@@ -1,4 +1,4 @@
-Shader "Hidden/Tonemap"
+Shader "Hidden/Morrowind Tonemap"
 {
     SubShader
     {

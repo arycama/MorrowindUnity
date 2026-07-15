@@ -1,11 +1,10 @@
 {
   "dependencies": {
     "com.arycama.customrenderpipeline": {
-      "version": "https://github.com/arycama/customrenderpipeline.git",
+      "version": "file:com.arycama.customrenderpipeline",
       "depth": 0,
-      "source": "git",
-      "dependencies": {},
-      "hash": "483f13aeb2d75d3ecae6a4103c9282fa4d476c67"
+      "source": "embedded",
+      "dependencies": {}
     },
     "com.arycama.unmath": {
       "version": "https://github.com/arycama/unmath.git",
@@ -20,6 +19,13 @@
       "source": "git",
       "dependencies": {},
       "hash": "cf2b792d2b697c6c285e03ab76e0ae0076d60b41"
+    },
+    "com.hecomi.hlsltoolsforvisualstudioconfiggenerator": {
+      "version": "https://github.com/hecomi/HLSLToolsForVisualStudioConfigGenerator.git#upm",
+      "depth": 0,
+      "source": "git",
+      "dependencies": {},
+      "hash": "08306fc30d1db7a9fb168b0bd825b7b2748419fe"
     },
     "com.unity.burst": {
       "version": "1.8.29",

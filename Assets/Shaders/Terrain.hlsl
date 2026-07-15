@@ -65,7 +65,7 @@ FragmentInput Vertex(VertexInput input)
 	
 		float3 normal = normalize(input.normal);
 		
-		float3 lighting = GetLighting(normal, input.worldPosition, input.position.w);
+		float3 lighting = GetLighting(normal, input.worldPosition, input.position);
 		lighting += AmbientLight;
 		color *= lighting * input.color;
 	
