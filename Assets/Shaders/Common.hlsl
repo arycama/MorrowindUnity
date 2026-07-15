@@ -60,12 +60,12 @@ cbuffer PointLightData
 	float TileSize;
 	uint LightCount;
 	uint TileCountX;
-	uint TileViewOffset;
+	uint LightIndexCount;
 };
 
 Texture2D<float> SunShadow;
-StructuredBuffer<Light> PointLights, LightList;
-Texture2DArray<uint> LightCounts;
+StructuredBuffer<Light> PointLights;
+StructuredBuffer<uint> VisibleLightBits;
 
 SamplerComparisonState LinearClampCompareSampler;
 
@@ -151,27 +151,36 @@ float3 GetLighting(float3 normal, float3 worldPosition, float4 screenPosition)
 		lighting *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
 	
 	// Point Lights
+	float lightCount = 0;
 	uint2 tile = (uint2) (screenPosition.xy / TileSize);
-	uint lightCount = LightCounts[uint3(tile, 0)];
 	uint tileIndex = tile.y * TileCountX + tile.x;
 	uint tileLightOffset = tileIndex * MaxLightsPerTile;
-	for (uint i = 0; i < lightCount; i++)
+	for (uint i = 0; i < LightIndexCount; i++)
 	{
-		Light light = LightList[tileLightOffset + i];
+		uint visibleLightBits = VisibleLightBits[tileIndex * LightIndexCount + i];
 	
-		float3 lightVector = light.position - worldPosition;
-		float distanceSquared = dot(lightVector, lightVector);
+		for (uint j = 0; j < 32; j++)
+		{
+			if (((visibleLightBits >> j) & 1) == 0)
+				continue;
+
+			Light light = PointLights[i * 32 + j];
+	
+			float3 lightVector = light.position - worldPosition;
+			float distanceSquared = dot(lightVector, lightVector);
 		
-		// Range attenuation
-		float attenuation = saturate(1.0h - pow(distanceSquared * light.rcpRangeSquared, 2.0));
+			// Range attenuation
+			float attenuation = saturate(1.0h - pow(distanceSquared * light.rcpRangeSquared, 2.0));
 		
-		// Angle attenuation
-		float rcpDistance = rsqrt(distanceSquared);
-		float3 L = lightVector * rcpDistance;
-		attenuation *= saturate(dot(light.forward, L) * light.angleScale + light.angleOffset);
-		attenuation *= attenuation;
+			// Angle attenuation
+			float rcpDistance = rsqrt(distanceSquared);
+			float3 L = lightVector * rcpDistance;
+			attenuation *= saturate(dot(light.forward, L) * light.angleScale + light.angleOffset);
+			attenuation *= attenuation;
 		
-		lighting += saturate(dot(normal, L)) * light.color * attenuation;
+			lighting += saturate(dot(normal, L)) * light.color * attenuation;
+			lightCount++;
+		}
 	}
 	
 	lighting += lightCount;

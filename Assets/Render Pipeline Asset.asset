@@ -58,4 +58,5 @@ MonoBehaviour:
   shadowSlopeBias: 1
   useSrpBatching: 1
   <ShadowFadeDistance>k__BackingField: 32
-  <TileSize>k__BackingField: 32
+  <LightCulling>k__BackingField:
+    <TileSize>k__BackingField: 32

@@ -31,45 +31,36 @@ public class LightCulling : ViewRenderFeature
 		var tileCountY = DivRoundUp(viewPassData.viewSize.y, settings.TileSize);
 		var tileCount = tileCountX * tileCountY;
 
-		var lightCounts = renderGraph.GetTexture(new(tileCountX, tileCountY), GraphicsFormat.R8_UInt, viewPassData.viewCount, TextureDimension.Tex2DArray);
-		var lightList = renderGraph.GetBuffer(tileCount * maxLightsPerTile * viewPassData.viewCount, UnsafeUtility.SizeOf<LightData>());
+		var pointLightData = renderGraph.GetResource<PointLightData>();
+		var pointLightCount = pointLightData.lightCount;
 
-		using (var pass = renderGraph.AddComputeRenderPass("Light Culling", (viewPassData.viewCount, tileCount * maxLightsPerTile, lightCounts, tileCountY)))
+		var lightIndexCount = DivRoundUp(pointLightCount, 32);
+		var visibleLightBits = renderGraph.GetBuffer(Max(1, lightIndexCount * tileCount));
+
+		using (var pass = renderGraph.AddComputeRenderPass("Light Culling", (viewPassData.viewCount, tileCount * maxLightsPerTile, tileCountY)))
 		{
 			pass.Initialize(computeShader, 0, tileCountX, tileCountY, viewPassData.viewCount, false);
 			pass.ReadResource<PointLightData>();
 
-			pass.WriteBuffer("LightListWrite", lightList);
-			pass.WriteTexture("LightCountWrite", lightCounts);
+			pass.WriteBuffer("VisibleLightBitsWrite", visibleLightBits);
 			pass.ReadResource<ViewData>();
-
-			pass.SetRenderFunction(static (command, pass, data) =>
-			{
-				command.SetRenderTarget(pass.GetRenderTexture(data.lightCounts));
-				command.ClearRenderTarget(true, true, default);
-
-				pass.SetInt("ViewCount", data.viewCount);
-			});
 		}
 
-		renderGraph.SetResource(new Result(lightCounts, lightList));
+		renderGraph.SetResource(new Result(visibleLightBits));
 	}
 
 	public readonly struct Result : IRenderPassData
 	{
-		private readonly ResourceHandle<RenderTexture> lightCounts;
-		private readonly ResourceHandle<GraphicsBuffer> lightList;
+		private readonly ResourceHandle<GraphicsBuffer> visibleLightBits;
 
-		public Result(ResourceHandle<RenderTexture> lightCounts, ResourceHandle<GraphicsBuffer> lightList)
+		public Result(ResourceHandle<GraphicsBuffer> visibleLightBits)
 		{
-			this.lightCounts = lightCounts;
-			this.lightList = lightList;
+			this.visibleLightBits = visibleLightBits;
 		}
 
 		public void SetInputs(RenderPass pass)
 		{
-			pass.ReadTexture("LightCounts", lightCounts);
-			pass.ReadBuffer("LightList", lightList);
+			pass.ReadBuffer("VisibleLightBits", visibleLightBits);
 		}
 
 		public void SetProperties(RenderPass pass, CommandBuffer command)

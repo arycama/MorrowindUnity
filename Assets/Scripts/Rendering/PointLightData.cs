@@ -6,11 +6,13 @@ namespace CustomRenderPipeline
     public readonly struct PointLightData : IRenderPassData
     {
         private readonly ResourceHandle<GraphicsBuffer> dataBuffer, lightBuffer;
+        public readonly int lightCount;
 
-        public PointLightData(ResourceHandle<GraphicsBuffer> dataBuffer, ResourceHandle<GraphicsBuffer> lightBuffer)
+        public PointLightData(ResourceHandle<GraphicsBuffer> dataBuffer, ResourceHandle<GraphicsBuffer> lightBuffer, int lightCount)
         {
             this.dataBuffer = dataBuffer;
             this.lightBuffer = lightBuffer;
+            this.lightCount = lightCount;
         }
 
         void IRenderPassData.SetInputs(RenderPass pass)

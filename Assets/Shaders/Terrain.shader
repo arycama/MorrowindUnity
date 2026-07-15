@@ -15,7 +15,7 @@ Shader "Terrain"
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
-			#pragma target 5.0
+			#pragma use_dxc
 			#pragma multi_compile_instancing
 			#include "Terrain.hlsl"
 			ENDHLSL
@@ -33,6 +33,7 @@ Shader "Terrain"
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
+			#pragma use_dxc
 			#pragma multi_compile_instancing
 			#include "Terrain.hlsl"
 			ENDHLSL

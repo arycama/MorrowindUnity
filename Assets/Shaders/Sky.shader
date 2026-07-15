@@ -24,6 +24,7 @@
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
+			#pragma use_dxc
 			#include "Sky.hlsl"
 			ENDHLSL
 		}

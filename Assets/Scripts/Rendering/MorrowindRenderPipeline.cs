@@ -225,16 +225,17 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			var tileCountX = DivRoundUp(viewPassData.viewSize.x, asset.LightCulling.TileSize);
 			var tileCountY = DivRoundUp(viewPassData.viewSize.y, asset.LightCulling.TileSize);
 			var tileViewOffset = tileCountX * tileCountY * LightCulling.maxLightsPerTile;
+			var lightIndexCount = DivRoundUp(lightList.Count, 32);
 
 			var pointLightData = renderGraph.SetConstantBuffer
-			(
-				((float)asset.LightCulling.TileSize,
+			((
+				(float)asset.LightCulling.TileSize,
 				lightList.Count,
 				DivRoundUp(viewPassData.viewSize.x, asset.LightCulling.TileSize),
-				tileViewOffset)
-			);
+				lightIndexCount
+			));
 
-			renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer));
+			renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, lightList.Count));
 		}),
 
 		new LightCulling(asset.LightCulling, renderGraph),

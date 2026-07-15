@@ -1,14 +1,12 @@
 #pragma kernel LightCulling
+#pragma use_dxc
 
 #include "../Common.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Math.hlsl"
 
-RWStructuredBuffer<Light> LightListWrite;
-RWTexture2DArray<uint> LightCountWrite;
+RWStructuredBuffer<uint> VisibleLightBitsWrite;
 
-const static uint ThreadsPerTile = 64;
-
-groupshared uint TileLightCount;
+const static uint ThreadsPerTile = 32;
 
 // Ref https://jcgt.org/published/0002/02/05/paper.pdf
 // TODO: This can still be simplified/optimised further
@@ -51,100 +49,96 @@ void ViewSphereBounds(float3 axis, float3 center, float radius, float nearZ, out
 }
 
 [numthreads(ThreadsPerTile, 1, 1)]
-void LightCulling(uint3 id : SV_DispatchThreadId, uint groupIndex : SV_GroupIndex, uint2 groupId : SV_GroupID)
+void LightCulling(uint3 id : SV_DispatchThreadId, uint2 groupId : SV_GroupID)
 {
-	if (!groupIndex)
-		TileLightCount = 0;
-	
-	GroupMemoryBarrierWithGroupSync();
-	
 	// TODO: Precompute where possible
 	uint tileIndex = groupId.y * TileCountX + groupId.x;
-	uint tileLightOffset = tileIndex * MaxLightsPerTile + TileViewOffset * id.z;
 	float4 tilePixelBounds = float4(groupId * TileSize, (groupId + 1) * TileSize);
 	
 	float4 tileBounds; // (left, up, right, down)
 	tileBounds.xy = mul(PixelToClip, float4(tilePixelBounds.xy, 0, 1)).xy;
 	tileBounds.zw = mul(PixelToClip, float4(tilePixelBounds.zw, 0, 1)).xy;
 
+	uint laneIndex = WaveGetLaneIndex();
+	
 	// TODO: Maybe hardcode iteration count for special cases (Eg 1, 2)
-	uint iterations = (LightCount + ThreadsPerTile - 1) / ThreadsPerTile;
-	for (uint i = 0; i < iterations; i++)
+	for (uint i = 0; i < LightIndexCount; i++)
 	{
-		if (TileLightCount >= MaxLightsPerTile)
-			break;
-			
-		uint index = i * ThreadsPerTile + groupIndex;
-		if (index >= LightCount)
-			break;
-			
-		Light light = PointLights[index];
+		uint index = i * ThreadsPerTile + laneIndex;
 		
-		// Adjust center and radius for spot light
-		// TODO: Pre-transform on CPU?
-		float3 lightPosition = light.position;
-		float radius = rsqrt(abs(light.rcpRangeSquared));
-		
-		if (light.angleScale)
+		bool isVisible = false;
+		if (index < LightCount)
 		{
-			float cosHalfAngle = -light.angleOffset / light.angleScale;
-			
-			if (cosHalfAngle < sqrt(0.5))
+			Light light = PointLights[index];
+		
+			// Adjust center and radius for spot light
+			// TODO: Pre-transform on CPU?
+			float3 lightPosition = light.position;
+			float radius = rsqrt(abs(light.rcpRangeSquared));
+		
+			if (light.angleScale)
 			{
-				lightPosition -= cosHalfAngle * radius * light.forward;
-				radius *= SinFromCos(cosHalfAngle);
-			}
-			else
-			{
-				lightPosition -= radius / (2 * cosHalfAngle) * light.forward;
-				radius /= 2.0 * cosHalfAngle;
-			}
-		}
-		
-		float3 c = MultiplyPoint3x4(WorldToView, lightPosition);
-		
-		// Culled by near plane
-		if (c.z + radius < Near)
-			continue;
-		 
-		// If we use our default method, we need to project onto the maxZ plane, the lengyel 
-		// method just solves for the x-y coordinates directly on the maxZ plane.
-		float3 left, right, down, up;
-		ViewSphereBounds(float3(1, 0, 0), c, radius, Near, left, right);
-		ViewSphereBounds(float3(0, 1, 0), c, radius, Near, up, down);
-		
-		float4 lightBounds;
-		lightBounds.x = MultiplyPointProj(ViewToClip, left).x;
-		lightBounds.y = MultiplyPointProj(ViewToClip, down).y;
-		lightBounds.z = MultiplyPointProj(ViewToClip, right).x;
-		lightBounds.w = MultiplyPointProj(ViewToClip, up).y;
-		
-		// TODO: Handle this better
-		if (ViewToClip._m11 < 0.0)
-		{
-			if (any(lightBounds.xy >= tileBounds.zy || lightBounds.zw <= tileBounds.xw))
-				continue;
-		}
-		else
-		{
-			lightBounds.yw = -lightBounds.yw;
+				float cosHalfAngle = -light.angleOffset / light.angleScale;
 			
-			if (any(lightBounds.xy >= tileBounds.zw || lightBounds.zw <= tileBounds.xy))
-				continue;
+				if (cosHalfAngle < sqrt(0.5))
+				{
+					lightPosition -= cosHalfAngle * radius * light.forward;
+					radius *= SinFromCos(cosHalfAngle);
+				}
+				else
+				{
+					lightPosition -= radius / (2 * cosHalfAngle) * light.forward;
+					radius /= 2.0 * cosHalfAngle;
+				}
+			}
+		
+			float3 c = MultiplyPoint3x4(WorldToView, lightPosition);
+		
+			// Culled by near plane
+			if (c.z + radius > Near)
+			{
+				// If we use our default method, we need to project onto the maxZ plane, the lengyel 
+				// method just solves for the x-y coordinates directly on the maxZ plane.
+				float3 left, right, down, up;
+				ViewSphereBounds(float3(1, 0, 0), c, radius, Near, left, right);
+				ViewSphereBounds(float3(0, 1, 0), c, radius, Near, up, down);
+		
+				float4 lightBounds;
+				lightBounds.x = MultiplyPointProj(ViewToClip, left).x;
+				lightBounds.y = MultiplyPointProj(ViewToClip, down).y;
+				lightBounds.z = MultiplyPointProj(ViewToClip, right).x;
+				lightBounds.w = MultiplyPointProj(ViewToClip, up).y;
+		
+				// TODO: Handle this better
+				if (ViewToClip._m11 < 0.0)
+				{
+					if (any(lightBounds.xy >= tileBounds.zy || lightBounds.zw <= tileBounds.xw))
+					{
+					}
+					else
+					{
+						isVisible = true;
+					}
+				}
+				else
+				{
+					lightBounds.yw = -lightBounds.yw;
+			
+					if (any(lightBounds.xy >= tileBounds.zw || lightBounds.zw <= tileBounds.xy))
+					{
+					}
+					else
+					{
+						isVisible = true;
+					}
+				}
+			}
 		}
+			
+		uint visibleBit = (isVisible ? 1u : 0u) << laneIndex;
+		uint visibleBitAll = WaveActiveBitOr(visibleBit);
 		
-		uint currentLightCount;
-		InterlockedAdd(TileLightCount, 1, currentLightCount);
-		
-		if (currentLightCount >= MaxLightsPerTile)
-			break;
-		
-		// TODO: Refactor to use a coherent write across the work group
-		LightListWrite[tileLightOffset + currentLightCount] = light;
+		if(!laneIndex)
+			VisibleLightBitsWrite[tileIndex * LightIndexCount + i] = visibleBitAll;
 	}
-	
-	GroupMemoryBarrierWithGroupSync();
-	
-	if (!groupIndex)
-		LightCountWrite[uint3(groupId, id.z)] = min(MaxLightsPerTile, TileLightCount);
 }

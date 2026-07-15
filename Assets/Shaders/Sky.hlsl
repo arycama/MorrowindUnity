@@ -13,8 +13,9 @@ struct FragmentInput
 	float4 color : TEXCOORD2;
 };
 
-sampler2D _MainTex, _FadeTexture;
+Texture2D _MainTex, _FadeTexture;
 float4 _SkyColor;
+SamplerState sampler_MainTex, sampler_FadeTexture;
 
 cbuffer UnityPerMaterial
 {
@@ -36,8 +37,8 @@ FragmentInput Vertex(VertexInput input)
 
 float3 Fragment(FragmentInput i) : SV_Target
 {
-	float4 color = tex2D(_MainTex, i.uv);
-	float4 fadeTex = tex2D(_FadeTexture, i.uv);
+	float4 color = _MainTex.Sample(sampler_MainTex, i.uv);
+	float4 fadeTex = _FadeTexture.Sample(sampler_FadeTexture, i.uv);
 
 	// Fade between the two textures based on transition factor
 	//color = lerp(color, fadeTex, _LerpFactor);
