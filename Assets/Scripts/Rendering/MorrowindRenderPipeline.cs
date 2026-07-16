@@ -19,7 +19,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 {
 	public const int maxLightsPerTile = 32;
 
-	//protected override bool RenderUiOverlay => false;
+	protected override bool RenderUiOverlay => false;
 	protected override bool RenderWireframe => false;
 
 	private readonly Material tonemap;
@@ -121,6 +121,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			Array.Resize(ref pointLights, Max(pointLights.Length, lightCount));
 			Array.Resize(ref pointLightDepths, Max(pointLightDepths.Length, lightCount));
 			var pointLightCount = 0;
+			var near = viewPassData.near;
 
 			for (var i = 0; i < lightCount; i++)
 			{
@@ -144,10 +145,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 						var cameraToWorld = Float4x4.TRS(viewPassData.position, viewPassData.rotation, 1);
 						var cameraToView = worldToView.Mul(cameraToWorld);
 
-						var near = viewPassData.near;
-						var far = asset.ShadowDistance;
-
-						var viewBounds = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, near, far, cameraToView);
+						var viewBounds = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, near, asset.ShadowDistance, cameraToView);
 						var viewToClip = Float4x4.OrthoReverseZ(-viewBounds.extents.x, viewBounds.extents.x, -viewBounds.extents.y, viewBounds.extents.y, 0, viewBounds.Size.z);
 
 						var worldViewPosition = viewBounds.center;
@@ -194,22 +192,28 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 					var isSpot = visibleLight.lightType == LightType.Spot;
 					var angleScale = isSpot ? Rcp(outerCosHalfAngle - innerCosHalfAngle) : 0.0f;
 					var angleOffset = isSpot ? outerCosHalfAngle * angleScale : 1.0f;
-					pointLights[pointLightCount] = new(position, distanceScale, forward, angleScale, visibleLight.finalColor.Float3(), angleOffset);
 
 					// Calcualte center of spot light cone
+					var cullingSphere = new Float4(position, radius);
 					if(visibleLight.lightType == LightType.Spot)
 					{
 						if(outerCosHalfAngle < Sqrt(0.5f))
 						{
-							position += outerCosHalfAngle * radius * forward;
+							cullingSphere.xyz += outerCosHalfAngle * radius * forward;
+							cullingSphere.w *= Sin(halfAngle);
 						}
 						else
 						{
-							position += radius / (2.0f * outerCosHalfAngle) * forward;
+							cullingSphere.xyz += radius / (2.0f * outerCosHalfAngle) * forward;
+							cullingSphere.w /= 2.0f * outerCosHalfAngle;
 						}
 					}
 
-					pointLightDepths[pointLightCount] = viewPassData.rotation.InverseRotate(position - viewPassData.position).z;
+					// Convert to view space
+					cullingSphere.xyz = viewPassData.rotation.InverseRotate(cullingSphere.xyz - viewPassData.position);
+
+					pointLights[pointLightCount] = new(position, distanceScale, forward, angleScale, visibleLight.finalColor.Float3(), angleOffset, cullingSphere);
+					pointLightDepths[pointLightCount] = cullingSphere.z;
 					pointLightCount++;
 				}
 			}
@@ -254,6 +258,10 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			for(var i = 0; i < lightDepthMinMax.Length; i++)
 				lightDepthMinMax[i] = BitPack(ushort.MaxValue, 16, 0) | BitPack(0, 16, 16);
 
+			var numSlices = asset.LightCullDepthSlices;
+			var linearToLogScale = numSlices / Log2(viewPassData.far / near);
+			var linearToLogOffset = -Log2(near) * linearToLogScale;
+
 			// Add sorted lights to list
 			var binWidth = viewPassData.far / asset.LightCullDepthSlices;
 			for(var i = 0; i < pointLightCount; i++)
@@ -261,33 +269,12 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 				var light = pointLights[i];
 				
 				// Calculate view min and max depth
-				var position = light.position;
-				var radius = Rsqrt(light.rcpRangeSq);
-
-				var viewPosition = viewPassData.rotation.InverseRotate(position);
-
-				if(light.angleScale > 0.0f)
-				{
-					var cosHalfAngle = light.angleOffset / light.angleScale;
-					if(cosHalfAngle < Sqrt(0.5f))
-					{
-						position += cosHalfAngle * radius * light.forward;
-						radius *= SinFromCos(cosHalfAngle);
-					}
-					else
-					{
-						position += radius / (2.0f * cosHalfAngle) * light.forward;
-						radius /= 2.0f * cosHalfAngle;
-					}
-				}
-
-				var viewZ = pointLightDepths[i];
-				var minZ = viewZ - radius;
-				var maxZ = viewZ + radius;
+				var minZ = light.cullingSphere.z - light.cullingSphere.w;
+				var maxZ = light.cullingSphere.z + light.cullingSphere.w;
 
 				// BitOr with covered Z bins
-				var minBin = Max(0, (int)(minZ / binWidth));
-				var maxBin = Min(asset.LightCullDepthSlices - 1, (int)(maxZ / binWidth));
+				var minBin = Max(0, (int)(Log2(minZ) * linearToLogScale + linearToLogOffset));
+				var maxBin = Min(asset.LightCullDepthSlices - 1, (int)(Log2(maxZ) * linearToLogScale + linearToLogOffset));
 
 				for(var j = minBin; j <= maxBin; j++)
 				{
@@ -335,8 +322,8 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 				lightIndexCount,
 				asset.LightCullDepthSlices,
 				binWidth,
-				0,
-				0
+				linearToLogScale,
+				linearToLogOffset
 			));
 
 			renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, pointLightCount, lightDepthBinBuffer, lightDepthMinMaxBuffer));
@@ -411,18 +398,6 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 		#if UNITY_EDITOR
 			new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
 			{
-				var wireOverlay = context.CreateWireOverlayRendererList(viewPassData.camera);
-
-				using var pass = renderGraph.AddGenericRenderPass("Render Wireframe", (wireOverlay, viewPassData.target));
-				pass.SetRenderFunction(static (command, pass, data) =>
-				{
-					command.SetRenderTarget(data.target);
-					command.DrawRendererList(data.wireOverlay);
-				});
-			}),
-
-			new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
-			{
 				if(!Handles.ShouldRenderGizmos())
 					return;
 
@@ -438,6 +413,18 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 						command.DrawRendererList(data.postImageEffects);
 					});
 				}
+			}),
+
+			new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
+			{
+				var wireOverlay = context.CreateWireOverlayRendererList(viewPassData.camera);
+
+				using var pass = renderGraph.AddGenericRenderPass("Render Wireframe", (wireOverlay, viewPassData.target));
+				pass.SetRenderFunction(static (command, pass, data) =>
+				{
+					command.SetRenderTarget(data.target);
+					command.DrawRendererList(data.wireOverlay);
+				});
 			}),
 			#endif
 	};

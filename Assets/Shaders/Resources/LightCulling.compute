@@ -73,63 +73,35 @@ void LightCulling(uint3 id : SV_DispatchThreadId, uint2 groupId : SV_GroupID)
 		
 			// Adjust center and radius for spot light
 			// TODO: Pre-transform on CPU?
-			float3 lightPosition = light.position;
-			float radius = rsqrt(abs(light.rcpRangeSquared));
-		
-			if (light.angleScale)
-			{
-				float cosHalfAngle = light.angleOffset / light.angleScale;
-				if (cosHalfAngle < sqrt(0.5))
-				{
-					lightPosition += cosHalfAngle * radius * light.forward;
-					radius *= SinFromCos(cosHalfAngle);
-				}
-				else
-				{
-					lightPosition += radius / (2 * cosHalfAngle) * light.forward;
-					radius /= 2.0 * cosHalfAngle;
-				}
-			}
-		
-			float3 c = MultiplyPoint3x4(WorldToView, lightPosition);
+			float4 cullingSphere = light.cullingSphere;
 		
 			// Culled by near plane
-			if (c.z + radius > Near)
+			if (cullingSphere.z + cullingSphere.w > Near)
 			{
 				// If we use our default method, we need to project onto the maxZ plane, the lengyel 
 				// method just solves for the x-y coordinates directly on the maxZ plane.
 				float3 left, right, down, up;
-				ViewSphereBounds(float3(1, 0, 0), c, radius, Near, left, right);
-				ViewSphereBounds(float3(0, 1, 0), c, radius, Near, up, down);
+				ViewSphereBounds(float3(1, 0, 0), cullingSphere.xyz, cullingSphere.w, Near, left, right);
+				ViewSphereBounds(float3(0, 1, 0), cullingSphere.xyz, cullingSphere.w, Near, up, down);
 		
 				float4 lightBounds;
 				lightBounds.x = MultiplyPointProj(ViewToClip, left).x;
 				lightBounds.y = MultiplyPointProj(ViewToClip, down).y;
 				lightBounds.z = MultiplyPointProj(ViewToClip, right).x;
 				lightBounds.w = MultiplyPointProj(ViewToClip, up).y;
-		
+				
 				// TODO: Handle this better
 				if (ViewToClip._m11 < 0.0)
 				{
-					if (any(lightBounds.xy >= tileBounds.zy || lightBounds.zw <= tileBounds.xw))
-					{
-					}
-					else
-					{
+					if (all(lightBounds.xy < tileBounds.zy && lightBounds.zw > tileBounds.xw))
 						isVisible = true;
-					}
 				}
 				else
 				{
 					lightBounds.yw = -lightBounds.yw;
 			
-					if (any(lightBounds.xy >= tileBounds.zw || lightBounds.zw <= tileBounds.xy))
-					{
-					}
-					else
-					{
+					if (all(lightBounds.xy < tileBounds.zw && lightBounds.zw > tileBounds.xy))
 						isVisible = true;
-					}
 				}
 			}
 		}

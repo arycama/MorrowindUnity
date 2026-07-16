@@ -38,6 +38,7 @@ struct Light
 	float angleScale;
 	float3 color;
 	float angleOffset;
+	float4 cullingSphere;
 };
 
 const static uint MaxLightsPerTile = 32;
@@ -65,7 +66,8 @@ cbuffer PointLightData
 	
 	uint LightCullDepthSlices;
 	float LightBinWidth;
-	float2 PointLightDataPadding;
+	float LinearToLogScale;
+	float LinearToLogOffset;
 };
 
 Texture2D<float> SunShadow;
@@ -109,6 +111,16 @@ float3 ObjectToWorld(float3 position, uint instanceId)
 	return MultiplyPoint3x4(objectToWorld, position);
 }
 
+float3 WorldToViewPosition(float3 position)
+{
+	return MultiplyPoint3x4(WorldToView, position);
+}
+
+float3 ObjectToViewPosition(float3 position, uint instanceId)
+{
+	return WorldToViewPosition(ObjectToWorld(position, instanceId));
+}
+
 float4 WorldToClipPosition(float3 position)
 {
 	#ifdef UNITY_PASS_SHADOWCASTER
@@ -143,18 +155,6 @@ float4 BilinearWeights(float2 uv, float2 textureSize)
 	return weights.zzww * weights.xyyx;
 }
 
-uint ClusterMaskRange(uint mask, uint2 range, uint start_index)
-{
-	range.x = clamp(range.x, start_index, start_index + 32u);
-	range.y = clamp(range.y + 1u, range.x, start_index + 32u);
-
-	uint num_bits = range.y - range.x;
-	uint range_mask = num_bits == 32 ?
-		0xffffffffu :
-		((1u << num_bits) - 1u) << (range.x - start_index);
-	return mask & uint(range_mask);
-}
-
 float3 GetLighting(float3 normal, float3 worldPosition, float4 screenPosition)
 {
 	// Directional light
@@ -168,51 +168,54 @@ float3 GetLighting(float3 normal, float3 worldPosition, float4 screenPosition)
 		lighting *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
 	
 	// Point Lights
-	float lightCount = 0;
-	int2 clusterCoord = (int2) (screenPosition.xy / TileSize);
-	int linearClusterCoord = clusterCoord.y * TileCountX + clusterCoord.x;
-	int tileDepth = (int) (screenPosition.w / LightBinWidth);
+	uint lightCount = 0;
+	uint2 clusterCoord = (uint2) (screenPosition.xy / TileSize);
+	uint tileDepth = (uint) (log2(screenPosition.w) * LinearToLogScale + LinearToLogOffset);
+	
+	uint linearClusterCoord = clusterCoord.y * TileCountX + clusterCoord.x;
 	
 	uint2 zRange = BitUnpack(LightDepthMinMax[tileDepth], 16, uint2(0, 16));
 	
 	// Find min/max light we need to consider when shading slice Z
-	int zStart = (int) (WaveActiveMin(zRange.x) >> 5u);
-	int zEnd = (int) (WaveActiveMax(zRange.y) >> 5u);
+	uint zStart = WaveActiveMin(zRange.x) >> 5u;
+	uint zEnd = WaveActiveMax(zRange.y) >> 5u;
 	
 	for (uint i = zStart; i <= zEnd; i++)
 	{
 		uint mask = VisibleLightBits[linearClusterCoord * LightIndexCount + i];
 		
 		// Restrict to lights within Z-range
-		mask = ClusterMaskRange(mask, zRange, 32u * i);
+		uint startIndex = 32u * i;
+		
+		uint2 range;
+		range.x = clamp(zRange.x, startIndex, startIndex + 32u);
+		range.y = clamp(zRange.y + 1u, range.x, startIndex + 32u);
+
+		uint numBits = range.y - range.x;
+		uint rangeMask = numBits == 32u ? UintMax : ((1u << numBits) - 1u) << (range.x - startIndex);
+		mask = WaveActiveBitOr(mask & rangeMask);
 	
 		while (mask != 0u)
 		{
 			uint bitIndex = firstbitlow(mask);
-			uint lightIndex = 32u * i + bitIndex;
-			
-			Light light = PointLights[lightIndex];
+			Light light = PointLights[startIndex + bitIndex];
 	
+			// Attenuation
 			float3 lightVector = light.position - worldPosition;
 			float distanceSquared = dot(lightVector, lightVector);
+			float attenuation = saturate(1.0h - distanceSquared * light.rcpRangeSquared);
 		
-			// Range attenuation
-			float attenuation = saturate(1.0h - pow(distanceSquared * light.rcpRangeSquared, 2.0));
-		
-			// Angle attenuation
-			float rcpDistance = rsqrt(distanceSquared);
-			float3 L = lightVector * rcpDistance;
-			attenuation *= saturate(dot(light.forward, L) * light.angleScale + light.angleOffset);
-			attenuation *= attenuation;
+			float3 L = lightVector * rsqrt(distanceSquared);
+			attenuation = Sq(attenuation * saturate(dot(light.forward, L) * light.angleScale + light.angleOffset));
 		
 			lighting += saturate(dot(normal, L)) * light.color * attenuation;
-			lightCount++;
-			
 			mask &= ~(1u << bitIndex);
+			
+			lightCount++;
 		}
 	}
 	
-	//lighting += lightCount;
+	//lighting = lightCount >> uint3(0, 1, 2) & 1;
 	
 	return lighting;
 }
