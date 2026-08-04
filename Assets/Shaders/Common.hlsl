@@ -5,6 +5,24 @@
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Packing.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Samplers.hlsl"
 
+struct GbufferOutput
+{
+	float4 albedoMetallic : SV_Target0;
+	float4 normalOcclusionRoughness : SV_Target1;
+	float4 emission : SV_Target2;
+};
+
+struct Light
+{
+	float3 position;
+	float rcpRangeSquared;
+	float3 forward;
+	float angleScale;
+	float3 color;
+	float angleOffset;
+	float4 cullingSphere;
+};
+
 cbuffer EnvironmentData
 {
 	float3 AmbientLight;
@@ -35,22 +53,13 @@ cbuffer ViewData
 	
 	float3 ViewPosition;
 	float ViewDataPadding;
+	
+	float4 FrustumCorners[3];
 };
 
 cbuffer CascadeData
 {
 	matrix WorldToShadowClip;
-};
-
-struct Light
-{
-	float3 position;
-	float rcpRangeSquared;
-	float3 forward;
-	float angleScale;
-	float3 color;
-	float angleOffset;
-	float4 cullingSphere;
 };
 
 cbuffer LightingData
@@ -80,10 +89,17 @@ cbuffer PointLightData
 	float RcpBinWidth;
 };
 
-Texture2D<float> SunShadow;
+cbuffer VolumetricLightingData
+{
+	float3 VolumeSize;
+	float MaxDepth;
+};
+
 StructuredBuffer<Light> PointLights;
 StructuredBuffer<uint> LightDepthMinMax;
+Texture2D<float> SunShadow;
 Texture2DArray<uint> VisibleLightBits;
+Texture3D<float4> VolumetricLighting;
 
 #ifdef INSTANCING_ON
 	cbuffer UnityDrawCallInfo
@@ -175,6 +191,11 @@ float4 ScreenToPreviousScreenPosition(float2 uv, float depth)
 	return WorldToPreviousScreenPosition(worldPosition);
 }
 
+float LinearEyeDepth(float depth)
+{
+	return rcp(LinearDepthScale * depth + LinearDepthOffset);
+}
+
 float LinearToDeviceDepth(float eyeDepth)
 {
 	return rcp(eyeDepth) * ViewToClip._m23 + ViewToClip._m22;
@@ -240,14 +261,35 @@ float3 GetLighting(float3 normal, float3 worldPosition, float4 screenPosition)
 			attenuation *= saturate(dot(light.forward, L) * light.angleScale + light.angleOffset);
 			attenuation = Sq(attenuation);
 			
-			//lighting += saturate(dot(normal, L)) * attenuation * light.color;
-			lighting += (attenuation > 0) * light.color;
+			lighting += saturate(dot(normal, L)) * attenuation * light.color;
 		}
 	}
 	
-	//lighting = (lightCount >> uint3(0, 1, 2) & 1);
+	lighting = (lightCount >> uint3(0, 1, 2) & 1);
 	
 	return lighting;
+}
+
+float3 GetFrustumCorner(uint id)
+{
+	return FrustumCorners[id];
+}
+
+float FogFactor(float viewDistance)
+{
+	return saturate(viewDistance * FogScale + FogOffset);
+}
+
+float4 ApplyFog(float4 color, float viewDistance)
+{
+	float fogFactor = FogFactor(viewDistance);
+	float4 result = lerp(color, float4(FogColor, 1.0), fogFactor);
+	return result;
+}
+
+float4 ApplyFog(float3 color, float viewDistance)
+{
+	return ApplyFog(float4(color, 1.0), viewDistance);
 }
 
 #endif

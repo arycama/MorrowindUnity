@@ -1,33 +1,30 @@
 #include "Common.hlsl"
-#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/VolumetricLight.hlsl"
 
 struct VertexInput
 {
 	uint instanceId : SV_InstanceID;
 	float3 position : POSITION;
-	
-	#ifndef UNITY_PASS_SHADOWCASTER
-		float3 normal : NORMAL;
-		float2 uv : TEXCOORD;
-		float3 color : COLOR;
-	#endif
+	float3 normal : NORMAL;
+	float2 uv : TEXCOORD;
+	float3 color : COLOR;
 };
 
 struct FragmentInput
 {
 	float4 position : SV_Position;
-	
-	#ifndef UNITY_PASS_SHADOWCASTER
-		float3 worldPosition : POSITION1;
-		float2 uv : TEXCOORD;
-		float3 normal : NORMAL;
-		float3 color : COLOR;
-	#endif
+	float3 worldPosition : POSITION1;
+	float2 uv : TEXCOORD;
+	float3 normal : NORMAL;
+	float3 color : COLOR;
 };
 
 struct FragmentOutput
 {
-	#ifndef UNITY_PASS_SHADOWCASTER
+	#ifdef GBUFFER
+		GbufferOutput gbuffer;
+	#endif
+	
+	#ifdef FORWARD
 		float4 color : SV_Target;
 	#endif
 };
@@ -48,31 +45,32 @@ FragmentInput Vertex(VertexInput input)
 	
 	FragmentInput output;
 	output.position = WorldToClipPosition(worldPosition);
-	
-	#ifndef UNITY_PASS_SHADOWCASTER
-		output.worldPosition = worldPosition;
-		output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
-		output.normal = ObjectToWorldNormal(input.normal, input.instanceId);
-		output.color = AmbientLight * input.color + _EmissionColor;
-	#endif
-	
+	output.worldPosition = worldPosition;
+	output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
+	output.normal = ObjectToWorldNormal(input.normal, input.instanceId);
+	output.color = AmbientLight * input.color + _EmissionColor;
 	return output;
 }
 
 FragmentOutput Fragment(FragmentInput input)
 {
 	FragmentOutput output;
+
+	float4 color = _MainTex.Sample(sampler_MainTex, input.uv);
+	float3 normal = normalize(input.normal);
 	
-	#ifndef UNITY_PASS_SHADOWCASTER
-		float4 color = _MainTex.Sample(sampler_MainTex, input.uv);
-		float3 normal = normalize(input.normal);
-		
+	#ifdef GBUFFER
+		output.gbuffer.albedoMetallic = float4(color.rgb, 0.0);
+		output.gbuffer.normalOcclusionRoughness = float4(normal * 0.5 + 0.5, 1.0);
+		output.gbuffer.emission = float4(input.color * color.rgb, 0.0);
+	#endif
+	
+	#ifdef FORWARD
 		float3 lighting = GetLighting(normal, input.worldPosition, input.position);
 		lighting += input.color;
 		color.rgb *= lighting;
 	
-		float fogFactor = saturate(input.position.w * FogScale + FogOffset);
-		color.rgb = lerp(color.rgb, FogColor, fogFactor);
+		color.rgb = ApplyFog(color.rgb, input.position.w).rgb;
 		
 	//	color.rgb = ApplyVolumetricLight(color.rgb, input.position.xy, input.position.w);
 		

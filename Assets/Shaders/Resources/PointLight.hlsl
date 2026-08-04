@@ -22,8 +22,8 @@ FragmentInput Vertex(VertexInput input)
 	float3 viewPosition = input.position * light.cullingSphere.w + light.cullingSphere.xyz;
 	
 	// Invert culling if camera inside
-	if(light.cullingSphere.z - light.cullingSphere.w * 1.075 <= 0)
-		viewPosition = -input.position * light.cullingSphere.w + light.cullingSphere.xyz;
+	//if(light.cullingSphere.z - light.cullingSphere.w * 1.075 <= 0)
+	//	viewPosition = -input.position * light.cullingSphere.w + light.cullingSphere.xyz;
 	
 	output.position = mul(ViewToClip, float4(viewPosition, 1.0));
 	output.data.x = input.instanceId / 32u; // Offset

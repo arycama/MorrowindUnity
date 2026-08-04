@@ -28,7 +28,7 @@ FragmentInput Vertex(VertexInput input)
 	FragmentInput output;
 	output.position = mul(WorldToClip, float4(mul(unity_ObjectToWorld, float4(input.position, 1.0)).xyz, 1.0));
 	output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw + _CloudSpeed * Time * 0.003;
-	//output.position.z /= output.position.w;
+	output.position.z /= output.position.w;
 
 	output.color.a = input.position.y * 0.005 - 0.5;
 	output.color.rgb = lerp(FogColor, _SkyColor.rgb, output.color.a);

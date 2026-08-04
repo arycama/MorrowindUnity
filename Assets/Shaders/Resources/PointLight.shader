@@ -2,8 +2,8 @@ Shader "Hidden/Point Light"
 {
     SubShader
     {
-        //Cull Front
-        //ZClip Off
+        Cull Off
+        ZTest Off 
         ZWrite Off
 
         Pass

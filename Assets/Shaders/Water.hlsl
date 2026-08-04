@@ -44,7 +44,7 @@ float4 Fragment(FragmentInput input) : SV_Target
 	float depthDistance = backgroundDepth - input.position.w;
 	float3 backgroundColor = CameraColor[input.position.xy];
 	float3 transmittance = exp(-depthDistance * Extinction);
-	color.rgb = lerp(color.rgb, 0.0, transmittance);
+	//color.rgb = lerp(color.rgb, 0.0, transmittance);
 	
 	float3 normal = normalize(input.normal);
 	float3 lighting = saturate(dot(normal, SunDirection)) * SunColor;
@@ -61,13 +61,10 @@ float4 Fragment(FragmentInput input) : SV_Target
 	{
 		float fogFactor = saturate(backgroundDepth * FogScale + FogOffset);
 		float3 backgroundFog = lerp(0.0, FogColor, fogFactor);
-		backgroundColor = max(0.0, backgroundColor - backgroundFog.rgb);
+		//backgroundColor = max(0.0, backgroundColor - backgroundFog.rgb);
 	}
 	
-	color.rgb += backgroundColor * transmittance;
+	//color.rgb += backgroundColor * transmittance;
 	
-	float fogFactor = saturate(input.position.w * FogScale + FogOffset);
-	color.rgb = lerp(color.rgb, FogColor, fogFactor);
-	
-	return color;
+	return ApplyFog(color, input.position.w);
 }

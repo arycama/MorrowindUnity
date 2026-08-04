@@ -1,12 +1,11 @@
 #include "Common.hlsl"
-#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/VolumetricLight.hlsl"
 
 struct VertexInput
 {
 	uint instanceId : SV_InstanceID;
 	float3 position : POSITION;
 	
-	#ifndef UNITY_PASS_SHADOWCASTER
+	#ifdef GBUFFER
 		float3 normal : NORMAL;
 		float3 color : COLOR;
 		float4 uv : TEXCOORD;
@@ -17,11 +16,18 @@ struct FragmentInput
 {
 	float4 position : SV_Position;
 	
-	#ifndef UNITY_PASS_SHADOWCASTER
+	#ifdef GBUFFER
 		float3 worldPosition : POSITION1;
 		float3 normal : NORMAL;
 		float3 color : COLOR;
 		float4 uv : TEXCOORD;
+	#endif
+};
+
+struct FragmentOutput
+{
+	#ifdef GBUFFER
+		GbufferOutput gbuffer;
 	#endif
 };
 
@@ -41,7 +47,7 @@ FragmentInput Vertex(VertexInput input)
 	FragmentInput output;
 	output.position = WorldToClipPosition(worldPosition);
 	
-	#ifndef UNITY_PASS_SHADOWCASTER
+	#ifdef GBUFFER
 		output.worldPosition = worldPosition;
 		output.uv = float4(input.uv.xy, input.uv.zw * _MainTex_ST.xy + _MainTex_ST.zw);
 		output.color = input.color;
@@ -51,11 +57,11 @@ FragmentInput Vertex(VertexInput input)
 	return output;
 }
 
-#ifdef UNITY_PASS_SHADOWCASTER
-	void Fragment() { }
-#else
-	float3 Fragment(FragmentInput input) : SV_Target
-	{
+FragmentOutput Fragment(FragmentInput input)
+{
+	FragmentOutput output;
+
+	#ifdef GBUFFER
 		float4 terrainData = _Control.Gather(sampler_Control, input.uv.xy) * 255.0;
 		float4 weights = BilinearWeights(input.uv.xy, _Control_TexelSize.zw);
 	
@@ -63,18 +69,12 @@ FragmentInput Vertex(VertexInput input)
 		color += _MainTex.Sample(sampler_MainTex, float3(input.uv.zw, terrainData.y)) * weights.y;
 		color += _MainTex.Sample(sampler_MainTex, float3(input.uv.zw, terrainData.z)) * weights.z;
 		color += _MainTex.Sample(sampler_MainTex, float3(input.uv.zw, terrainData.w)) * weights.w;
-	
-		float3 normal = normalize(input.normal);
+		color *= input.color;
 		
-		float3 lighting = GetLighting(normal, input.worldPosition, input.position);
-		lighting += AmbientLight;
-		color *= lighting * input.color;
+		output.gbuffer.albedoMetallic = float4(color, 0.0);
+		output.gbuffer.normalOcclusionRoughness.xyz = normalize(input.normal);
+		output.gbuffer.emission = float4(AmbientLight * color, 0.0);
+	#endif
 	
-		float fogFactor = saturate(input.position.w * FogScale + FogOffset);
-		color = lerp(color, FogColor, fogFactor);
-		
-		//color.rgb = ApplyVolumetricLight(color.rgb, input.position.xy, input.position.w);
-	
-		return color;
-	}
-#endif
+	return output;
+}

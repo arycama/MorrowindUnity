@@ -26,7 +26,20 @@
 	{
 		Pass
 		{
-			Name "Base"
+            Tags { "LightMode" = "GBuffer" }
+
+			HLSLPROGRAM
+			#pragma vertex Vertex
+			#pragma fragment Fragment
+			#pragma require WaveMath
+			#pragma multi_compile_instancing
+			#define GBUFFER
+			#include "Surface.hlsl"
+			ENDHLSL
+		}
+
+		Pass
+		{
             Tags { "LightMode" = "Forward" }
 
 			Blend [_SrcBlend] [_DstBlend]
@@ -36,28 +49,26 @@
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
-			#pragma use_dxc
 			#pragma require WaveMath
 			#pragma multi_compile_instancing
+			#define FORWARD
 			#include "Surface.hlsl"
 			ENDHLSL
 		}
 
 		Pass
 		{
-			Name "Shadow"
-
 			Colormask 0
-			ZClip[ZClip]
+			ZClip [ZClip]
 
             Tags { "LightMode" = "ShadowCaster" }
 
             HLSLPROGRAM
             #pragma vertex Vertex
             #pragma fragment Fragment
-			#pragma use_dxc
 			#pragma require WaveMath
 			#pragma multi_compile_instancing
+			#define SHADOW
 			#include "Surface.hlsl"
 			ENDHLSL
 		}

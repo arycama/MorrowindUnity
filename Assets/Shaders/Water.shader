@@ -12,13 +12,13 @@
 
 	SubShader
 	{
-		Tags { "Queue"="Transparent" }
+		Tags { "Queue" = "Transparent" }
 
 		Pass
 		{
-			Name "Base"
+			Tags { "LightMode" = "Forward" }
 
-			Blend One Zero
+			Blend SrcAlpha OneMinusSrcAlpha
 			ZWrite Off
 
 			HLSLPROGRAM

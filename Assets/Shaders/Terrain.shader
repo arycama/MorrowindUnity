@@ -8,36 +8,33 @@ Shader "Terrain"
 
 	SubShader
 	{
+		HLSLINCLUDE
+		#pragma vertex Vertex
+		#pragma fragment Fragment
+		#pragma use_dxc
+		#pragma require waveMath
+		#pragma multi_compile_instancing
+		ENDHLSL
+
 		Pass
 		{
-			Name "Base"
-			Tags { "LightMode" = "Forward" }
+			Tags { "LightMode" = "Gbuffer" }
 
 			HLSLPROGRAM
-			#pragma vertex Vertex
-			#pragma fragment Fragment
-			#pragma use_dxc
-			#pragma require waveMath
-			#pragma multi_compile_instancing
+			#define GBUFFER
 			#include "Terrain.hlsl"
 			ENDHLSL
 		}
 
 		Pass
 		{
-			Name "Shadow"
-
 			Colormask 0
 			ZClip [ZClip]
 
 			Tags { "LightMode" = "ShadowCaster" }
 
 			HLSLPROGRAM
-			#pragma vertex Vertex
-			#pragma fragment Fragment
-			#pragma use_dxc
-			#pragma require waveMath
-			#pragma multi_compile_instancing
+			#define SHADOW
 			#include "Terrain.hlsl"
 			ENDHLSL
 		}

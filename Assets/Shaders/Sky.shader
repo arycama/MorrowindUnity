@@ -13,14 +13,12 @@
 
 	SubShader
 	{
-		//Blend SrcAlpha OneMinusSrcAlpha
-		ZWrite Off
-		//ZClip Off
-
-		Tags { "Queue"="Background" "PreviewType"="Skybox" }
-
 		Pass
 		{
+			ZWrite Off
+
+			Tags { "LightMode" = "Sky" }
+
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
