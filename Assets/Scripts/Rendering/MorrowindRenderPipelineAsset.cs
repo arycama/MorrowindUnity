@@ -4,6 +4,7 @@ using UnityEngine.Rendering;
 [CreateAssetMenu(menuName = "Morrowind Render Pipeline Asset")]
 public class MorrowindRenderPipelineAsset : CustomRenderPipelineAssetBase
 {
+	[field: SerializeField, Pow2(128)] public int TileSize { get; private set; } = 16;
 	[SerializeField] private float shadowDistance = 4096;
 	[SerializeField] private int shadowResolution = 2048;
 	[SerializeField] private float shadowBias = 0.0f;
@@ -12,7 +13,8 @@ public class MorrowindRenderPipelineAsset : CustomRenderPipelineAssetBase
 	[field: SerializeField] public float ShadowFadeDistance { get; private set; } = 8f;
 
 	[field: SerializeField, Pow2(8192)] public int LightCullDepthSlices { get; private set; } = 8192;
-	[field: SerializeField] public LightCulling.Settings LightCulling { get; private set; }
+	[field: SerializeField] public VolumetricLighting.Settings VolumetricLighting { get; private set; }
+	[field: SerializeField] public Mesh PointLightMesh { get; private set; }
 
 	public float ShadowDistance => shadowDistance;
 	public int ShadowResolution => shadowResolution;

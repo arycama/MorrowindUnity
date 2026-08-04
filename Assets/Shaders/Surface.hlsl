@@ -1,4 +1,5 @@
 #include "Common.hlsl"
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/VolumetricLight.hlsl"
 
 struct VertexInput
 {
@@ -72,6 +73,8 @@ FragmentOutput Fragment(FragmentInput input)
 	
 		float fogFactor = saturate(input.position.w * FogScale + FogOffset);
 		color.rgb = lerp(color.rgb, FogColor, fogFactor);
+		
+	//	color.rgb = ApplyVolumetricLight(color.rgb, input.position.xy, input.position.w);
 		
 		output.color = color;
 	#endif

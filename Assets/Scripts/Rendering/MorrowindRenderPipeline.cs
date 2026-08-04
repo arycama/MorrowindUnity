@@ -10,6 +10,8 @@ using Unity.Collections;
 
 using static Unmath.Math;
 using Unity.Collections.LowLevel.Unsafe;
+using Quaternion = Unmath.Quaternion;
+
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -17,22 +19,24 @@ using UnityEditor;
 
 public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<MorrowindRenderPipelineAsset>
 {
-	public const int maxLightsPerTile = 32;
-
 	protected override bool RenderUiOverlay => false;
 	protected override bool RenderWireframe => false;
 
+	private readonly Dictionary<int, (Float3, Quaternion, Float4x4)> previousCameraTransform = new();
+
 	private readonly Material tonemap;
+	private readonly Material pointLightMaterial;
 	private readonly NativeList<LightShadowCasterCullingInfo> perLightInfos = new(1, Allocator.Persistent);
 	private readonly NativeList<ShadowSplitData> splitBuffer = new(1, Allocator.Persistent);
 
 	private LightData[] pointLights = new LightData[8];
 	private float[] pointLightDepths = new float[8];
-	private int[] lightDepthBins, lightDepthMinMax;
+	private int[] lightDepthMinMax;
 
 	public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset) : base(renderPipelineAsset)
 	{
 		tonemap = new Material(Shader.Find("Hidden/Morrowind Tonemap")) { hideFlags = HideFlags.HideAndDontSave };
+		pointLightMaterial = new Material(Shader.Find("Hidden/Point Light")) { hideFlags = HideFlags.HideAndDontSave };
 	}
 
 	protected override List<FrameRenderFeature> InitializePerFrameRenderFeatures() => new()
@@ -73,7 +77,9 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 				RenderSettings.fogColor.LinearFloat3(),
 				fogOffset,
 				Time.time,
-				Float3.Zero
+				fogStart,
+				fogEnd, 
+				0f
 			));
 
 			renderGraph.SetResource(new EnvironmentData(environmentDataBuffer));
@@ -90,10 +96,37 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 			// View
 			var viewToClip = Float4x4.PerspectiveReverseZ(viewPassData.tanHalfFov, viewPassData.near, viewPassData.far, 0, viewPassData.isFlipped);
+			var clipToView = Float4x4.PerspectiveReverseZInverse(viewPassData.tanHalfFov, viewPassData.near, viewPassData.far);
+
+			var viewToScreen = clipToScreen.Mul(viewToClip);
+			var screenToView = clipToView.Mul(screenToClip);
+
+			var viewToPixel = screenToPixel.Mul(viewToScreen);
+			var pixelToView = clipToView.Mul(pixelToClip);
+
+			var viewToWorld = Float4x4.TRS(viewPassData.position, viewPassData.rotation, 1.0f);
 			var worldToView = Float4x4.WorldToLocal(viewPassData.position, viewPassData.rotation);
 
-			// World
-			var worldToClip = viewToClip.Mul(worldToView);
+            // World
+            var worldToClip = viewToClip.Mul(worldToView);
+			var clipToWorld = viewToWorld.Mul(clipToView);
+
+			var worldToScreen = clipToScreen.Mul(worldToClip);
+			var screenToWorld = viewToWorld.Mul(screenToView);
+
+			var worldToPixel = screenToPixel.Mul(worldToScreen);
+			var pixelToWorld = viewToWorld.Mul(pixelToView);
+
+			// Previous frame matrices
+            var viewToNonJitteredScreen = clipToScreen.Mul(viewToClip);
+			if (!previousCameraTransform.TryGetValue(viewPassData.viewId, out var previousTransform))
+				previousTransform = (viewPassData.position, viewPassData.rotation, viewToNonJitteredScreen);
+
+			previousCameraTransform[viewPassData.viewId] = (viewPassData.position, viewPassData.rotation, viewToNonJitteredScreen);
+
+			  var worldToPreviousView = Float4x4.WorldToLocal(previousTransform.Item1 - viewPassData.position, previousTransform.Item2);
+			var worldToPreviousScreen = previousTransform.Item3.Mul(worldToPreviousView);
+			var pixelToWorldDir = Float4x4.PixelToWorldViewDirectionMatrix(viewPassData.viewSize, 0f, viewPassData.tanHalfFov, viewToWorld, true, false);
 
 			renderGraph.SetResource(new ViewData(renderGraph.SetConstantBuffer
 			((
@@ -101,7 +134,13 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 				viewToClip,
 				worldToView,
 				pixelToClip,
-				(viewPassData.far - viewPassData.near) * Rcp(viewPassData.near * viewPassData.far), Rcp(viewPassData.far), viewPassData.near, viewPassData.far
+				screenToWorld,
+				worldToPreviousScreen,
+				(viewPassData.far - viewPassData.near) * Rcp(viewPassData.near * viewPassData.far), Rcp(viewPassData.far), viewPassData.near, viewPassData.far,
+				(Float2)viewPassData.viewSize,
+				1.0f / (Float2)viewPassData.viewSize,
+				viewPassData.position,
+				0f
 			))));
 		}),
 
@@ -121,7 +160,6 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			Array.Resize(ref pointLights, Max(pointLights.Length, lightCount));
 			Array.Resize(ref pointLightDepths, Max(pointLightDepths.Length, lightCount));
 			var pointLightCount = 0;
-			var near = viewPassData.near;
 
 			for (var i = 0; i < lightCount; i++)
 			{
@@ -145,7 +183,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 						var cameraToWorld = Float4x4.TRS(viewPassData.position, viewPassData.rotation, 1);
 						var cameraToView = worldToView.Mul(cameraToWorld);
 
-						var viewBounds = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, near, asset.ShadowDistance, cameraToView);
+						var viewBounds = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, viewPassData.near, asset.ShadowDistance, cameraToView);
 						var viewToClip = Float4x4.OrthoReverseZ(-viewBounds.extents.x, viewBounds.extents.x, -viewBounds.extents.y, viewBounds.extents.y, 0, viewBounds.Size.z);
 
 						var worldViewPosition = viewBounds.center;
@@ -247,20 +285,17 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 			renderGraph.SetResource(new LightingData(sunShadows, lightingDataBuffer, sunShadowsEnabled));
 
+			if (pointLightCount == 0)
+				return;
+
 			// Sort lights by view depth
 			Array.Sort(pointLightDepths, pointLights);
-
-			// Resize Z bins if needed and clear
-			Array.Resize(ref lightDepthBins, asset.LightCullDepthSlices);
-			Array.Clear(lightDepthBins, 0, lightDepthBins.Length);
 
 			Array.Resize(ref lightDepthMinMax, asset.LightCullDepthSlices);
 			for(var i = 0; i < lightDepthMinMax.Length; i++)
 				lightDepthMinMax[i] = BitPack(ushort.MaxValue, 16, 0) | BitPack(0, 16, 16);
 
 			var numSlices = asset.LightCullDepthSlices;
-			var linearToLogScale = numSlices / Log2(viewPassData.far / near);
-			var linearToLogOffset = -Log2(near) * linearToLogScale;
 
 			// Add sorted lights to list
 			var binWidth = viewPassData.far / asset.LightCullDepthSlices;
@@ -273,13 +308,11 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 				var maxZ = light.cullingSphere.z + light.cullingSphere.w;
 
 				// BitOr with covered Z bins
-				var minBin = Max(0, (int)(Log2(minZ) * linearToLogScale + linearToLogOffset));
-				var maxBin = Min(asset.LightCullDepthSlices - 1, (int)(Log2(maxZ) * linearToLogScale + linearToLogOffset));
+				var minBin = Max(0, (int)(minZ / binWidth));
+				var maxBin = Min(asset.LightCullDepthSlices - 1, (int)(maxZ / binWidth));
 
 				for(var j = minBin; j <= maxBin; j++)
 				{
-					lightDepthBins[j] |= i;
-
 					var currentMinMax = lightDepthMinMax[j];
 
 					var currentMin = BitUnpack(currentMinMax, 16, 0);
@@ -292,72 +325,107 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 				}
 			}
 
-			var pointLightBuffer = pointLightCount == 0 ? renderGraph.EmptyBuffer : renderGraph.GetBuffer(pointLightCount, UnsafeUtility.SizeOf<LightData>());
-			var lightDepthBinBuffer = renderGraph.GetBuffer(asset.LightCullDepthSlices);
-			var lightDepthMinMaxBuffer = renderGraph.GetBuffer(asset.LightCullDepthSlices);
+			var tileCountX = DivRoundUp(viewPassData.viewSize.x, asset.TileSize);
+			var tileCountY = DivRoundUp(viewPassData.viewSize.y, asset.TileSize);
+			var lightIndexCount = DivRoundUp(pointLightCount, 32);
 
-			using (var pass = renderGraph.AddGenericRenderPass("Set Light Data", (pointLights, pointLightCount, pointLightBuffer, lightDepthBinBuffer, lightDepthBins, lightDepthMinMaxBuffer, lightDepthMinMax)))
+			var pointLightBuffer = pointLightCount == 0 ? renderGraph.EmptyBuffer : renderGraph.GetBuffer(pointLightCount, UnsafeUtility.SizeOf<LightData>());
+			var lightDepthMinMaxBuffer = renderGraph.GetBuffer(asset.LightCullDepthSlices);
+			var visibleLightBits = renderGraph.GetTexture(new(tileCountX, tileCountY), GraphicsFormat.R32_UInt, lightIndexCount, TextureDimension.Tex2DArray, isRandomWrite: true);
+
+			using (var pass = renderGraph.AddGenericRenderPass("Set Light Data", (pointLights, pointLightCount, pointLightBuffer, lightDepthMinMaxBuffer, lightDepthMinMax, visibleLightBits)))
 			{
 				pass.WriteBuffer("", pointLightBuffer);
-				pass.WriteBuffer("", lightDepthBinBuffer);
 				pass.WriteBuffer("", lightDepthMinMaxBuffer);
+				pass.WriteTexture(visibleLightBits);
+
 				pass.SetRenderFunction(static (command, pass, data) =>
 				{
 					command.SetBufferData(pass.GetBuffer(data.pointLightBuffer), data.pointLights, 0, 0, data.pointLightCount);
-					command.SetBufferData(pass.GetBuffer(data.lightDepthBinBuffer), data.lightDepthBins);
 					command.SetBufferData(pass.GetBuffer(data.lightDepthMinMaxBuffer), data.lightDepthMinMax);
+
+					// Clear the light bitmask texture
+					command.SetRenderTarget(pass.GetRenderTexture(data.visibleLightBits), 0, CubemapFace.Unknown, -1);
+					command.ClearRenderTarget(false, true, default);
 				});
 			}
 
-			var tileCountX = DivRoundUp(viewPassData.viewSize.x, asset.LightCulling.TileSize);
-			var tileCountY = DivRoundUp(viewPassData.viewSize.y, asset.LightCulling.TileSize);
-			var tileViewOffset = tileCountX * tileCountY * LightCulling.maxLightsPerTile;
-			var lightIndexCount = DivRoundUp(pointLightCount, 32);
-
 			var pointLightData = renderGraph.SetConstantBuffer
 			((
-				(float)asset.LightCulling.TileSize,
+				(float)asset.TileSize,
 				pointLightCount,
-				DivRoundUp(viewPassData.viewSize.x, asset.LightCulling.TileSize),
+				DivRoundUp(viewPassData.viewSize.x, asset.TileSize),
 				lightIndexCount,
 				asset.LightCullDepthSlices,
 				binWidth,
-				linearToLogScale,
-				linearToLogOffset
+				Rcp(asset.TileSize),
+				Rcp(binWidth)
 			));
 
-			renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, pointLightCount, lightDepthBinBuffer, lightDepthMinMaxBuffer));
+			renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, pointLightCount, lightDepthMinMaxBuffer, visibleLightBits));
 		}),
-
-		new LightCulling(asset.LightCulling, renderGraph),
 
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
 		{
-			var cameraDepth = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.D32_SFloat_S8_UInt, clear: true, isCcw: viewPassData.isFlipped);
-			var cameraTarget = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.B10G11R11_UFloatPack32, clear: true, clearColor: viewPassData.camera.backgroundColor.linear, isCcw: viewPassData.isFlipped);
+			var cameraDepth = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.D32_SFloat_S8_UInt, clear: true, isCcw: viewPassData.isFlipped, isScreenTexture: true);
+			var cameraTarget = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.B10G11R11_UFloatPack32, clear: true, clearColor: viewPassData.camera.backgroundColor.linear, isCcw: viewPassData.isFlipped, isScreenTexture: true);
 
+			renderGraph.SetRTHandle<CameraDepth>(cameraDepth);
+			renderGraph.SetRTHandle<CameraTarget>(cameraTarget);
+		}),
+
+		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
+		{
+			if(asset.PointLightMesh == null || !renderGraph.TryGetResource<PointLightData>(out var pointLightData))
+				return;
+
+			using var pass = renderGraph.AddDrawInstancedProceduralRenderPass("Light Culling", pointLightData);
+
+			var lightCount = pointLightData.lightCount;
+
+			pass.Initialize(asset.PointLightMesh, 0, pointLightMaterial, lightCount, viewPassData.viewSize, viewPassData.viewCount);
+			pass.WriteRtHandleDepth<CameraDepth>();
+
+			pass.ReadResource<ViewData>();
+			pass.ReadResource<PointLightData>();
+
+			pass.SetRenderFunction(static (command, pass, data) =>
+			{
+				command.SetRandomWriteTarget(0, pass.GetRenderTexture(data.visibleLightBits));
+				pass.SetTexture(Shader.PropertyToID("VisibleLightBitsWrite"), pass.GetRenderTexture(data.visibleLightBits));
+			});
+		}),
+
+		//new LightCulling(asset.LightCulling, renderGraph),
+		new VolumetricLighting(asset.VolumetricLighting, renderGraph),
+
+		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
+		{
 			// Opaque
 			var cullingResults = renderGraph.GetResource<CullingResultsData>().cullingResults;
 			using (var pass = renderGraph.AddObjectRenderPass("Opaque"))
 			{
-				pass.Initialize("SRPDefaultUnlit", context, cullingResults, RenderQueueRange.opaque, viewPassData.viewSize, viewPassData.position, viewPassData.rotation, viewPassData.sortAxis, viewPassData.distanceMetric, SortingCriteria.QuantizedFrontToBack | SortingCriteria.OptimizeStateChanges);
+				pass.Initialize("Forward", context, cullingResults, RenderQueueRange.opaque, viewPassData.viewSize, viewPassData.position, viewPassData.rotation, viewPassData.sortAxis, viewPassData.distanceMetric, SortingCriteria.QuantizedFrontToBack | SortingCriteria.OptimizeStateChanges);
 
-				pass.WriteDepth(cameraDepth);
-				pass.WriteTexture(cameraTarget);
+				pass.WriteRtHandleDepth<CameraDepth>();
+				pass.WriteRtHandle<CameraTarget>();
 
 				pass.ReadResource<ViewData>();
 				pass.ReadResource<EnvironmentData>();
 				pass.ReadResource<LightingData>();
-				pass.ReadResource<PointLightData>();
-				pass.ReadResource<LightCulling.Result>();
+				pass.ReadResource<VolumetricLighting.Result>();
+
+				if (pass.TryReadResource<PointLightData>())
+					pass.AddKeyword("POINT_LIGHTS_ON");
 			}
 
 			// Opaque copy
-			var cameraCopy = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.B10G11R11_UFloatPack32);
+			var cameraCopy = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.B10G11R11_UFloatPack32, isScreenTexture: true);
 			using (var pass = renderGraph.AddGenericRenderPass("Opaque"))
 			{
 				pass.PreventNewSubPass = true;
 
+				var cameraTarget = renderGraph.GetRtHandleData<CameraTarget>().handle;
 				pass.ReadTexture("", cameraTarget);
 				pass.WriteTexture(cameraCopy);
 
@@ -370,20 +438,23 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			// Transparent
 			using (var pass = renderGraph.AddObjectRenderPass("Transparent"))
 			{
-				pass.Initialize("SRPDefaultUnlit", context, cullingResults, RenderQueueRange.transparent, viewPassData.viewSize, viewPassData.position, viewPassData.rotation, viewPassData.sortAxis, viewPassData.distanceMetric, SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges);
+				pass.Initialize("Forward", context, cullingResults, RenderQueueRange.transparent, viewPassData.viewSize, viewPassData.position, viewPassData.rotation, viewPassData.sortAxis, viewPassData.distanceMetric, SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges);
 
 				pass.PreventNewSubPass = true;
 
-				pass.WriteDepth(cameraDepth, SubPassFlags.ReadOnlyDepth);
-				pass.WriteTexture(cameraTarget);
-				pass.ReadTexture("CameraDepth", cameraDepth);
+				pass.WriteRtHandleDepth<CameraDepth>(SubPassFlags.ReadOnlyDepth);
+				pass.WriteRtHandle<CameraTarget>();
+
+				pass.ReadRtHandle<CameraDepth>();
 				pass.ReadTexture("CameraColor", cameraCopy);
 
 				pass.ReadResource<ViewData>();
 				pass.ReadResource<EnvironmentData>();
 				pass.ReadResource<LightingData>();
-				pass.ReadResource<PointLightData>();
-				pass.ReadResource<LightCulling.Result>();
+				pass.ReadResource<VolumetricLighting.Result>();
+
+				if (pass.TryReadResource<PointLightData>())
+					pass.AddKeyword("POINT_LIGHTS_ON");
 			}
 
 			// Tonemap
@@ -391,7 +462,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			{
 				pass.Initialize(tonemap, viewPassData.viewSize, 1, 0, 1, viewPassData.target, viewPassData.format);
 				pass.PreventNewSubPass = true;
-				pass.ReadTexture("CameraTarget", cameraTarget);
+				pass.ReadRtHandle<CameraTarget>();
 			}
 		}),
 

@@ -52,11 +52,18 @@ MonoBehaviour:
       type: 3}
     <TerrainDetailLitShader>k__BackingField: {fileID: 4800000, guid: 3ccccb8a788d20845becb2c612e8b454,
       type: 3}
+  <TileSize>k__BackingField: 8
   shadowDistance: 4096
   shadowResolution: 4096
   shadowBias: 5
   shadowSlopeBias: 1
-  useSrpBatching: 1
+  useSrpBatching: 0
   <ShadowFadeDistance>k__BackingField: 32
-  <LightCulling>k__BackingField:
-    <TileSize>k__BackingField: 32
+  <LightCullDepthSlices>k__BackingField: 8192
+  <VolumetricLighting>k__BackingField:
+    <TileSize>k__BackingField: 8
+    <DepthSlices>k__BackingField: 64
+    <BlurSigma>k__BackingField: 0
+    <MaxDistance>k__BackingField: 8192
+  <PointLightMesh>k__BackingField: {fileID: -1732264862850525403, guid: 11d2b5b6ced55eb4bac974fc35c160ca,
+    type: 3}

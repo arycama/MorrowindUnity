@@ -11,11 +11,13 @@ Shader "Terrain"
 		Pass
 		{
 			Name "Base"
+			Tags { "LightMode" = "Forward" }
 
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
 			#pragma use_dxc
+			#pragma require waveMath
 			#pragma multi_compile_instancing
 			#include "Terrain.hlsl"
 			ENDHLSL
@@ -34,6 +36,7 @@ Shader "Terrain"
 			#pragma vertex Vertex
 			#pragma fragment Fragment
 			#pragma use_dxc
+			#pragma require waveMath
 			#pragma multi_compile_instancing
 			#include "Terrain.hlsl"
 			ENDHLSL

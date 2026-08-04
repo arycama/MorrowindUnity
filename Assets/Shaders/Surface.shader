@@ -27,6 +27,7 @@
 		Pass
 		{
 			Name "Base"
+            Tags { "LightMode" = "Forward" }
 
 			Blend [_SrcBlend] [_DstBlend]
 			ZTest [_ZTest]
@@ -36,6 +37,7 @@
 			#pragma vertex Vertex
 			#pragma fragment Fragment
 			#pragma use_dxc
+			#pragma require WaveMath
 			#pragma multi_compile_instancing
 			#include "Surface.hlsl"
 			ENDHLSL
@@ -54,6 +56,7 @@
             #pragma vertex Vertex
             #pragma fragment Fragment
 			#pragma use_dxc
+			#pragma require WaveMath
 			#pragma multi_compile_instancing
 			#include "Surface.hlsl"
 			ENDHLSL

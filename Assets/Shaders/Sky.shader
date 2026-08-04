@@ -25,6 +25,7 @@
 			#pragma vertex Vertex
 			#pragma fragment Fragment
 			#pragma use_dxc
+			#pragma require waveMath
 			#include "Sky.hlsl"
 			ENDHLSL
 		}

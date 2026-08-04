@@ -1,0 +1,164 @@
+#include "../Common.hlsl"
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Random.hlsl"
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/VolumetricLight.hlsl"
+
+#pragma kernel Compute
+#pragma kernel FilterX KERNEL=FilterX HORIZONTAL
+#pragma kernel FilterY KERNEL=FilterY VERTICAL
+#pragma kernel Accumulate
+#pragma use_dxc
+#pragma require waveMath
+
+RWTexture3D<float4> Result;
+Texture3D<float4> Input;
+
+float4x4 PixelToWorldViewDir;
+float3 InputScale, InputMax;
+bool IsFirst;
+
+[numthreads(8, 8, 1)]
+void Compute(uint3 id : SV_DispatchThreadID)
+{
+	float jitter = Hash12(id.xy + 0.5);//0.5; //Noise1D(id.xy);
+	float3 worldDir = MultiplyVector(PixelToWorldViewDir, float3(id.xy + 0.5, 1.0));
+	float rcpWorldDirLength = RcpLength(worldDir);
+	worldDir *= rcpWorldDirLength;
+	
+	float eyeDepth = VolumetricToLinearDepth(id.z + jitter);
+	
+	float viewDistance = eyeDepth * rcp(rcpWorldDirLength);
+	float3 worldPosition = ViewPosition + worldDir * viewDistance;
+	
+	float2 screenPosition = (id.xy + 0.5) / float2(VolumeWidth, VolumeHeight);
+	float2 pixelPosition = screenPosition * ViewSize;
+	
+	uint3 cluster = GetClusterIndex(float3(pixelPosition, eyeDepth));
+	uint2 lightRange = BitUnpack(LightDepthMinMax[cluster.z], 16, uint2(0, 16));
+	uint2 mergedRange = lightRange >> 5u;
+	
+	uint tileIndex = (cluster.y * TileCountX + cluster.x) * LightIndexCount;
+	
+	float3 lighting = SunColor;
+	float fade = saturate(eyeDepth * SunShadowFadeScale + SunShadowFadeOffset);
+	float3 shadowPosition = MultiplyPoint3x4((float3x4) WorldToSunShadow, worldPosition);
+	
+	// Shadow
+	if (fade && all(saturate(shadowPosition.xy) == shadowPosition.xy))
+		lighting *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
+	
+	lighting += AmbientLight;
+	
+	// Point lights TODO: Combine with common lighting code
+	// Read range of words of visibility bits
+	//for (uint i = mergedRange.x; i <= mergedRange.y; i++)
+	//{
+	//	// Load bit mask data per lane
+	//	uint tileMask = VisibleLightBits[tileIndex + i];
+		
+	//	// Mask by zbin mask
+	//	uint localMin = clamp((int) lightRange.x - (int) (32 * i), 0, 31);
+	//	uint maskWidth = clamp((int) lightRange.y - (int) lightRange.x + 1, 0, 32);
+		
+	//	// BitFieldMask op needs manual 32 size wrap support
+	//	uint depthMask = maskWidth == 32u ? UintMax : ((1u << maskWidth) - 1u) << localMin;
+		
+	//	// Compact world bitmask over all lanes in wavefront
+	//	uint mask = tileMask & depthMask;
+	//	while (mask != 0u)
+	//	{
+	//		uint bitIndex = firstbitlow(mask);
+	//		uint lightIndex = 32u * i + bitIndex;
+	//		mask &= ~(1u << bitIndex);
+			
+	//		Light light = PointLights[lightIndex];
+	
+	//		// Attenuation
+	//		float3 lightVector = light.position - worldPosition;
+	//		float distanceSquared = dot(lightVector, lightVector);
+	//		float attenuation = saturate(1.0h - distanceSquared * light.rcpRangeSquared);
+		
+	//		float3 L = lightVector * rsqrt(distanceSquared);
+	//		attenuation *= saturate(dot(light.forward, L) * light.angleScale + light.angleOffset);
+	//		attenuation = Sq(attenuation);
+			
+	//		lighting += attenuation * light.color;
+	//	}
+	//}
+	
+	float extinction = eyeDepth > FogStart && eyeDepth < FogEnd ? rcp(FogEnd - eyeDepth) : 0.0;
+	float3 albedo = FogColor / (SunColor + AmbientLight);
+	float4 luminanceExtinction = float4(albedo * lighting, extinction);
+
+	// Reproject previous frame. Needs to use unjittered world position
+	// TODO: Could do screen to previous screen to save a few instructions
+	//float linearUnjitteredDepth = VolumetricToLinearDepth(id.z + 0.5);
+	//float4 previousScreenPosition = ScreenToPreviousScreenPosition(screenPosition, LinearToDeviceDepth(linearUnjitteredDepth));
+	//previousScreenPosition.xy = PerspectiveDivide(previousScreenPosition).xy;
+	
+	//// TODO: This seems to overshoot the motion and sample too far or something
+	//float3 volumeUv = float3(previousScreenPosition.xy, LinearToVolumetricDepth(previousScreenPosition.w));
+	//if (!IsFirst && all(saturate(volumeUv) == volumeUv))
+	//{
+	//	// TODO: Neighborood clamp? (May be expensive, probably best to combien with groupshared
+	//	float4 previousLuminanceExtinction = Input.SampleLevel(TrilinearClampSampler, volumeUv, 0.0);
+	//	luminanceExtinction = lerp(previousLuminanceExtinction, luminanceExtinction, 0.05);
+	//}
+	
+	Result[id] = luminanceExtinction;
+}
+
+[numthreads(8, 8, 1)]
+void KERNEL(uint3 id : SV_DispatchThreadID)
+{
+	float4 result = 0.0;
+	float weightSum = 0.0;
+	
+	int radius = 2;
+	for (int i = -radius; i <= radius; i++)
+	{
+		#ifdef HORIZONTAL
+			int3 coord = id + int3(i, 0, 0);
+		#else
+			int3 coord = id + int3(0, i, 0);
+		#endif
+		
+		if (any(coord < 0 || coord >= int3(VolumeWidth, VolumeHeight, VolumeDepth)))
+			continue;
+		
+		float4 luminanceExtinction = Input[coord];
+		float weight = exp(-Sq(i / VolumetricBlurSigma));
+		result += luminanceExtinction * weight;
+		weightSum += weight;
+	}
+	
+	if (weightSum > 0.0)
+		result /= weightSum;
+	
+	result.a = 0;
+	Result[id] = result;
+}
+
+[numthreads(8, 4, 1)]
+void Accumulate(uint2 id : SV_DispatchThreadID)
+{
+	float3 worldDir = MultiplyVector(PixelToWorldViewDir, float3(id + 0.5, 1.0));
+	float rcpWorldDirLength = RcpLength(worldDir);
+	worldDir *= rcpWorldDirLength;
+	float worldDirLength = rcp(rcpWorldDirLength);
+	
+	float4 result = float2(0.0, 1.0).xxxy;
+	for (uint i = 0; i < VolumeDepthInt; i++)
+	{
+		float t0 = VolumetricToLinearDepth(i + 0) * worldDirLength;
+		float t1 = VolumetricToLinearDepth(i + 1) * worldDirLength;
+		float ds = t1 - t0;
+	
+		// Attenuate due to atmosphere and local extinction
+		float4 luminanceExtinction = Input[uint3(id, i)];
+		float transmittance = exp(-luminanceExtinction.a * ds);
+		
+		result.rgb += result.a * luminanceExtinction.rgb * (1.0 - transmittance);
+		result.a *= transmittance;
+		Result[uint3(id, i)] = result;
+	}
+}

@@ -1,5 +1,6 @@
 #pragma kernel LightCulling
 #pragma use_dxc
+#pragma require waveMath
 
 #include "../Common.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Math.hlsl"
