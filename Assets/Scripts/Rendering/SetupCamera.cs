@@ -39,8 +39,8 @@ public class SetupCamera : ViewRenderFeature
 			fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
-		var fogStart = RenderSettings.fogStartDistance;
-		var fogEnd = RenderSettings.fogEndDistance;
+		var fogStart = fogEnabled ? RenderSettings.fogStartDistance : 0;
+		var fogEnd = fogEnabled ? RenderSettings.fogEndDistance : 0;
 		var fogScale = fogEnabled ? 1 / (fogEnd - fogStart) : 0;
 		var fogOffset = fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
 

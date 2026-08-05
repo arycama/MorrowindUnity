@@ -66,15 +66,8 @@ FragmentOutput Fragment(FragmentInput input)
 	#endif
 	
 	#ifdef FORWARD
-		float3 lighting = GetLighting(normal, input.worldPosition, input.position);
-		lighting += input.color;
-		color.rgb *= lighting;
-	
-		color.rgb = ApplyFog(color.rgb, input.position.w).rgb;
-		
-	//	color.rgb = ApplyVolumetricLight(color.rgb, input.position.xy, input.position.w);
-		
-		output.color = color;
+		color.rgb *= GetLuminance(normal, input.worldPosition, input.position.xy, input.position.w) + input.color;
+		output.color = ApplyFog(color, input.position.xy, input.position.w, input.position.w, false);
 	#endif
 	
 	return output;

@@ -66,5 +66,5 @@ float4 Fragment(FragmentInput input) : SV_Target
 	
 	//color.rgb += backgroundColor * transmittance;
 	
-	return ApplyFog(color, input.position.w);
+	return ApplyFog(color, input.position.xy, input.position.w, input.position.w, false);
 }

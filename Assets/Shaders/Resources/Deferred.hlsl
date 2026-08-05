@@ -23,18 +23,7 @@ float4 Fragment(VertexFullscreenTriangleOutput input) : SV_Target
 	float3 worldPosition = eyeDepth * input.worldDirection + ViewPosition;
 	
 	float3 normal = normalize(normalOcclusionRoughness.xyz * 2.0 - 1.0);
-	float3 result = GetLighting(normal, worldPosition, float4(input.position.xy, depth, eyeDepth)) * albedoMetallic.rgb;
+	float3 color = GetLuminance(normal, worldPosition, input.position.xy, eyeDepth) * albedoMetallic.rgb;
 	
-	#ifdef VOLUMETRIC_LIGHT_ON
-		float3 volumetricUv = float3(input.position.xy / ViewSize, eyeDepth / MaxDepth);
-		volumetricUv.y = 1 - volumetricUv.y;
-	
-		float4 volumetricLight = VolumetricLighting.Sample(LinearClampSampler, volumetricUv);
-		result.rgb = result.rgb * volumetricLight.a + volumetricLight.rgb;
-		return float4(result, 1.0 - volumetricLight.a);
-	#else
-		float fogFactor = FogFactor(viewDistance);
-		result = lerp(result, FogColor, fogFactor);
-		return float4(result, fogFactor);
-	#endif
+	return ApplyFog(float4(color, 0.0), input.position.xy, eyeDepth, viewDistance, true);
 }

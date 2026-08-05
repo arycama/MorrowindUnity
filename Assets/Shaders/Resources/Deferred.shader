@@ -15,6 +15,8 @@ Shader "Hidden/Morrowind Deferred"
             #pragma use_dxc
             #pragma require WaveMath
             #pragma multi_compile _ VOLUMETRIC_LIGHT_ON
+            #pragma multi_compile _ SHADOWS_ON
+            #pragma multi_compile _ POINT_LIGHTS_ON
             #include "Deferred.hlsl"
             ENDHLSL
         }

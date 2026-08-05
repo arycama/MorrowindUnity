@@ -27,6 +27,10 @@
 			#pragma use_dxc
 			#pragma require waveMath
 			#pragma multi_compile_instancing
+			#pragma multi_compile _ VOLUMETRIC_LIGHT_ON
+			#pragma multi_compile _ SHADOWS_ON
+            #pragma multi_compile _ POINT_LIGHTS_ON
+			#define FORWARD
 			#include "Water.hlsl"
 			ENDHLSL
 		}

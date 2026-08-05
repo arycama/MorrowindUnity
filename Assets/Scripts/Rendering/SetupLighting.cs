@@ -129,8 +129,12 @@ public class SetupLighting : ViewRenderFeature
 				// Convert to view space
 				cullingSphere.xyz = viewPassData.rotation.InverseRotate(cullingSphere.xyz - viewPassData.position);
 
+				// Reject lights that are fully behind the near plane since Unity doesn't do it automatically..
+				if (cullingSphere.z + cullingSphere.w <= viewPassData.near)
+					continue;
+
 				pointLights[pointLightCount] = new(position, distanceScale, forward, angleScale, visibleLight.finalColor.Float3(), angleOffset, cullingSphere);
-				pointLightDepths[pointLightCount] = cullingSphere.z;
+				pointLightDepths[pointLightCount] = cullingSphere.z - cullingSphere.w * 1.075f;
 				pointLightCount++;
 			}
 		}
@@ -178,6 +182,8 @@ public class SetupLighting : ViewRenderFeature
 
 		// Add sorted lights to list
 		var binWidth = viewPassData.far / asset.LightCullDepthSlices;
+		var intersectingLightCount = 0;
+
 		for (var i = 0; i < pointLightCount; i++)
 		{
 			var light = pointLights[i];
@@ -202,6 +208,10 @@ public class SetupLighting : ViewRenderFeature
 
 				lightDepthMinMax[j] = BitPack(currentMin, 16, 0) | BitPack(currentMax, 16, 16);
 			}
+
+			// Check if the light intersects the near plane
+			if(pointLightDepths[i] < viewPassData.near)
+				intersectingLightCount = i + 1;
 		}
 
 		var tileCountX = DivRoundUp(viewPassData.viewSize.x, asset.TileSize);
@@ -241,7 +251,7 @@ public class SetupLighting : ViewRenderFeature
 			Rcp(binWidth)
 		));
 
-		renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, pointLightCount, lightDepthMinMaxBuffer, visibleLightBits));
+		renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, pointLightCount, lightDepthMinMaxBuffer, visibleLightBits, intersectingLightCount));
 	}
 
 	private static ShadowSplitData CalculateShadowSplitData(Float4x4 viewProjectionMatrix, bool skipNearPlane)

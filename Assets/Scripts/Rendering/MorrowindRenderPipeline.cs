@@ -3,9 +3,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using CustomRenderPipeline;
 using System;
-using Unmath;
 using UnityEngine.Experimental.Rendering;
-using Unity.Collections;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -13,6 +11,22 @@ using UnityEditor;
 
 public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<MorrowindRenderPipelineAsset>
 {
+	private static readonly IndexedString blueNoise1DIds = new("STBN/stbn_vec1_2Dx1D_128x128x64_", 64);
+	private static readonly IndexedString blueNoise2DIds = new("STBN/stbn_vec2_2Dx1D_128x128x64_", 64);
+	private static readonly IndexedString blueNoise3DIds = new("STBN/stbn_vec3_2Dx1D_128x128x64_", 64);
+
+	private static readonly IndexedString blueNoise2DUnitIds = new("STBN/stbn_unitvec2_2Dx1D_128x128x64_", 64);
+	private static readonly IndexedString blueNoise3DUnitIds = new("STBN/stbn_unitvec3_2Dx1D_128x128x64_", 64);
+	private static readonly IndexedString blueNoise3DCosineIds = new("STBN/stbn_unitvec3_cosine_2Dx1D_128x128x64_", 64);
+
+	private static readonly int BlueNoise1DId = Shader.PropertyToID("BlueNoise1D");
+	private static readonly int BlueNoise2DId = Shader.PropertyToID("BlueNoise2D");
+	private static readonly int BlueNoise3DId = Shader.PropertyToID("BlueNoise3D");
+	private static readonly int BlueNoise2DUnitId = Shader.PropertyToID("BlueNoise2DUnit");
+	private static readonly int BlueNoise3DUnitId = Shader.PropertyToID("BlueNoise3DUnit");
+	private static readonly int BlueNoise3DCosineId = Shader.PropertyToID("BlueNoise3DCosine");
+
+
 	protected override bool RenderUiOverlay => false;
 	protected override bool RenderWireframe => false;
 
@@ -46,17 +60,33 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			renderGraph.SetRTHandle<GBufferNormalOcclusionRoughness>(normalOcclusionRoughness);
 			renderGraph.SetRTHandle<CameraTarget>(cameraTarget);
 
-			var cullingResults = renderGraph.GetResource<CullingResultsData>().cullingResults;
-			using (var pass = renderGraph.AddObjectRenderPass("Opaque"))
-			{
-				pass.Initialize("GBuffer", context, cullingResults, RenderQueueRange.opaque, viewPassData.viewSize, viewPassData.position, viewPassData.rotation, viewPassData.sortAxis, viewPassData.distanceMetric, SortingCriteria.QuantizedFrontToBack | SortingCriteria.OptimizeStateChanges);
+			var noiseIndex = renderGraph.FrameIndex % 64;
+			var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds[noiseIndex]);
+			var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
+			var blueNoise3D = Resources.Load<Texture2D>(blueNoise3DIds[noiseIndex]);
+			var blueNoise2DUnit = Resources.Load<Texture2D>(blueNoise2DUnitIds[noiseIndex]);
+			var blueNoise3DUnit = Resources.Load<Texture2D>(blueNoise3DUnitIds[noiseIndex]);
+			var blueNoise3DCosine = Resources.Load<Texture2D>(blueNoise3DCosineIds[noiseIndex]);
 
-				pass.WriteRtHandleDepth<CameraDepth>();
-				pass.WriteRtHandle<GBufferAlbedoMetallic>();
-				pass.WriteRtHandle<GBufferNormalOcclusionRoughness>();
-				pass.WriteRtHandle<CameraTarget>();
-				pass.ReadResource<ViewData>();
-			}
+			var cullingResults = renderGraph.GetResource<CullingResultsData>().cullingResults;
+			using var pass = renderGraph.AddObjectRenderPass("Opaque", (blueNoise1D, blueNoise2D, blueNoise3D, blueNoise2DUnit, blueNoise3DUnit, blueNoise3DCosine));
+			pass.Initialize("GBuffer", context, cullingResults, RenderQueueRange.opaque, viewPassData.viewSize, viewPassData.position, viewPassData.rotation, viewPassData.sortAxis, viewPassData.distanceMetric, SortingCriteria.QuantizedFrontToBack | SortingCriteria.OptimizeStateChanges, isScreenPass: true);
+
+			pass.WriteRtHandleDepth<CameraDepth>();
+			pass.WriteRtHandle<GBufferAlbedoMetallic>();
+			pass.WriteRtHandle<GBufferNormalOcclusionRoughness>();
+			pass.WriteRtHandle<CameraTarget>();
+			pass.ReadResource<ViewData>();
+
+			pass.SetRenderFunction(static (command, pass, data) =>
+			{
+				pass.SetTexture(BlueNoise1DId, data.blueNoise1D);
+				pass.SetTexture(BlueNoise2DId, data.blueNoise2D);
+				pass.SetTexture(BlueNoise3DId, data.blueNoise3D);
+				pass.SetTexture(BlueNoise2DUnitId, data.blueNoise2DUnit);
+				pass.SetTexture(BlueNoise3DUnitId, data.blueNoise3DUnit);
+				pass.SetTexture(BlueNoise3DCosineId, data.blueNoise3DCosine);
+			});
 		}),
 
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
@@ -64,19 +94,41 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			if(asset.PointLightMesh == null || !renderGraph.TryGetResource<PointLightData>(out var pointLightData))
 				return;
 
-			using var pass = renderGraph.AddDrawInstancedProceduralRenderPass("Light Culling", pointLightData);
-
-			pass.Initialize(asset.PointLightMesh, 0, pointLightMaterial, pointLightData.lightCount, viewPassData.viewSize, viewPassData.viewCount);
-			pass.WriteRtHandleDepth<CameraDepth>(SubPassFlags.ReadOnlyDepthStencil);
-
-			pass.ReadResource<ViewData>();
-			pass.ReadResource<PointLightData>();
-
-			pass.SetRenderFunction(static (command, pass, data) =>
+			var intersectingLightCount = pointLightData.intersectingLightCount;
+			if(intersectingLightCount > 0)
 			{
-				command.SetRandomWriteTarget(0, pass.GetRenderTexture(data.visibleLightBits));
-				pass.SetTexture(Shader.PropertyToID("VisibleLightBitsWrite"), pass.GetRenderTexture(data.visibleLightBits));
-			});
+				using var pass = renderGraph.AddDrawInstancedProceduralRenderPass("Light Culling", pointLightData);
+				pass.Initialize(asset.PointLightMesh, 0, pointLightMaterial, intersectingLightCount, viewPassData.viewSize, viewPassData.viewCount, isScreenPass: true);
+				pass.WriteRtHandleDepth<CameraDepth>(SubPassFlags.ReadOnlyDepthStencil);
+
+				pass.ReadResource<ViewData>();
+				pass.ReadResource<PointLightData>();
+
+				pass.SetRenderFunction(static (command, pass, data) =>
+				{
+					command.SetRandomWriteTarget(0, pass.GetRenderTexture(data.visibleLightBits));
+					pass.SetTexture(Shader.PropertyToID("VisibleLightBitsWrite"), pass.GetRenderTexture(data.visibleLightBits));
+					pass.SetInt("IndexOffset", 0);
+				});
+			}
+
+			var remainingLightCount = pointLightData.lightCount - intersectingLightCount;
+			if(remainingLightCount > 0)
+			{
+				using var pass = renderGraph.AddDrawInstancedProceduralRenderPass("Light Culling", pointLightData);
+				pass.Initialize(asset.PointLightMesh, 0, pointLightMaterial, remainingLightCount, viewPassData.viewSize, viewPassData.viewCount, 1, isScreenPass: true);
+				pass.WriteRtHandleDepth<CameraDepth>(SubPassFlags.ReadOnlyDepthStencil);
+
+				pass.ReadResource<ViewData>();
+				pass.ReadResource<PointLightData>();
+
+				pass.SetRenderFunction((command, pass, data) =>
+				{
+					command.SetRandomWriteTarget(0, pass.GetRenderTexture(data.visibleLightBits));
+					pass.SetTexture(Shader.PropertyToID("VisibleLightBitsWrite"), pass.GetRenderTexture(data.visibleLightBits));
+					pass.SetInt("IndexOffset", intersectingLightCount);
+				});
+			}
 		}),
 
 		new VolumetricLighting(asset.VolumetricLighting, renderGraph),
@@ -107,7 +159,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 		{
 			using var pass = renderGraph.AddObjectRenderPass("Sky");
 			var cullingResults = renderGraph.GetResource<CullingResultsData>().cullingResults;
-			pass.Initialize("Sky", context, cullingResults, RenderQueueRange.all, viewPassData.viewSize, viewPassData.position, viewPassData.rotation, viewPassData.sortAxis, viewPassData.distanceMetric);
+			pass.Initialize("Sky", context, cullingResults, RenderQueueRange.all, viewPassData.viewSize, viewPassData.position, viewPassData.rotation, viewPassData.sortAxis, viewPassData.distanceMetric, isScreenPass: true);
 			pass.PreventNewSubPass = true;
 			pass.WriteRtHandleDepth<CameraDepth>(SubPassFlags.ReadOnlyDepthStencil);
 			pass.WriteRtHandle<CameraTarget>();
@@ -138,7 +190,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 			using (var pass = renderGraph.AddObjectRenderPass("Transparent"))
 			{
-				pass.Initialize("Forward", context, cullingResults, RenderQueueRange.transparent, viewPassData.viewSize, viewPassData.position, viewPassData.rotation, viewPassData.sortAxis, viewPassData.distanceMetric, SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges);
+				pass.Initialize("Forward", context, cullingResults, RenderQueueRange.transparent, viewPassData.viewSize, viewPassData.position, viewPassData.rotation, viewPassData.sortAxis, viewPassData.distanceMetric, SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges, isScreenPass: true);
 
 				pass.PreventNewSubPass = true;
 
@@ -155,6 +207,9 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 				if (pass.TryReadResource<PointLightData>())
 					pass.AddKeyword("POINT_LIGHTS_ON");
+
+				if(asset.VolumetricLighting.Enabled)
+					pass.AddKeyword("VOLUMETRIC_LIGHT_ON");
 			}
 
 			// Tonemap

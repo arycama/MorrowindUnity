@@ -24,6 +24,7 @@
 			#pragma fragment Fragment
 			#pragma use_dxc
 			#pragma require waveMath
+			#pragma multi_compile _ VOLUMETRIC_LIGHT_ON
 			#include "Sky.hlsl"
 			ENDHLSL
 		}

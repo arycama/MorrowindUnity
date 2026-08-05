@@ -13,21 +13,20 @@ struct FragmentInput
 };
 
 RWTexture2DArray<uint> VisibleLightBitsWrite : register(u0);
+uint IndexOffset;
 
 FragmentInput Vertex(VertexInput input)
 {
+	uint index = input.instanceId + IndexOffset;
+
 	FragmentInput output;
 	
-	Light light = PointLights[input.instanceId];
+	Light light = PointLights[index];
 	float3 viewPosition = input.position * light.cullingSphere.w + light.cullingSphere.xyz;
 	
-	// Invert culling if camera inside
-	//if(light.cullingSphere.z - light.cullingSphere.w * 1.075 <= 0)
-	//	viewPosition = -input.position * light.cullingSphere.w + light.cullingSphere.xyz;
-	
 	output.position = mul(ViewToClip, float4(viewPosition, 1.0));
-	output.data.x = input.instanceId / 32u; // Offset
-	output.data.y = 1 << (input.instanceId % 32); // Bit
+	output.data.x = index / 32u; // Offset
+	output.data.y = 1 << (index % 32); // Bit
 	return output;
 }
 

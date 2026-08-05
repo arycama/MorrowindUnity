@@ -206,68 +206,73 @@ uint3 GetClusterIndex(float3 screenPosition)
 	return float3(screenPosition.xy * RcpTileSize, screenPosition.z * RcpBinWidth);
 }
 
-float3 GetLighting(float3 normal, float3 worldPosition, float4 screenPosition)
+float3 GetLuminance(float3 normal, float3 worldPosition, float2 screenPosition, float eyeDepth, out float3 illuminance)
 {
 	// Directional light
-	float NdotL = saturate(dot(normal, SunDirection));
-	float3 lighting = NdotL * SunColor;
-	float fade = saturate(screenPosition.w * SunShadowFadeScale + SunShadowFadeOffset);
-	float3 shadowPosition = MultiplyPoint3x4((float3x4) WorldToSunShadow, worldPosition);
+	illuminance = SunColor;
 	
 	// Shadow
-	if (NdotL && fade && all(saturate(shadowPosition.xy) == shadowPosition.xy))
-		lighting *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
+	#ifdef SHADOWS_ON
+		float fade = saturate(eyeDepth * SunShadowFadeScale + SunShadowFadeOffset);
+		float3 shadowPosition = MultiplyPoint3x4((float3x4) WorldToSunShadow, worldPosition);
+		if (fade && all(saturate(shadowPosition.xy) == shadowPosition.xy))
+			illuminance *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
+	#endif
 	
-	// Flat bit array iterator scalarized on entity with Z-Bin masked words
-	float3 cluster = GetClusterIndex(float3(screenPosition.xy, screenPosition.w));
-	uint2 lightRange = BitUnpack(LightDepthMinMax[cluster.z], 16, uint2(0, 16));
-	uint2 mergedRange = uint2(WaveActiveMin(lightRange.x), WaveActiveMax(lightRange.y)) >> 5u;
-	half3 luminance = 0.0h;
+	float NdotL = saturate(dot(normal, SunDirection));
+	float3 luminance = illuminance * NdotL;
 	
-	uint lightCount = 0;
+	#ifdef POINT_LIGHTS_ON
+		// Flat bit array iterator scalarized on entity with Z-Bin masked words
+		float3 cluster = GetClusterIndex(float3(screenPosition, eyeDepth));
+		uint2 lightRange = BitUnpack(LightDepthMinMax[cluster.z], 16, uint2(0, 16));
+		uint2 mergedRange = uint2(WaveActiveMin(lightRange.x), WaveActiveMax(lightRange.y)) >> 5u;
 	
-	// Read range of words of visibility bits
-	for (uint i = mergedRange.x; i <= mergedRange.y; i++)
-	{
-		// Load bit mask data per lane
-		uint tileMask = VisibleLightBits[uint3(cluster.xy, i)];
-		
-		// Mask by zbin mask
-		uint localMin = clamp((int) lightRange.x - (int) (32 * i), 0, 31);
-		uint maskWidth = clamp((int) lightRange.y - (int) lightRange.x + 1, 0, 32);
-		
-		// BitFieldMask op needs manual 32 size wrap support
-		uint depthMask = maskWidth == 32u ? UintMax : ((1u << maskWidth) - 1u) << localMin;
-		
-		// Compact world bitmask over all lanes in wavefront
-		uint mask = WaveActiveBitOr(tileMask & depthMask);
-		//lightCount++;
-		
-		while (mask != 0u)
+		// Read range of words of visibility bits
+		for (uint i = mergedRange.x; i <= mergedRange.y; i++)
 		{
-			uint bitIndex = firstbitlow(mask);
-			uint lightIndex = 32u * i + bitIndex;
-			mask &= ~(1u << bitIndex);
-			
-			Light light = PointLights[lightIndex];
-			lightCount++;
-	
-			// Attenuation
-			float3 lightVector = light.position - worldPosition;
-			float distanceSquared = dot(lightVector, lightVector);
-			float attenuation = saturate(1.0h - distanceSquared * light.rcpRangeSquared);
+			// Load bit mask data per lane
+			uint tileMask = VisibleLightBits[uint3(cluster.xy, i)];
 		
-			float3 L = lightVector * rsqrt(distanceSquared);
-			attenuation *= saturate(dot(light.forward, L) * light.angleScale + light.angleOffset);
-			attenuation = Sq(attenuation);
+			// Mask by zbin mask
+			uint localMin = clamp((int) lightRange.x - (int) (32 * i), 0, 31);
+			uint maskWidth = clamp((int) lightRange.y - (int) lightRange.x + 1, 0, 32);
+		
+			// BitFieldMask op needs manual 32 size wrap support
+			uint depthMask = maskWidth == 32u ? UintMax : ((1u << maskWidth) - 1u) << localMin;
+		
+			// Compact world bitmask over all lanes in wavefront
+			uint mask = WaveActiveBitOr(tileMask & depthMask);
+			while (mask != 0u)
+			{
+				uint bitIndex = firstbitlow(mask);
+				uint lightIndex = 32u * i + bitIndex;
+				mask &= ~(1u << bitIndex);
 			
-			lighting += saturate(dot(normal, L)) * attenuation * light.color;
+				Light light = PointLights[lightIndex];
+	
+				// Attenuation
+				float3 lightVector = light.position - worldPosition;
+				float distanceSquared = dot(lightVector, lightVector);
+				float attenuation = saturate(1.0h - distanceSquared * light.rcpRangeSquared);
+		
+				float3 L = lightVector * rsqrt(distanceSquared);
+				attenuation *= saturate(dot(light.forward, L) * light.angleScale + light.angleOffset);
+				attenuation = Sq(attenuation);
+			
+				illuminance += attenuation * light.color;
+				luminance += saturate(dot(normal, L)) * attenuation * light.color;
+			}
 		}
-	}
+	#endif
 	
-	lighting = (lightCount >> uint3(0, 1, 2) & 1);
-	
-	return lighting;
+	return luminance;
+}
+
+float3 GetLuminance(float3 normal, float3 worldPosition, float2 screenPosition, float eyeDepth)
+{
+	float3 illuminance;
+	return GetLuminance(normal, worldPosition, screenPosition, eyeDepth, illuminance);
 }
 
 float3 GetFrustumCorner(uint id)
@@ -280,16 +285,31 @@ float FogFactor(float viewDistance)
 	return saturate(viewDistance * FogScale + FogOffset);
 }
 
-float4 ApplyFog(float4 color, float viewDistance)
+float4 ApplyFog(float4 color, float2 screenPosition, float eyeDepth, float viewDistance, bool isPremultiplied)
 {
-	float fogFactor = FogFactor(viewDistance);
-	float4 result = lerp(color, float4(FogColor, 1.0), fogFactor);
-	return result;
-}
-
-float4 ApplyFog(float3 color, float viewDistance)
-{
-	return ApplyFog(float4(color, 1.0), viewDistance);
+	#ifdef VOLUMETRIC_LIGHT_ON
+		float3 volumetricUv = float3(screenPosition / ViewSize, eyeDepth / MaxDepth);
+		volumetricUv.y = 1 - volumetricUv.y;
+	
+		float4 volumetricLight = VolumetricLighting.Sample(LinearClampSampler, volumetricUv);
+		float3 fogLuminance = volumetricLight.rgb;
+		float fogTransmittance = volumetricLight.a;
+	#else
+		float fogOpacity = FogFactor(viewDistance);
+		float3 fogLuminance = FogColor * fogOpacity;
+		float fogTransmittance = 1.0 - fogOpacity;
+	#endif
+	
+	if (isPremultiplied)
+	{
+		color.rgb = color.rgb * fogTransmittance + fogLuminance;
+		return float4(color.rgb, 1.0 - fogTransmittance * (1.0 - color.a));
+	}
+	else
+	{
+		color.rgb = color.rgb * fogTransmittance + fogLuminance;
+		return float4(color.rgb, 1.0 - (1.0 - color.a));
+	}
 }
 
 #endif

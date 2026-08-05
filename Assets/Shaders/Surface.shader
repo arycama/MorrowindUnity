@@ -51,6 +51,9 @@
 			#pragma fragment Fragment
 			#pragma require WaveMath
 			#pragma multi_compile_instancing
+			#pragma multi_compile _ VOLUMETRIC_LIGHT_ON
+			#pragma multi_compile _ SHADOWS_ON
+            #pragma multi_compile _ POINT_LIGHTS_ON
 			#define FORWARD
 			#include "Surface.hlsl"
 			ENDHLSL

@@ -61,7 +61,7 @@ MonoBehaviour:
   <ShadowFadeDistance>k__BackingField: 32
   <LightCullDepthSlices>k__BackingField: 8192
   <VolumetricLighting>k__BackingField:
-    <Enabled>k__BackingField: 0
+    <Enabled>k__BackingField: 1
     <TileSize>k__BackingField: 8
     <DepthSlices>k__BackingField: 128
     <BlurSigma>k__BackingField: 0
