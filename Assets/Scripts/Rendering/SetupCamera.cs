@@ -14,11 +14,11 @@ using UnityEditor;
 public class SetupCamera : ViewRenderFeature
 {
 	private readonly Dictionary<int, (Float3, Quaternion, Float4x4)> previousCameraTransform = new();
-	private readonly MorrowindRenderPipelineAsset asset;
+	private readonly LightingSettings lighting;
 
-	public SetupCamera(RenderGraph renderGraph, MorrowindRenderPipelineAsset asset) : base(renderGraph)
+	public SetupCamera(RenderGraph renderGraph, LightingSettings lighting) : base(renderGraph)
 	{
-		this.asset = asset;
+		this.lighting = lighting;
 	}
 
 	public override void Render(in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context)
@@ -26,7 +26,7 @@ public class SetupCamera : ViewRenderFeature
 		context.SetupCameraProperties(viewPassData.camera);
 
 		var cullingParameters = viewPassData.cullingParameters;
-		cullingParameters.shadowDistance = asset.ShadowDistance;
+		cullingParameters.shadowDistance = lighting.DirectionalShadowDistance;
 		cullingParameters.cullingOptions = CullingOptions.NeedsLighting | CullingOptions.DisablePerObjectCulling | CullingOptions.ShadowCasters;
 
 		var cullingResults = context.Cull(ref cullingParameters);

@@ -1,5 +1,9 @@
 #include "Common.hlsl"
 
+#ifdef __INTELLISENSE__
+	#define GBUFFER
+#endif
+
 struct VertexInput
 {
 	uint instanceId : SV_InstanceID;
@@ -17,7 +21,6 @@ struct FragmentInput
 	float4 position : SV_Position;
 	
 	#ifdef GBUFFER
-		float3 worldPosition : POSITION1;
 		float3 normal : NORMAL;
 		float3 color : COLOR;
 		float4 uv : TEXCOORD;
@@ -48,9 +51,8 @@ FragmentInput Vertex(VertexInput input)
 	output.position = WorldToClipPosition(worldPosition);
 	
 	#ifdef GBUFFER
-		output.worldPosition = worldPosition;
 		output.uv = float4(input.uv.xy, input.uv.zw * _MainTex_ST.xy + _MainTex_ST.zw);
-		output.color = input.color;
+		output.color = GammaToLinear(input.color);
 		output.normal = input.normal;
 	#endif
 	
@@ -71,9 +73,7 @@ FragmentOutput Fragment(FragmentInput input)
 		color += _MainTex.Sample(sampler_MainTex, float3(input.uv.zw, terrainData.w)) * weights.w;
 		color *= input.color;
 		
-		output.gbuffer.albedoMetallic = float4(color, 0.0);
-		output.gbuffer.normalOcclusionRoughness.xyz = normalize(input.normal);
-		output.gbuffer.emission = float4(AmbientLight * color, 0.0);
+		output.gbuffer = OutputGbuffer(color, normalize(input.normal), AmbientLight * color);
 	#endif
 	
 	return output;

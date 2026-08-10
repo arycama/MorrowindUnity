@@ -40,7 +40,7 @@ public class TerrainFactory
         var uvs = new Vector4[vertices.Length];
         var nextColHeight = record.HeightData.ReferenceHeight;
 
-        var triangles = new int[64 * 64 * 6];
+        var triangles = new ushort[64 * 64 * 6];
 
         for (int y = 0, i = 0; y < 65; y++)
         {
@@ -74,10 +74,10 @@ public class TerrainFactory
         {
             for (int x = 0; x < 64; x++, ti += 6, vi++)
             {
-                triangles[ti] = vi;
-                triangles[ti + 3] = triangles[ti + 2] = vi + 1;
-                triangles[ti + 4] = triangles[ti + 1] = vi + 64 + 1;
-                triangles[ti + 5] = vi + 64 + 2;
+                triangles[ti] = (ushort)vi;
+                triangles[ti + 3] = triangles[ti + 2] = (ushort)(vi + 1);
+                triangles[ti + 4] = triangles[ti + 1] = (ushort)(vi + 64 + 1);
+                triangles[ti + 5] = (ushort)(vi + 64 + 2);
             }
         }
 
@@ -90,18 +90,17 @@ public class TerrainFactory
         var mesh = new Mesh
         {
             vertices = vertices,
-            triangles = triangles,
             normals = normals
         };
 
         mesh.SetUVs(0, uvs);
+		mesh.SetTriangles(triangles, 0);
 
         if (record.ColorData != null)
             mesh.colors32 = record.ColorData.Colors;
 
+        mesh.UploadMeshData(true);
         meshFilter.sharedMesh = mesh;
-
-        // Now calculate vertex colors. Look at each "patch". if the neighbouring patch is a different texture, then set the alpha between the pixels to 0 or something
 
         // Remaining steps are for textures only
         if (record.TextureData == null)

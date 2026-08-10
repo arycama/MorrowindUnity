@@ -6,15 +6,15 @@ public class Water : Singleton<Water>
     [SerializeField, Tooltip("Number of vertices used to create the water grid")]
     private int resolution;
 
-    [SerializeField]
-    private Projection projection;
+    private Projection projection = new();
+	private float surfaceFps;
+    private int surfaceFrameCount;
+    private float worldAlpha;
+    private Color underwaterColor;
+    private float underwaterColorWeight;
+    private float tileTextureDivisor;
 
-    [SerializeField]
-    private Texture2D[] textures;
-
-    [SerializeField]
-    private float surfaceFps = 15;
-
+	private Texture2D[] textures;
     private int lastTextureIndex;
     private float nextUpdateTime;
     private Matrix4x4 interpolation;
@@ -23,26 +23,29 @@ public class Water : Singleton<Water>
     private MeshRenderer meshRenderer;
     private Mesh mesh;
 
-    private readonly int textureCount = 32;
-
     private Vector3[] vertices;
     private Vector2[] uvs;
 
-    private void Awake()
+    private void Start()
     {
-        textures = new Texture2D[32];
-        for (var i = 0; i < textures.Length; i++)
+        surfaceFrameCount = IniManager.GetInt("Water", "SurfaceFrameCount");
+		surfaceFps = IniManager.GetInt("Water", "SurfaceFPS");
+        worldAlpha = IniManager.GetFloat("Water", "World Alpha");
+        underwaterColor = IniManager.GetColor("Water", "UnderwaterColor");
+        underwaterColorWeight = IniManager.GetFloat("Water", "UnderwaterColorWeight");
+        tileTextureDivisor = IniManager.GetFloat("Water", "TileTextureDivisor");
+
+		var surfaceTexture = IniManager.GetString("Water", "SurfaceTexture");
+
+		textures = new Texture2D[surfaceFrameCount];
+        for (var i = 0; i < surfaceFrameCount; i++)
         {
-            var path = $"textures/water/water{i:00}.dds";
+            var path = $"textures/water/{surfaceTexture}{i:00}.dds";
             var texture = BsaFileReader.LoadTexture(path);
             textures[i] = texture as Texture2D;
         }
 
-
         CellManager.OnFinishedLoadingCells += SetupWater;
-
-        //Camera.main.depthTextureMode = DepthTextureMode.Depth;
-        //Shader.EnableKeyword("DEPTH_TEXTURE_ENABLED");
 
         meshFilter = GetComponent<MeshFilter>();
         meshRenderer = GetComponent<MeshRenderer>();
@@ -129,7 +132,14 @@ public class Water : Singleton<Water>
             meshRenderer.sharedMaterial.mainTexture = textures[lastTextureIndex];
             nextUpdateTime = Time.time + 1 / surfaceFps;
         }
-    }
+
+        meshRenderer.sharedMaterial.SetFloat("Alpha", worldAlpha);
+        meshRenderer.sharedMaterial.SetColor("Albedo", underwaterColor);
+        meshRenderer.sharedMaterial.SetFloat("Scale", 1.0f / tileTextureDivisor);
+
+        Shader.SetGlobalVector("UnderwaterColor", underwaterColor.linear);
+        Shader.SetGlobalFloat("UnderwaterColorWeight", underwaterColorWeight);
+	}
 
     private void SetupWater(CellRecord cell)
     {

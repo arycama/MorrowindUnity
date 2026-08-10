@@ -4,14 +4,14 @@ using UnityEngine;
 
 public static class BinaryReaderExtensions
 {
-	public static int[] ReadTriangles(this BinaryReader reader, int count)
+	public static ushort[] ReadTriangles(this BinaryReader reader, int count)
 	{
-		var triangles = new int[count];
+		var triangles = new ushort[count];
 		for (var i = 0; i < count; i += 3)
 		{
-			triangles[i] = reader.ReadInt16();
-			triangles[i + 2] = reader.ReadInt16();
-			triangles[i + 1] = reader.ReadInt16();
+			triangles[i] = reader.ReadUInt16();
+			triangles[i + 2] = reader.ReadUInt16();
+			triangles[i + 1] = reader.ReadUInt16();
 		}
 
 		return triangles;
@@ -83,56 +83,7 @@ public static class BinaryReaderExtensions
 		var m12 = reader.ReadSingle();
 		var m11 = reader.ReadSingle();
 
-		var tr = m00 + m11 + m22;
-
-		if (tr > 0)
-		{
-			var s = Mathf.Sqrt(tr + 1); // S=4*qw 
-			var recip = 0.5f / s;
-			return new Quaternion()
-			{
-				w = 0.5f * s,
-				x = (m21 - m12) * recip,
-				y = (m02 - m20) * recip,
-				z = (m10 - m01) * recip
-			};
-		}
-		else if ((m00 > m11) && (m00 > m22))
-		{
-			var s = Mathf.Sqrt(1 + m00 - m11 - m22); // S=4*qx 
-			var recip = 0.5f / s;
-			return new Quaternion()
-			{
-				w = (m21 - m12) * recip,
-				x = 0.5f * s,
-				y = (m01 + m10) * recip,
-				z = (m02 + m20) * recip
-			};
-		}
-		else if (m11 > m22)
-		{
-			var s = Mathf.Sqrt(1 + m11 - m00 - m22); // S=4*qy
-			var recip = 0.5f / s;
-			return new Quaternion()
-			{
-				w = (m02 - m20) * recip,
-				x = (m01 + m10) * recip,
-				y = 0.5f * s,
-				z = (m12 + m21) * recip
-			};
-		}
-		else
-		{
-			var s = Mathf.Sqrt(1 + m22 - m00 - m11); // S=4*qz
-			var recip = 0.5f / s;
-			return new Quaternion()
-			{
-				w = (m10 - m01) * recip,
-				x = (m02 + m20) * recip,
-				y = (m12 + m21) * recip,
-				z = 0.5f * s
-			};
-		}
+		return new Matrix4x4(new(m00, m10, m20, 0.0f), new(m01, m11, m21, 0.0f), new(m02, m12, m22, 0.0f), new(0.0f, 0.0f, 0.0f, 1.0f)).rotation;
 	}
 
 	public static Vector3 ReadVector3(this BinaryReader reader) => new Vector3(){ x = reader.ReadSingle(), z = reader.ReadSingle(), y = reader.ReadSingle() };

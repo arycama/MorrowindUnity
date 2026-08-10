@@ -45,15 +45,15 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 	protected override List<ViewRenderFeature> InitializePerCameraRenderFeatures() => new()
 	{
-		new SetupCamera(renderGraph, asset),
-		new SetupLighting(renderGraph, asset),
+		new SetupCamera(renderGraph, asset.LightingSettings),
+		new SetupLighting(renderGraph, asset.LightingSettings, asset.LightCulling),
 
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
 		{
 			var cameraDepth = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.D32_SFloat_S8_UInt, clear: true, isCcw: viewPassData.isFlipped, isScreenTexture: true);
 			var albedoMetallic = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.R8G8B8A8_SRGB, isCcw: viewPassData.isFlipped, isScreenTexture: true);
 			var normalOcclusionRoughness = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.R8G8B8A8_UNorm, isCcw: viewPassData.isFlipped, isScreenTexture: true);
-			var cameraTarget = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.B10G11R11_UFloatPack32, clear: true, clearColor: viewPassData.camera.backgroundColor.linear, isCcw: viewPassData.isFlipped, isScreenTexture: true);
+			var cameraTarget = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.B10G11R11_UFloatPack32, clear: true, clearColor: RenderSettings.fogColor.linear, isCcw: viewPassData.isFlipped, isScreenTexture: true);
 
 			renderGraph.SetRTHandle<CameraDepth>(cameraDepth);
 			renderGraph.SetRTHandle<GBufferAlbedoMetallic>(albedoMetallic);
@@ -89,48 +89,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			});
 		}),
 
-		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
-		{
-			if(asset.PointLightMesh == null || !renderGraph.TryGetResource<PointLightData>(out var pointLightData))
-				return;
-
-			var intersectingLightCount = pointLightData.intersectingLightCount;
-			if(intersectingLightCount > 0)
-			{
-				using var pass = renderGraph.AddDrawInstancedProceduralRenderPass("Light Culling", pointLightData);
-				pass.Initialize(asset.PointLightMesh, 0, pointLightMaterial, intersectingLightCount, viewPassData.viewSize, viewPassData.viewCount, isScreenPass: true);
-				pass.WriteRtHandleDepth<CameraDepth>(SubPassFlags.ReadOnlyDepthStencil);
-
-				pass.ReadResource<ViewData>();
-				pass.ReadResource<PointLightData>();
-
-				pass.SetRenderFunction(static (command, pass, data) =>
-				{
-					command.SetRandomWriteTarget(0, pass.GetRenderTexture(data.visibleLightBits));
-					pass.SetTexture(Shader.PropertyToID("VisibleLightBitsWrite"), pass.GetRenderTexture(data.visibleLightBits));
-					pass.SetInt("IndexOffset", 0);
-				});
-			}
-
-			var remainingLightCount = pointLightData.lightCount - intersectingLightCount;
-			if(remainingLightCount > 0)
-			{
-				using var pass = renderGraph.AddDrawInstancedProceduralRenderPass("Light Culling", pointLightData);
-				pass.Initialize(asset.PointLightMesh, 0, pointLightMaterial, remainingLightCount, viewPassData.viewSize, viewPassData.viewCount, 1, isScreenPass: true);
-				pass.WriteRtHandleDepth<CameraDepth>(SubPassFlags.ReadOnlyDepthStencil);
-
-				pass.ReadResource<ViewData>();
-				pass.ReadResource<PointLightData>();
-
-				pass.SetRenderFunction((command, pass, data) =>
-				{
-					command.SetRandomWriteTarget(0, pass.GetRenderTexture(data.visibleLightBits));
-					pass.SetTexture(Shader.PropertyToID("VisibleLightBitsWrite"), pass.GetRenderTexture(data.visibleLightBits));
-					pass.SetInt("IndexOffset", intersectingLightCount);
-				});
-			}
-		}),
-
+		new LightCulling(asset.LightCulling, renderGraph, "Hidden/Morrowind Point Light"),
 		new VolumetricLighting(asset.VolumetricLighting, renderGraph),
 
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>

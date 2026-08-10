@@ -1,4 +1,5 @@
 ﻿using System;
+using UnityEngine;
 
 namespace Nif
 {
@@ -11,7 +12,8 @@ namespace Nif
 		public NiTriShapeData(NiFile niFile) : base(niFile)
 		{
 			var indexCount = niFile.Reader.ReadInt32();
-			Mesh.triangles = niFile.Reader.ReadTriangles(indexCount);
+			Mesh.SetTriangles(niFile.Reader.ReadTriangles(indexCount), 0);
+			Mesh.UploadMeshData(true);
 
 			matchGroupCount = niFile.Reader.ReadInt16();
 

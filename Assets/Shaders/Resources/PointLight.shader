@@ -1,4 +1,4 @@
-Shader "Hidden/Point Light"
+Shader "Hidden/Morrowind Point Light"
 {
     SubShader
     {
@@ -15,7 +15,6 @@ Shader "Hidden/Point Light"
             #pragma vertex Vertex
             #pragma fragment Fragment
             #pragma use_dxc
-            #pragma require waveMath
             #include "PointLight.hlsl"
             ENDHLSL
         }
@@ -30,7 +29,6 @@ Shader "Hidden/Point Light"
             #pragma vertex Vertex
             #pragma fragment Fragment
             #pragma use_dxc
-            #pragma require waveMath
             #include "PointLight.hlsl"
             ENDHLSL
         }

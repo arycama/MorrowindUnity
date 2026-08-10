@@ -1,7 +1,5 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
 using System.Linq;
-using Esm;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -22,7 +20,10 @@ public class WeatherManager : Singleton<WeatherManager>
     [SerializeField]
     private string skyboxPath = "sky_clouds_01.nif";
 
-    [SerializeField]
+	[SerializeField]
+	private string atmospherePath = "sky_atmosphere.nif";
+
+	[SerializeField]
     private string nightSkyPath = "sky_night_01.nif";
 
     [SerializeField]
@@ -64,8 +65,12 @@ public class WeatherManager : Singleton<WeatherManager>
     [SerializeField]
     private Material skyboxMaterial;
 
-    private Mesh skyboxMesh;
+	[SerializeField]
+	private Material atmosphereMaterial;
+
+	private Mesh skyboxMesh, atmosphereMesh;
     private bool shouldUpdate;
+    private Matrix4x4 skyMatrix, atmosphereMatrix;
 
     private float SecondsOfDay => seconds + minute * SecondsPerMinute + hour * SecondsPerHour;
 
@@ -76,48 +81,60 @@ public class WeatherManager : Singleton<WeatherManager>
 
         shouldUpdate = true;
 
-        // Night Sky
-        //var nightNif = new Nif.NiFile(nightSkyPath);
-        //var nightGo = nightNif.CreateGameObject();
+		// Night Sky
+		//var nightNif = new Nif.NiFile(nightSkyPath);
+		//var nightGo = nightNif.CreateGameObject();
 
-        //nightCommandBuffer = new CommandBuffer();
-        //var nightMeshes = nightGo.GetComponentsInChildren<MeshFilter>();
-        //var nightMeshRenderers = nightGo.GetComponentsInChildren<MeshRenderer>();
-        //for (var i = 0; i < nightMeshes.Length; i++)
-        //{
-        //	if (i > 3)
-        //		continue;
+		//nightCommandBuffer = new CommandBuffer();
+		//var nightMeshes = nightGo.GetComponentsInChildren<MeshFilter>();
+		//var nightMeshRenderers = nightGo.GetComponentsInChildren<MeshRenderer>();
+		//for (var i = 0; i < nightMeshes.Length; i++)
+		//{
+		//	if (i > 3)
+		//		continue;
 
-        //	var material = nightMeshRenderers[i].sharedMaterial;
-        //	material.shader = MaterialManager.Instance.NightSkyShader;
+		//	var material = nightMeshRenderers[i].sharedMaterial;
+		//	material.shader = MaterialManager.Instance.NightSkyShader;
 
-        //	var mesh = nightMeshes[i].sharedMesh;
-        //	nightCommandBuffer.DrawMesh(mesh, Matrix4x4.identity, material);
-        //}
+		//	var mesh = nightMeshes[i].sharedMesh;
+		//	nightCommandBuffer.DrawMesh(mesh, Matrix4x4.identity, material);
+		//}
 
-        //Camera.main.AddCommandBuffer(CameraEvent.AfterForwardOpaque, nightCommandBuffer);
-        //Destroy(nightGo);
+		//Camera.main.AddCommandBuffer(CameraEvent.AfterForwardOpaque, nightCommandBuffer);
+		//Destroy(nightGo);
 
-        // Load skybox
-        var reader = BsaFileReader.LoadArchiveFileData($"meshes\\{skyboxPath}");
-        var nif = new Nif.NiFile(reader);
-        var go = nif.CreateGameObject(Camera.main.transform);
+		// Load atmosphere
+		var atmosphereReader = BsaFileReader.LoadArchiveFileData($"meshes\\{atmospherePath}");
+		var atmosphereNif = new Nif.NiFile(atmosphereReader);
+		var atmosphereGo = atmosphereNif.CreateGameObject();
+		var atmosphereRenderer = atmosphereGo.GetComponentInChildren<Renderer>();
 
-        var renderer = go.GetComponentInChildren<Renderer>();
+		atmosphereMaterial = new Material(MaterialManager.Instance.AtmosphereShader);
+		var atmosphereMeshFilter = atmosphereGo.GetComponentInChildren<MeshFilter>();
+		atmosphereMesh = atmosphereMeshFilter.sharedMesh;
+		atmosphereMatrix = atmosphereMeshFilter.transform.localToWorldMatrix;
+
+		// Load skybox
+		var skyboxReader = BsaFileReader.LoadArchiveFileData($"meshes\\{skyboxPath}");
+        var skyboxNif = new Nif.NiFile(skyboxReader);
+        var skyboxGo = skyboxNif.CreateGameObject();
+        var skyboxRenderer = skyboxGo.GetComponentInChildren<Renderer>();
 
         skyboxMaterial = new Material(MaterialManager.Instance.SkyShader);
-        //var skyCommandBuffer = new CommandBuffer();
-        skyboxMesh = go.GetComponentInChildren<MeshFilter>().sharedMesh;
-        //skyCommandBuffer.DrawMesh(skyboxMesh, Matrix4x4.TRS(new Vector3(0, -15, 0), Quaternion.identity, Vector3.one), skyboxMaterial);
+        var skyboxMeshFilter = skyboxGo.GetComponentInChildren<MeshFilter>();
+		skyboxMesh = skyboxMeshFilter.sharedMesh;
+        skyMatrix = skyboxMeshFilter.transform.localToWorldMatrix;
 
-        //Camera.main.AddCommandBuffer(CameraEvent.BeforeSkybox, skyCommandBuffer);
-        if (!Application.isPlaying)
+		//Camera.main.AddCommandBuffer(CameraEvent.BeforeSkybox, skyCommandBuffer);
+		if (!Application.isPlaying)
         {
-            DestroyImmediate(go);
+            DestroyImmediate(atmosphereGo);
+            DestroyImmediate(skyboxGo);
         }
         else
         {
-            Destroy(go);
+            Destroy(atmosphereGo);
+            Destroy(skyboxGo);
         }
 
         minimumTimeBetweenEnvironmentalSounds = IniManager.GetFloat("Weather", "Minimum Time Between Environmental Sounds");
@@ -129,8 +146,8 @@ public class WeatherManager : Singleton<WeatherManager>
         if (!shouldUpdate)
             return;
 
-        var localMatrix = Matrix4x4.TRS(camera.transform.position, Quaternion.identity, Vector3.one);
-        Graphics.DrawMesh(skyboxMesh, localMatrix, skyboxMaterial, 0, camera);
+		Graphics.DrawMesh(atmosphereMesh, Matrix4x4.Translate(camera.transform.position) * atmosphereMatrix, atmosphereMaterial, 0, camera);
+		Graphics.DrawMesh(skyboxMesh, Matrix4x4.Translate(camera.transform.position) * skyMatrix, skyboxMaterial, 0, camera);
     }
 
     private void OnDisable()

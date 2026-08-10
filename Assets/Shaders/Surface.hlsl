@@ -36,19 +36,17 @@ cbuffer UnityPerMaterial
 {
 	float4 _Color, _MainTex_ST;
 	float3 _EmissionColor;
-	float _Cutoff;
+	float _Cutoff, _SrcBlend;
 };
 
 FragmentInput Vertex(VertexInput input)
 {
-	float3 worldPosition = ObjectToWorld(input.position, input.instanceId);
-	
 	FragmentInput output;
-	output.position = WorldToClipPosition(worldPosition);
-	output.worldPosition = worldPosition;
+	output.worldPosition = ObjectToWorld(input.position, input.instanceId);
+	output.position = WorldToClipPosition(output.worldPosition);
 	output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
 	output.normal = ObjectToWorldNormal(input.normal, input.instanceId);
-	output.color = AmbientLight * input.color + _EmissionColor;
+	output.color = AmbientLight * GammaToLinear(input.color) + _EmissionColor;
 	return output;
 }
 
@@ -59,15 +57,18 @@ FragmentOutput Fragment(FragmentInput input)
 	float4 color = _MainTex.Sample(sampler_MainTex, input.uv);
 	float3 normal = normalize(input.normal);
 	
+	#ifdef SHADOW
+		clip(color.a - 0.5);
+	#endif
+	
 	#ifdef GBUFFER
-		output.gbuffer.albedoMetallic = float4(color.rgb, 0.0);
-		output.gbuffer.normalOcclusionRoughness = float4(normal * 0.5 + 0.5, 1.0);
-		output.gbuffer.emission = float4(input.color * color.rgb, 0.0);
+		output.gbuffer = OutputGbuffer(color.rgb, normal, input.color * color.rgb);
 	#endif
 	
 	#ifdef FORWARD
-		color.rgb *= GetLuminance(normal, input.worldPosition, input.position.xy, input.position.w) + input.color;
-		output.color = ApplyFog(color, input.position.xy, input.position.w, input.position.w, false);
+		float viewDistance = distance(ViewPosition, input.worldPosition);
+		bool isPremultiplied = _SrcBlend == 1.0;
+		output.color = GetLuminanceAndFog(color, input.color, normal, input.position.xy, input.position.w, viewDistance, isPremultiplied, input.worldPosition);
 	#endif
 	
 	return output;

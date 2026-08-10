@@ -74,7 +74,7 @@ public class WeatherSettings : ScriptableObject
 		RenderSettings.fog = true;
 		RenderSettings.fogMode = FogMode.Linear;
 
-		RenderSettings.fogEndDistance = Camera.main.farClipPlane;
+		RenderSettings.fogEndDistance = 8192;
 		RenderSettings.fogStartDistance = RenderSettings.fogEndDistance * (1 - IniManager.GetFloat(section, $"Land Fog Day Depth"));
 	}
 
@@ -132,7 +132,7 @@ public class WeatherSettings : ScriptableObject
 
 	public void UpdateWeather(float time)
 	{
-		Shader.SetGlobalColor("_SkyColor", skyGradient.Evaluate(time));
+		Shader.SetGlobalVector("_SkyColor", skyGradient.Evaluate(time).linear);
 		Camera.main.backgroundColor = fogGradient.Evaluate(time);
 
 		// Sun glare

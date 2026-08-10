@@ -23,7 +23,5 @@ float4 Fragment(VertexFullscreenTriangleOutput input) : SV_Target
 	float3 worldPosition = eyeDepth * input.worldDirection + ViewPosition;
 	
 	float3 normal = normalize(normalOcclusionRoughness.xyz * 2.0 - 1.0);
-	float3 color = GetLuminance(normal, worldPosition, input.position.xy, eyeDepth) * albedoMetallic.rgb;
-	
-	return ApplyFog(float4(color, 0.0), input.position.xy, eyeDepth, viewDistance, true);
+	return float4(GetLuminanceAndFog(float4(albedoMetallic.rgb, 1.0), 0.0, normal, input.position.xy, eyeDepth, viewDistance, false, worldPosition).rgb, FogFactor(viewDistance));
 }

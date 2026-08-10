@@ -4,10 +4,9 @@
 	{
 		Albedo("Albedo", Color) = (1, 1, 1, 1)
 		[HDR] Extinction("Extinction", Color) = (1, 1, 1, 1)
-		_Alpha ("Alpha", Range(0, 1)) = 0.75
-		_MainTex ("Fallback texture", 2D) = "black" {}
-		_Fade("Blend parameter", Float) = 0.15
-		_Tiling("Tiling", Float) = 1024
+		Alpha ("Alpha", Range(0, 1)) = 0.75
+		Scale("Scale", Float) = 0.2105
+		_MainTex ("Texture", 2D) = "black" {}
 	}
 
 	SubShader
@@ -24,7 +23,6 @@
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
-			#pragma use_dxc
 			#pragma require waveMath
 			#pragma multi_compile_instancing
 			#pragma multi_compile _ VOLUMETRIC_LIGHT_ON

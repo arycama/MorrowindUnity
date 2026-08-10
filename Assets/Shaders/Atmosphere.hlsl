@@ -28,26 +28,20 @@ cbuffer UnityPerMaterial
 
 FragmentInput Vertex(VertexInput input)
 {
-	float3 worldPosition = ObjectToWorld(input.position, 0);
+	float3 worldPosition = ObjectToWorld(input.position * 6, 0);
 
 	FragmentInput output;
 	output.worldPosition = worldPosition;
 	output.position = WorldToClipPosition(worldPosition);
-	output.position.z /= output.position.w;
 	output.uv = input.uv;// * _MainTex_ST.xy + _MainTex_ST.zw; //	+_CloudSpeed * Time * 0.003;
+	output.position.z /= output.position.w;
 	
-	float alpha = 1.0;
-	uint i = input.vertexId;
-	if (i >= 49 && i <= 64)
-		alpha = 0.0; // bottom-most row
-	else if (i >= 33 && i <= 48)
-		alpha = 0.25098; // second row
-		
-	output.color = float4(1.0, 1.0, 1.0, alpha);
+	float alpha = (input.vertexId & 1) ? 0.0 : 1.0;
+	output.color = float4(_SkyColor.rgb, alpha);
 	return output;
 }
 
 float4 Fragment(FragmentInput input) : SV_Target
 {
-	return _MainTex.Sample(sampler_MainTex, input.uv) * input.color;
+	return input.color;
 }

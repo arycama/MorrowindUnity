@@ -35,7 +35,7 @@ public class AmbientData
 
 		RenderSettings.fog = true;
 		RenderSettings.fogMode = FogMode.Linear;
-		RenderSettings.fogEndDistance = Camera.main.farClipPlane;
+		RenderSettings.fogEndDistance = 8192;
 		RenderSettings.fogStartDistance = RenderSettings.fogEndDistance * (1 - fogDensity);
 		RenderSettings.fogDensity = fogDensity;
 	}

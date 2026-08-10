@@ -100,7 +100,6 @@ namespace Nif
 				GameObject.layer = NiParent.GameObject.layer;
 			}
 
-
 			if (flags.HasFlag(Flags.Hidden))
 			{
 				GameObject.tag = "Hidden"; // Set tag and layer, so we can easily check if an object is hidden/marker etc by checking it's tag
@@ -114,8 +113,7 @@ namespace Nif
 			}
 
 			// Set transform (Use localPosition/rotation as this may be already parented)
-			GameObject.transform.localPosition = position;
-			GameObject.transform.localRotation = rotation;
+			GameObject.transform.SetLocalPositionAndRotation(position, rotation);
 			GameObject.transform.localScale = new Vector3(scale, scale, scale);
 
 			if (hasBoundingBox)

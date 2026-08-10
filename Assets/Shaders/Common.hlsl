@@ -1,6 +1,19 @@
 #ifndef COMMON_INCLUDED
 #define COMMON_INCLUDED
 
+#ifdef GBUFFER
+	const static bool IsGbufferPass = true;
+#else
+	const static bool IsGbufferPass = false;
+#endif
+
+#ifdef SHADOW
+	const static bool IsShadowPass = true;
+#else
+	const static bool IsShadowPass = false;
+#endif
+
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Geometry.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/MatrixUtils.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Packing.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Samplers.hlsl"
@@ -101,6 +114,9 @@ Texture2D<float> SunShadow;
 Texture2DArray<uint> VisibleLightBits;
 Texture3D<float4> VolumetricLighting;
 
+float3 UnderwaterColor;
+float UnderwaterColorWeight;
+
 #ifdef INSTANCING_ON
 	cbuffer UnityDrawCallInfo
 	{
@@ -127,11 +143,11 @@ cbuffer UnityPerDraw
 
 float3 ObjectToWorld(float3 position, uint instanceId)
 {
-#ifdef INSTANCING_ON
+	#ifdef INSTANCING_ON
 		float3x4 objectToWorld = (float3x4)unity_Builtins0Array[unity_BaseInstanceID + instanceId].unity_ObjectToWorldArray;
-#else
-	float3x4 objectToWorld = unity_ObjectToWorld;
-#endif
+	#else
+		float3x4 objectToWorld = unity_ObjectToWorld;
+	#endif
 	
 	return MultiplyPoint3x4(objectToWorld, position);
 }
@@ -199,6 +215,15 @@ float LinearEyeDepth(float depth)
 float LinearToDeviceDepth(float eyeDepth)
 {
 	return rcp(eyeDepth) * ViewToClip._m23 + ViewToClip._m22;
+}
+
+GbufferOutput OutputGbuffer(float3 albedo, float3 normal, float3 emission)
+{
+	GbufferOutput gbuffer;
+	gbuffer.albedoMetallic = float4(albedo, 0.0);
+	gbuffer.normalOcclusionRoughness = float4(normal * 0.5 + 0.5, 1.0);
+	gbuffer.emission = float4(emission, 0.0);
+	return gbuffer;
 }
 
 uint3 GetClusterIndex(float3 screenPosition)
@@ -285,8 +310,11 @@ float FogFactor(float viewDistance)
 	return saturate(viewDistance * FogScale + FogOffset);
 }
 
-float4 ApplyFog(float4 color, float2 screenPosition, float eyeDepth, float viewDistance, bool isPremultiplied)
+float4 GetLuminanceAndFog(float4 color, float3 ambient, float3 normal, float2 screenPosition, float eyeDepth, float viewDistance, bool isPremultiplied, float3 worldPosition)
 {
+	color.rgb *= ambient + GetLuminance(normal, worldPosition, screenPosition, eyeDepth);
+	
+	// Fog
 	#ifdef VOLUMETRIC_LIGHT_ON
 		float3 volumetricUv = float3(screenPosition / ViewSize, eyeDepth / MaxDepth);
 		volumetricUv.y = 1 - volumetricUv.y;
@@ -301,15 +329,15 @@ float4 ApplyFog(float4 color, float2 screenPosition, float eyeDepth, float viewD
 	#endif
 	
 	if (isPremultiplied)
-	{
-		color.rgb = color.rgb * fogTransmittance + fogLuminance;
-		return float4(color.rgb, 1.0 - fogTransmittance * (1.0 - color.a));
-	}
-	else
-	{
-		color.rgb = color.rgb * fogTransmittance + fogLuminance;
-		return float4(color.rgb, 1.0 - (1.0 - color.a));
-	}
+		fogLuminance *= color.a;
+		
+	color.rgb = color.rgb * fogTransmittance + fogLuminance;
+	return color;
+}
+
+float3 GammaToLinear(float3 color)
+{
+	return select(color <= 0.04045, color * rcp(12.92), pow((color + 0.055) * rcp(1.055), 2.4));
 }
 
 #endif

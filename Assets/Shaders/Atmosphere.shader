@@ -1,4 +1,4 @@
-﻿Shader "Sky"
+﻿Shader "Atmosphere"
 {
 	Properties
 	{
@@ -26,7 +26,7 @@
 			#pragma fragment Fragment
 			#pragma use_dxc
 			#pragma multi_compile _ VOLUMETRIC_LIGHT_ON
-			#include "Sky.hlsl"
+			#include "Atmosphere.hlsl"
 			ENDHLSL
 		}
 	}

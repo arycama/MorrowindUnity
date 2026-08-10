@@ -1,25 +1,17 @@
 ﻿using UnityEngine;
 using UnityEngine.Rendering;
+using CustomRenderPipeline;
 
 [CreateAssetMenu(menuName = "Morrowind Render Pipeline Asset")]
 public class MorrowindRenderPipelineAsset : CustomRenderPipelineAssetBase
 {
-	[field: SerializeField, Pow2(128)] public int TileSize { get; private set; } = 16;
-	[SerializeField] private float shadowDistance = 4096;
-	[SerializeField] private int shadowResolution = 2048;
-	[SerializeField] private float shadowBias = 0.0f;
-	[SerializeField] private float shadowSlopeBias = 0.0f;
 	[SerializeField] private bool useSrpBatching = true;
 	[field: SerializeField] public float ShadowFadeDistance { get; private set; } = 8f;
 
-	[field: SerializeField, Pow2(8192)] public int LightCullDepthSlices { get; private set; } = 8192;
+	[field: SerializeField] public LightingSettings LightingSettings { get; private set; }
+	[field: SerializeField] public LightCulling.Settings LightCulling { get; private set; }
 	[field: SerializeField] public VolumetricLighting.Settings VolumetricLighting { get; private set; }
-	[field: SerializeField] public Mesh PointLightMesh { get; private set; }
 
-	public float ShadowDistance => shadowDistance;
-	public int ShadowResolution => shadowResolution;
-	public float ShadowBias => shadowBias;
-	public float ShadowSlopeBias => shadowSlopeBias;
 	public override bool UseSrpBatching => useSrpBatching;
 
 	public override SupportedRenderingFeatures SupportedRenderingFeatures => new()

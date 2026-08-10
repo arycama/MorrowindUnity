@@ -31,7 +31,7 @@
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
-			#pragma require WaveMath
+			#pragma use_dxc
 			#pragma multi_compile_instancing
 			#define GBUFFER
 			#include "Surface.hlsl"
@@ -69,7 +69,7 @@
             HLSLPROGRAM
             #pragma vertex Vertex
             #pragma fragment Fragment
-			#pragma require WaveMath
+			#pragma use_dxc
 			#pragma multi_compile_instancing
 			#define SHADOW
 			#include "Surface.hlsl"

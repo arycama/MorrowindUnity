@@ -12,7 +12,6 @@ Shader "Terrain"
 		#pragma vertex Vertex
 		#pragma fragment Fragment
 		#pragma use_dxc
-		#pragma require waveMath
 		#pragma multi_compile_instancing
 		ENDHLSL
 

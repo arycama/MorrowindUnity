@@ -10,7 +10,6 @@ using static Unmath.Math;
 
 public class SetupLighting : ViewRenderFeature
 {
-	private readonly MorrowindRenderPipelineAsset asset;
 	private readonly NativeList<LightShadowCasterCullingInfo> perLightInfos = new(1, Allocator.Persistent);
 	private readonly NativeList<ShadowSplitData> splitBuffer = new(1, Allocator.Persistent);
 
@@ -18,9 +17,13 @@ public class SetupLighting : ViewRenderFeature
 	private float[] pointLightDepths = new float[8];
 	private int[] lightDepthMinMax;
 
-	public SetupLighting(RenderGraph renderGraph, MorrowindRenderPipelineAsset asset) : base(renderGraph)
+	private readonly LightingSettings lighting;
+	private readonly LightCulling.Settings lightCulling;
+
+	public SetupLighting(RenderGraph renderGraph, LightingSettings lighting, LightCulling.Settings lightCulling) : base(renderGraph)
 	{
-		this.asset = asset;
+		this.lighting = lighting;
+		this.lightCulling = lightCulling;
 	}
 
 	public override void Render(in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context)
@@ -62,7 +65,7 @@ public class SetupLighting : ViewRenderFeature
 					var cameraToWorld = Float4x4.TRS(viewPassData.position, viewPassData.rotation, 1);
 					var cameraToView = worldToView.Mul(cameraToWorld);
 
-					var viewBounds = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, viewPassData.near, asset.ShadowDistance, cameraToView);
+					var viewBounds = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, viewPassData.near, lighting.DirectionalShadowDistance, cameraToView);
 					var viewToClip = Float4x4.OrthoReverseZ(-viewBounds.extents.x, viewBounds.extents.x, -viewBounds.extents.y, viewBounds.extents.y, 0, viewBounds.Size.z);
 
 					var worldViewPosition = viewBounds.center;
@@ -72,7 +75,7 @@ public class SetupLighting : ViewRenderFeature
 					var worldToCascade = Float4x4.WorldToLocal(worldViewPosition, lightRotation);
 					worldToSunShadow = Float4x4.OrthoReverseZSample(-viewBounds.extents.x, viewBounds.extents.x, -viewBounds.extents.y, viewBounds.extents.y, 0, viewBounds.Size.z).Mul(worldToCascade);
 
-					sunShadows = renderGraph.GetTexture(asset.ShadowResolution, GraphicsFormat.D16_UNorm, isExactSize: true, clear: true);
+					sunShadows = renderGraph.GetTexture(lighting.DirectionalShadowResolution, GraphicsFormat.D16_UNorm, isExactSize: true, clear: true);
 
 					var shadowSplitData = CalculateShadowSplitData(viewToClip.Mul(worldToCascade), lightDirection, true);
 					shadowSplitData.shadowCascadeBlendCullingFactor = 1;
@@ -83,7 +86,7 @@ public class SetupLighting : ViewRenderFeature
 
 					var perCascadeData = renderGraph.SetConstantBuffer(viewToClip.Mul(worldToCascade));
 					using var pass = renderGraph.AddShadowRenderPass("Directional Shadows");
-					pass.Initialize(context, cullingResults, mainLightIndex, asset.ShadowBias, asset.ShadowSlopeBias, false, false, asset.ShadowResolution, 1);
+					pass.Initialize(context, cullingResults, mainLightIndex, lighting.DirectionalShadowBias, lighting.DirectionalShadowSlopeBias, false, false, lighting.DirectionalShadowResolution, 1);
 					pass.ReadBuffer("CascadeData", perCascadeData);
 					pass.WriteDepth(sunShadows);
 				}
@@ -148,8 +151,8 @@ public class SetupLighting : ViewRenderFeature
 		perLightInfos.Clear();
 		splitBuffer.Clear();
 
-		var sunShadowFadeScale = -1.0f / asset.ShadowFadeDistance;
-		var sunShadowFadeOffset = asset.ShadowDistance / asset.ShadowFadeDistance;
+		var sunShadowFadeScale = -1.0f / lighting.DirectionalFadeLength;
+		var sunShadowFadeOffset = lighting.DirectionalShadowDistance / lighting.DirectionalFadeLength;
 
 		var lightingDataBuffer = renderGraph.SetConstantBuffer
 		((
@@ -161,8 +164,8 @@ public class SetupLighting : ViewRenderFeature
 
 			worldToSunShadow,
 
-			Rcp(asset.ShadowResolution),
-			(float)asset.ShadowResolution,
+			Rcp(lighting.DirectionalShadowResolution),
+			(float)lighting.DirectionalShadowResolution,
 			0f, 0f
 		));
 
@@ -174,14 +177,12 @@ public class SetupLighting : ViewRenderFeature
 		// Sort lights by view depth
 		Array.Sort(pointLightDepths, pointLights);
 
-		Array.Resize(ref lightDepthMinMax, asset.LightCullDepthSlices);
+		Array.Resize(ref lightDepthMinMax, lightCulling.DepthSlices);
 		for (var i = 0; i < lightDepthMinMax.Length; i++)
 			lightDepthMinMax[i] = BitPack(ushort.MaxValue, 16, 0) | BitPack(0, 16, 16);
 
-		var numSlices = asset.LightCullDepthSlices;
-
 		// Add sorted lights to list
-		var binWidth = viewPassData.far / asset.LightCullDepthSlices;
+		var binWidth = viewPassData.far / lightCulling.DepthSlices;
 		var intersectingLightCount = 0;
 
 		for (var i = 0; i < pointLightCount; i++)
@@ -194,7 +195,7 @@ public class SetupLighting : ViewRenderFeature
 
 			// BitOr with covered Z bins
 			var minBin = Max(0, (int)(minZ / binWidth));
-			var maxBin = Min(asset.LightCullDepthSlices - 1, (int)(maxZ / binWidth));
+			var maxBin = Min(lightCulling.DepthSlices - 1, (int)(maxZ / binWidth));
 
 			for (var j = minBin; j <= maxBin; j++)
 			{
@@ -214,12 +215,12 @@ public class SetupLighting : ViewRenderFeature
 				intersectingLightCount = i + 1;
 		}
 
-		var tileCountX = DivRoundUp(viewPassData.viewSize.x, asset.TileSize);
-		var tileCountY = DivRoundUp(viewPassData.viewSize.y, asset.TileSize);
+		var tileCountX = DivRoundUp(viewPassData.viewSize.x, lightCulling.TileSize);
+		var tileCountY = DivRoundUp(viewPassData.viewSize.y, lightCulling.TileSize);
 		var lightIndexCount = DivRoundUp(pointLightCount, 32);
 
 		var pointLightBuffer = pointLightCount == 0 ? renderGraph.EmptyBuffer : renderGraph.GetBuffer(pointLightCount, UnsafeUtility.SizeOf<LightData>());
-		var lightDepthMinMaxBuffer = renderGraph.GetBuffer(asset.LightCullDepthSlices);
+		var lightDepthMinMaxBuffer = renderGraph.GetBuffer(lightCulling.DepthSlices);
 		var visibleLightBits = renderGraph.GetTexture(new(tileCountX, tileCountY), GraphicsFormat.R32_UInt, lightIndexCount, TextureDimension.Tex2DArray, isRandomWrite: true);
 
 		using (var pass = renderGraph.AddGenericRenderPass("Set Light Data", (pointLights, pointLightCount, pointLightBuffer, lightDepthMinMaxBuffer, lightDepthMinMax, visibleLightBits)))
@@ -241,13 +242,13 @@ public class SetupLighting : ViewRenderFeature
 
 		var pointLightData = renderGraph.SetConstantBuffer
 		((
-			(float)asset.TileSize,
+			(float)lightCulling.TileSize,
 			pointLightCount,
-			DivRoundUp(viewPassData.viewSize.x, asset.TileSize),
+			DivRoundUp(viewPassData.viewSize.x, lightCulling.TileSize),
 			lightIndexCount,
-			asset.LightCullDepthSlices,
+			lightCulling.DepthSlices,
 			binWidth,
-			Rcp(asset.TileSize),
+			Rcp(lightCulling.TileSize),
 			Rcp(binWidth)
 		));
 

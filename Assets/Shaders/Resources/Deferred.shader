@@ -12,7 +12,6 @@ Shader "Hidden/Morrowind Deferred"
             HLSLPROGRAM
             #pragma vertex Vertex
             #pragma fragment Fragment
-            #pragma use_dxc
             #pragma require WaveMath
             #pragma multi_compile _ VOLUMETRIC_LIGHT_ON
             #pragma multi_compile _ SHADOWS_ON

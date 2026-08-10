@@ -831,6 +831,7 @@ MonoBehaviour:
   TimeScale: 30
   rain: {fileID: 70955723}
   skyboxPath: sky_clouds_01.nif
+  atmospherePath: sky_atmosphere.nif
   nightSkyPath: sky_night_01.nif
   sunTexture: tx_Sun_05.dds
   sunAxis: {x: 360, y: 0, z: 0}
@@ -844,6 +845,7 @@ MonoBehaviour:
   day: 0
   month: 7
   skyboxMaterial: {fileID: 1600696161}
+  atmosphereMaterial: {fileID: 0}
 --- !u!114 &1594392080
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -869,11 +871,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 926a5f7cafec063428dad34c2e00992c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  defaultShader: {fileID: 4800000, guid: 3ccccb8a788d20845becb2c612e8b454, type: 3}
-  terrainShader: {fileID: 4800000, guid: ec5d6386443e8304da45e32fcc7bda1e, type: 3}
-  skyShader: {fileID: 4800000, guid: fa26dcbafeabb7b499f78fd97602cda3, type: 3}
-  waterShader: {fileID: 4800000, guid: d71c7ec2f6ab57747b282476d12d56bc, type: 3}
-  nightSkyShader: {fileID: 4800000, guid: 9ed7939180316fd4fbcd718da47d8284, type: 3}
+  <DefaultShader>k__BackingField: {fileID: 4800000, guid: 3ccccb8a788d20845becb2c612e8b454,
+    type: 3}
+  <TerrainShader>k__BackingField: {fileID: 4800000, guid: ec5d6386443e8304da45e32fcc7bda1e,
+    type: 3}
+  <WaterShader>k__BackingField: {fileID: 4800000, guid: d71c7ec2f6ab57747b282476d12d56bc,
+    type: 3}
+  <AtmosphereShader>k__BackingField: {fileID: 4800000, guid: 7d8038090fbd6164691c76c103c7d31a,
+    type: 3}
+  <SkyShader>k__BackingField: {fileID: 4800000, guid: fa26dcbafeabb7b499f78fd97602cda3,
+    type: 3}
+  <NightSkyShader>k__BackingField: {fileID: 4800000, guid: fa26dcbafeabb7b499f78fd97602cda3,
+    type: 3}
 --- !u!114 &1594392082
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1300,6 +1309,11 @@ PrefabInstance:
         type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 507403520110897234, guid: 39e05c24e4a896d40be4b0407b23f93f,
+        type: 3}
+      propertyPath: resolution
+      value: 32
       objectReference: {fileID: 0}
     - target: {fileID: 507403520110897263, guid: 39e05c24e4a896d40be4b0407b23f93f,
         type: 3}
