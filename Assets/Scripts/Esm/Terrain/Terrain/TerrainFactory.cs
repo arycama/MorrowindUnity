@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Esm;
+using Unity.Collections;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class TerrainFactory
 {
@@ -19,7 +22,29 @@ public class TerrainFactory
         NE = 0x100
     };
 
-    public static void Create(Vector2Int coordinates)
+	// Vertex structure with sequential memory layout containing position, compressed 16-bit normal, 32-bit color, and half-precision texture coordinates
+	[StructLayout(LayoutKind.Sequential)]
+	struct Vertex
+	{
+		public sbyte normalX, normalY, normalZ, normalPadding;
+		public Color32 color;
+		public ushort uvX, uvY, uvZ, uvW;
+
+		public Vertex(sbyte normalX, sbyte normalY, sbyte normalZ, Color32 color, Vector4 uv)
+		{
+			this.normalX = normalX;
+			this.normalY = normalY;
+			this.normalZ = normalZ;
+            normalPadding = 0;
+			this.color = color;
+            uvX = Mathf.FloatToHalf(uv.x);
+            uvY = Mathf.FloatToHalf(uv.y);
+            uvZ = Mathf.FloatToHalf(uv.z);
+            uvW = Mathf.FloatToHalf(uv.w);
+		}
+	}
+
+	public static void Create(Vector2Int coordinates)
     {
         var record = LandRecord.Get(coordinates);
         var gameObject = new GameObject(coordinates.ToString());
@@ -28,21 +53,36 @@ public class TerrainFactory
         var meshFilter = gameObject.AddComponent<MeshFilter>();
 
         var meshRenderer = gameObject.AddComponent<MeshRenderer>();
-        meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.TwoSided;
-        meshRenderer.sharedMaterial = new Material(MaterialManager.Instance.TerrainShader) { enableInstancing = true };
-        meshRenderer.sharedMaterial.mainTextureScale = new Vector2(16, 16);
+        meshRenderer.shadowCastingMode = ShadowCastingMode.TwoSided;
+		meshRenderer.sharedMaterial = new Material(MaterialManager.Instance.TerrainShader)
+		{
+			enableInstancing = true,
+			mainTextureScale = new Vector2(16, 16)
+		};
 
-        // Generate the mesh
-        int vertexStep = 8192 / 64;
+		// Generate the mesh
+		int vertexStep = 8192 / 64;
 
         // Generate vertices and appropriate heights
-        var vertices = new Vector3[65 * 65];
-        var uvs = new Vector4[vertices.Length];
         var nextColHeight = record.HeightData.ReferenceHeight;
+        var positions = new NativeArray<Vector3>(65 * 65, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+        var vertices = new NativeArray<Vertex>(65 * 65, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
-        var triangles = new ushort[64 * 64 * 6];
+		// Create mesh with predefined bounds to avoid recalculation
+		var mesh = new Mesh();
 
-        for (int y = 0, i = 0; y < 65; y++)
+        // Create and assign triangle vertices
+        // Configure vertex buffer layout and allocate space
+        var vertexAttributeDescriptors = new NativeArray<VertexAttributeDescriptor>(4, Allocator.Temp);
+        vertexAttributeDescriptors[0] = new(VertexAttribute.Position, VertexAttributeFormat.Float32, 3, 0);
+        vertexAttributeDescriptors[1] = new(VertexAttribute.Normal, VertexAttributeFormat.SNorm8, 4, 1);
+        vertexAttributeDescriptors[2] = new(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4, 1);
+        vertexAttributeDescriptors[3] = new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float16, 4, 1);
+
+		mesh.SetVertexBufferParams(vertices.Length, vertexAttributeDescriptors);
+
+		var colors = record.ColorData.Colors;
+		for (int y = 0, i = 0; y < 65; y++)
         {
             var previousHeight = nextColHeight;
             for (var x = 0; x < 65; x++, i++)
@@ -54,52 +94,69 @@ public class TerrainFactory
                     nextColHeight = height;
                 }
 
-                var vertex = new Vector3(x * vertexStep, height * 8, y * vertexStep); // Each vertex is 128 game-units apart
-                vertices[i] = vertex;
+                positions[i] = new Vector3(x * vertexStep, height * 8, y * vertexStep); // Each vertex is 128 game-units apart
+
+				// Generate UV ( every 4 patches should be one UV)
+				var uvX = Mathf.Lerp(1f / 18f, 1 - 1f / 18f, x / 64f);
+				var uvY = Mathf.Lerp(1f / 18f, 1 - 1f / 18f, y / 64f);
+				var uvZ = x / 64f;
+				var uvW = y / 64f;
+
+                var color = colors != null ? colors[i] : new Color32(255, 255, 255, 255);
+
+				vertices[i] = new Vertex
+                (
+                    record.NormalData.Normals[i * 3 + 0], record.NormalData.Normals[i * 3 + 2], record.NormalData.Normals[i * 3 + 1],
+                    color,
+					new Vector4(uvX, uvY, uvZ, uvW)
+				);
                 previousHeight = height;
-
-                // Generate UV too ( every 4 patches should be one UV)
-                var uvX = Mathf.Lerp(1f / 18f, 1 - 1f / 18f, x / 64f);
-                var uvY = Mathf.Lerp(1f / 18f, 1 - 1f / 18f, y / 64f);
-                var uvZ = x / 64f;
-                var uvW = y / 64f;
-
-                uvs[x + y * 65] = new Vector4(uvX, uvY, uvZ, uvW);
             }
         }
 
-        // Triangles
-        // Needs to be seperate from previous loop
-        for (int ti = 0, vi = 0, y = 0; y < 64; y++, vi++)
+		// Assigns the generated vertices to the mesh
+		mesh.SetVertexBufferData(positions, 0, 0, positions.Length, 0);
+		mesh.SetVertexBufferData(vertices, 0, 0, vertices.Length, 1);
+
+		// Indices, Needs to be seperate from previous loop
+		var indexLength = 64 * 64 * 6;
+		mesh.SetIndexBufferParams(indexLength, IndexFormat.UInt16);
+		var indices = new ushort[indexLength];
+
+        var cellsPerRow = 64;
+		for (int ti = 0, vi = 0, y = 0; y < cellsPerRow; y++, vi++)
         {
-            for (int x = 0; x < 64; x++, ti += 6, vi++)
+            for (int x = 0; x < cellsPerRow; x++, ti += 6, vi++)
             {
-                triangles[ti] = (ushort)vi;
-                triangles[ti + 3] = triangles[ti + 2] = (ushort)(vi + 1);
-                triangles[ti + 4] = triangles[ti + 1] = (ushort)(vi + 64 + 1);
-                triangles[ti + 5] = (ushort)(vi + 64 + 2);
+				var flip = (x & 1) == (y & 1);
+
+                if (flip)
+                {
+					indices[ti + 0] = (ushort)(vi);
+					indices[ti + 1] = (ushort)(vi + cellsPerRow + 1);
+					indices[ti + 2] = (ushort)(vi + cellsPerRow + 2);
+					indices[ti + 3] = (ushort)(vi + cellsPerRow + 2);
+					indices[ti + 4] = (ushort)(vi + 1);
+					indices[ti + 5] = (ushort)(vi);
+				}
+                else
+                {
+                    indices[ti + 0] = (ushort)(vi);
+                    indices[ti + 1] = (ushort)(vi + cellsPerRow + 1);
+                    indices[ti + 2] = (ushort)(vi + 1);
+                    indices[ti + 3] = (ushort)(vi + 1);
+                    indices[ti + 4] = (ushort)(vi + cellsPerRow + 1);
+                    indices[ti + 5] = (ushort)(vi + cellsPerRow + 2);
+                }
             }
         }
 
-        var normals = new Vector3[record.NormalData.Normals.Length / 3];
-        for (var i = 0; i < normals.Length; i++)
-        {
-            normals[i] = new Vector3(record.NormalData.Normals[i * 3] / 128f, record.NormalData.Normals[i * 3 + 2] / 128f, record.NormalData.Normals[i * 3 + 1] / 128f);
-        }
+		// Assigns the generated indices to the mesh
+		mesh.SetIndexBufferData(indices, 0, 0, indices.Length);
+		mesh.SetSubMesh(0, new SubMeshDescriptor(0, indexLength));
+        mesh.RecalculateBounds();
 
-        var mesh = new Mesh
-        {
-            vertices = vertices,
-            normals = normals
-        };
-
-        mesh.SetUVs(0, uvs);
-		mesh.SetTriangles(triangles, 0);
-
-        if (record.ColorData != null)
-            mesh.colors32 = record.ColorData.Colors;
-
-        mesh.UploadMeshData(true);
+		mesh.UploadMeshData(true);
         meshFilter.sharedMesh = mesh;
 
         // Remaining steps are for textures only
@@ -128,7 +185,6 @@ public class TerrainFactory
         }
 
         // Don't do this inside the loop, silly
-        var currentIndices = record.TextureData.TextureIndices;
         var borderIndices = GetBorderIndices(cellDirections, borderCells); // Get an 18x18 array, which includes the surrounding textures
 
         var control = new Texture2D(18, 18, TextureFormat.R8, false, true)

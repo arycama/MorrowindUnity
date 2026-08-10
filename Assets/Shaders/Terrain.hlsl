@@ -6,7 +6,6 @@
 
 struct VertexInput
 {
-	uint instanceId : SV_InstanceID;
 	float3 position : POSITION;
 	
 	#ifdef GBUFFER
@@ -45,7 +44,7 @@ cbuffer UnityPerMaterial
 
 FragmentInput Vertex(VertexInput input)
 {
-	float3 worldPosition = ObjectToWorld(input.position, input.instanceId);
+	float3 worldPosition = ObjectToWorld(input.position, 0);
 	
 	FragmentInput output;
 	output.position = WorldToClipPosition(worldPosition);
