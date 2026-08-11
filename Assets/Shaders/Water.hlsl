@@ -29,7 +29,7 @@ cbuffer UnityPerMaterial
 FragmentInput Vertex(VertexInput input)
 {
 	FragmentInput output;
-	output.viewPosition = WorldToViewPosition(input.position);
+	output.viewPosition = WorldToViewPosition(input.position - ViewPosition);
 	output.position = ViewToClipPosition(output.viewPosition);
 	output.uv = input.position.xz * Scale / 64.0 / 3;
 	output.normal = WorldToViewNormal(float3(0.0, 1.0, 0.0));

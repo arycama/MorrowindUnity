@@ -84,8 +84,8 @@ public class SetupCamera : ViewRenderFeature
 		var viewToPixel = screenToPixel.Mul(viewToScreen);
 		var pixelToView = clipToView.Mul(pixelToClip);
 
-		var viewToWorld = Float4x4.TRS(viewPassData.position, viewPassData.rotation, 1.0f);
-		var worldToView = Float4x4.WorldToLocal(viewPassData.position, viewPassData.rotation);
+		var viewToWorld = Float4x4.TRS(0.0f, viewPassData.rotation, 1.0f);
+		var worldToView = Float4x4.WorldToLocal(0.0f, viewPassData.rotation);
 
 		// World
 		var worldToClip = viewToClip.Mul(worldToView);
@@ -121,7 +121,9 @@ public class SetupCamera : ViewRenderFeature
 		((
 			worldToClip,
 			viewToClip,
-			worldToView,
+			worldToView.r0,
+			worldToView.r1,
+			worldToView.r2,
 			pixelToClip,
 			screenToWorld,
 			worldToPreviousScreen,

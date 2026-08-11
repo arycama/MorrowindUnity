@@ -38,7 +38,6 @@ public class SetupLighting : ViewRenderFeature
 		var sunShadowsEnabled = false;
 
 		var lightCount = cullingResults.visibleLights.Length;
-		var worldToView = Float4x4.WorldToLocal(viewPassData.position, viewPassData.rotation);
 
 		Array.Resize(ref pointLights, Max(pointLights.Length, lightCount));
 		Array.Resize(ref pointLightDepths, Max(pointLightDepths.Length, lightCount));
@@ -64,13 +63,11 @@ public class SetupLighting : ViewRenderFeature
 				{
 					// Transform from view space to light space
 					var viewToLight = Float4x4.Rotate(viewSpaceLightRotation.Inverse);
+					var viewSpaceLightBounds = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, viewPassData.near, lighting.DirectionalShadowDistance, viewToLight);
 
-					// Rotate corners from view into light space
-					var lightBoundsView = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, viewPassData.near, lighting.DirectionalShadowDistance, viewToLight);
-
-					// Matrix that goes from world space to light-rotated view space
-					var worldToLightView = Float4x4.WorldToLocal(viewPassData.position, lightRotation);
-					var worldToLightClip = Float4x4.OrthoReverseZ(lightBoundsView).Mul(worldToLightView);
+					// Matrix that goes from world space to light space
+					var worldToLight = Float4x4.Rotate(lightRotation.Inverse);
+					var worldToLightClip = Float4x4.OrthoReverseZ(viewSpaceLightBounds).Mul(worldToLight);
 
 					var shadowSplitData = CalculateShadowSplitData(worldToLightClip, lightDirection, true);
 					shadowSplitData.shadowCascadeBlendCullingFactor = 1;
@@ -82,7 +79,7 @@ public class SetupLighting : ViewRenderFeature
 					var perCascadeData = renderGraph.SetConstantBuffer(worldToLightClip);
 
 					// Matrix that converts from view space to shadow-sampling space
-					viewToSunShadow = Float4x4.OrthoReverseZSample(lightBoundsView).Mul(viewToLight);
+					viewToSunShadow = Float4x4.OrthoReverseZSample(viewSpaceLightBounds).Mul(viewToLight);
 
 					using var pass = renderGraph.AddShadowRenderPass("Directional Shadows");
 					sunShadows = renderGraph.GetTexture(lighting.DirectionalShadowResolution, GraphicsFormat.D16_UNorm, isExactSize: true, clear: true);
@@ -165,7 +162,9 @@ public class SetupLighting : ViewRenderFeature
 			sunColor,
 			sunShadowFadeOffset,
 
-			viewToSunShadow,
+			viewToSunShadow.r0,
+			viewToSunShadow.r1,
+			viewToSunShadow.r2,
 
 			Rcp(lighting.DirectionalShadowResolution),
 			(float)lighting.DirectionalShadowResolution,

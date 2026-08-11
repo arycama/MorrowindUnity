@@ -81,7 +81,7 @@ MonoBehaviour:
     <PointLightMesh>k__BackingField: {fileID: -1732264862850525403, guid: 47996dfb8af93f44b8c55e697e3ea42e,
       type: 3}
   <VolumetricLighting>k__BackingField:
-    <Enabled>k__BackingField: 0
+    <Enabled>k__BackingField: 1
     <TileSize>k__BackingField: 4
     <DepthSlices>k__BackingField: 128
     <BlurSigma>k__BackingField: 0

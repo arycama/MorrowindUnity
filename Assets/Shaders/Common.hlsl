@@ -54,7 +54,7 @@ cbuffer ViewData
 {
 	matrix WorldToClip;
 	matrix ViewToClip;
-	matrix WorldToView;
+	row_major float3x4 WorldToView;
 	matrix PixelToClip;
 	matrix ScreenToWorld; 
 	matrix WorldToPreviousScreen;
@@ -83,7 +83,7 @@ cbuffer LightingData
 	float3 SunColor;
 	float SunShadowFadeOffset;
 	
-	float4x4 WorldToSunShadow;
+	row_major float3x4 ViewToSunShadow;
 	
 	float SunShadowRcpResolution;
 	float SunShadowResolution;
@@ -145,10 +145,13 @@ float UnderwaterColorWeight;
 float3x4 GetObjectToWorld(uint instanceId)
 {
 	#ifdef INSTANCING_ON
-		return (float3x4)unity_Builtins0Array[unity_BaseInstanceID + instanceId].unity_ObjectToWorldArray;
+		float3x4 objectToWorld = (float3x4)unity_Builtins0Array[unity_BaseInstanceID + instanceId].unity_ObjectToWorldArray;
 	#else
-		return unity_ObjectToWorld;
+		float3x4 objectToWorld = unity_ObjectToWorld;
 	#endif
+	
+	objectToWorld._m03_m13_m23 -= ViewPosition;
+	return objectToWorld;
 }
 
 float3 ObjectToWorldPosition(float3 position, uint instanceId)
@@ -250,7 +253,7 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, o
 	// Shadow
 	#ifdef SHADOWS_ON
 		float fade = saturate(viewPosition.z * SunShadowFadeScale + SunShadowFadeOffset);
-		float3 shadowPosition = MultiplyPoint3x4((float3x4) WorldToSunShadow, viewPosition);
+		float3 shadowPosition = MultiplyPoint3x4(ViewToSunShadow, viewPosition);
 		if (fade && all(saturate(shadowPosition.xy) == shadowPosition.xy))
 			illuminance *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
 	#endif
