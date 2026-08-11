@@ -15,7 +15,7 @@ MonoBehaviour:
   defaultMaterials:
     <DefaultMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,
       type: 2}
-    <DefaultUIMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,
+    <DefaultUIMaterial>k__BackingField: {fileID: 2100000, guid: f3281f5f79abf5a4fa97071d934c1ee8,
       type: 2}
     <Default2DMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,
       type: 2}
@@ -27,7 +27,7 @@ MonoBehaviour:
       type: 2}
     <DefaultUIETC1SupportedMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,
       type: 2}
-    <DefaultUIOverdrawMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,
+    <DefaultUIOverdrawMaterial>k__BackingField: {fileID: 2100000, guid: f3281f5f79abf5a4fa97071d934c1ee8,
       type: 2}
     <Default2DMaskMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,
       type: 2}
@@ -54,6 +54,8 @@ MonoBehaviour:
       type: 3}
   useSrpBatching: 0
   <ShadowFadeDistance>k__BackingField: 32
+  <FogStartDensity>k__BackingField: 0.95
+  <FogAtDensity>k__BackingField: 0.5
   <LightingSettings>k__BackingField:
     <MicroShadows>k__BackingField: 1
     <SunAngularDiameter>k__BackingField: 0.52
@@ -74,7 +76,7 @@ MonoBehaviour:
     <SpotShadowBias>k__BackingField: 0
     <SpotShadowSlopeBias>k__BackingField: 0
   <LightCulling>k__BackingField:
-    <TileSize>k__BackingField: 16
+    <TileSize>k__BackingField: 8
     <DepthSlices>k__BackingField: 8192
     <PointLightMesh>k__BackingField: {fileID: -1732264862850525403, guid: 47996dfb8af93f44b8c55e697e3ea42e,
       type: 3}

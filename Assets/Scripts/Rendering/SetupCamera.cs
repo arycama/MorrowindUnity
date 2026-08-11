@@ -15,10 +15,12 @@ public class SetupCamera : ViewRenderFeature
 {
 	private readonly Dictionary<int, (Float3, Quaternion, Float4x4)> previousCameraTransform = new();
 	private readonly LightingSettings lighting;
+	private readonly MorrowindRenderPipelineAsset asset;
 
-	public SetupCamera(RenderGraph renderGraph, LightingSettings lighting) : base(renderGraph)
+	public SetupCamera(RenderGraph renderGraph, LightingSettings lighting, MorrowindRenderPipelineAsset asset) : base(renderGraph)
 	{
 		this.lighting = lighting;
+		this.asset = asset;
 	}
 
 	public override void Render(in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context)
@@ -44,6 +46,10 @@ public class SetupCamera : ViewRenderFeature
 		var fogScale = fogEnabled ? 1 / (fogEnd - fogStart) : 0;
 		var fogOffset = fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
 
+		var target = asset.FogStartDensity; // value we want the fog to have at halfway between start and end
+		var targetAt = Lerp(fogStart, fogEnd, asset.FogAtDensity);
+		var fogDensity = -Log2(target) * Rcp(targetAt);
+
 		var environmentDataBuffer = renderGraph.SetConstantBuffer(
 		(
 			RenderSettings.ambientLight.LinearFloat3(),
@@ -53,7 +59,7 @@ public class SetupCamera : ViewRenderFeature
 			Time.time,
 			fogStart,
 			fogEnd,
-			0f
+			fogDensity
 		));
 
 		renderGraph.SetResource(new EnvironmentData(environmentDataBuffer));
@@ -100,15 +106,16 @@ public class SetupCamera : ViewRenderFeature
 
 		var worldToPreviousView = Float4x4.WorldToLocal(previousTransform.Item1 - viewPassData.position, previousTransform.Item2);
 		var worldToPreviousScreen = previousTransform.Item3.Mul(worldToPreviousView);
-		var pixelToWorldDir = Float4x4.PixelToWorldViewDirectionMatrix(viewPassData.viewSize, 0f, viewPassData.tanHalfFov, viewToWorld, true, false);
 
 		var isFlipped = viewPassData.isFlipped;
 
-		var rotation = viewPassData.rotation;
 		var corner0 = isFlipped ? new Float2(-1, 1) : new Float2(-1, -1);
 		var corner1 = isFlipped ? new Float2(-1, -3) : new Float2(-1, 3);
 		var corner2 = isFlipped ? new Float2(3, 1) : new Float2(3, -1);
 		var tanHalfFov = viewPassData.tanHalfFov;
+
+		var overlayMatrix = Float4x4.Ortho(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
+		overlayMatrix = GL.GetGPUProjectionMatrix(overlayMatrix, false);
 
 		renderGraph.SetResource(new ViewData(renderGraph.SetConstantBuffer
 		((
@@ -118,14 +125,15 @@ public class SetupCamera : ViewRenderFeature
 			pixelToClip,
 			screenToWorld,
 			worldToPreviousScreen,
+			overlayMatrix,
 			(viewPassData.far - viewPassData.near) * Rcp(viewPassData.near * viewPassData.far), Rcp(viewPassData.far), viewPassData.near, viewPassData.far,
 			(Float2)viewPassData.viewSize,
 			1.0f / (Float2)viewPassData.viewSize,
 			viewPassData.position,
 			0f,
-			rotation.Rotate(new Float3(tanHalfFov * corner0, 1)), 0,
-			rotation.Rotate(new Float3(tanHalfFov * corner1, 1)), 0,
-			rotation.Rotate(new Float3(tanHalfFov * corner2, 1)), 0
+			new Float3(tanHalfFov * corner0, 1), 0,
+			new Float3(tanHalfFov * corner1, 1), 0,
+			new Float3(tanHalfFov * corner2, 1), 0
 		))));
 	}
 }

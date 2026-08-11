@@ -44,15 +44,13 @@ cbuffer UnityPerMaterial
 
 FragmentInput Vertex(VertexInput input)
 {
-	float3 worldPosition = ObjectToWorld(input.position, 0);
-	
 	FragmentInput output;
-	output.position = WorldToClipPosition(worldPosition);
+	output.position = ObjectToClipPosition(input.position, 0);
 	
 	#ifdef GBUFFER
 		output.uv = float4(input.uv.xy, input.uv.zw * _MainTex_ST.xy + _MainTex_ST.zw);
 		output.color = GammaToLinear(input.color);
-		output.normal = input.normal;
+		output.normal = WorldToViewNormal(input.normal);
 	#endif
 	
 	return output;
@@ -72,7 +70,11 @@ FragmentOutput Fragment(FragmentInput input)
 		color += _MainTex.Sample(sampler_MainTex, float3(input.uv.zw, terrainData.w)) * weights.w;
 		color *= input.color;
 		
-		output.gbuffer = OutputGbuffer(color, normalize(input.normal), AmbientLight * color);
+		float3 emissive = AmbientLight * color;
+		if (ViewPosition.y < 0)
+			emissive = lerp(emissive, emissive * UnderwaterColor, UnderwaterColorWeight);
+		
+		output.gbuffer = OutputGbuffer(color, normalize(input.normal), emissive);
 	#endif
 	
 	return output;

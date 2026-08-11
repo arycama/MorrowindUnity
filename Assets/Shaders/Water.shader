@@ -7,6 +7,8 @@
 		Alpha ("Alpha", Range(0, 1)) = 0.75
 		Scale("Scale", Float) = 0.2105
 		_MainTex ("Texture", 2D) = "black" {}
+		FadeTexture ("Fade Texture", 2D) = "black" {}
+		Fade("Fade", Float) = 0
 	}
 
 	SubShader

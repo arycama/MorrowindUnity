@@ -34,7 +34,7 @@ public class SetupLighting : ViewRenderFeature
 		var sunColor = Float3.One * Pi;
 		var mainLightIndex = -1;
 		var sunShadows = renderGraph.EmptyTexture;
-		var worldToSunShadow = Float4x4.Identity;
+		var viewToSunShadow = Float4x4.Identity;
 		var sunShadowsEnabled = false;
 
 		var lightCount = cullingResults.visibleLights.Length;
@@ -59,33 +59,26 @@ public class SetupLighting : ViewRenderFeature
 
 				if (cullingResults.GetShadowCasterBounds(mainLightIndex, out _))
 				{
-					var lightRotation = lightToWorld.Rotation;
+					var viewToWorld = Float4x4.TRS(viewPassData.position, viewPassData.rotation, 1);
+					var worldToLight = Float4x4.Rotate(lightToWorld.Rotation.Inverse);
+					var viewToLight = worldToLight.Mul(viewToWorld);
 
-					var worldToView = Float4x4.Rotate(lightRotation.Inverse);
-					var cameraToWorld = Float4x4.TRS(viewPassData.position, viewPassData.rotation, 1);
-					var cameraToView = worldToView.Mul(cameraToWorld);
+					var lightBounds = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, viewPassData.near, lighting.DirectionalShadowDistance, viewToLight);
+					var lightToLightClip = Float4x4.OrthoReverseZ(lightBounds);
 
-					var viewBounds = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, viewPassData.near, lighting.DirectionalShadowDistance, cameraToView);
-					var viewToClip = Float4x4.OrthoReverseZ(-viewBounds.extents.x, viewBounds.extents.x, -viewBounds.extents.y, viewBounds.extents.y, 0, viewBounds.Size.z);
+					var worldToLightClip = lightToLightClip.Mul(worldToLight);
+					viewToSunShadow = Float4x4.OrthoReverseZSample(lightBounds).Mul(viewToLight);
 
-					var worldViewPosition = viewBounds.center;
-					worldViewPosition.z = viewBounds.Min.z;
-					worldViewPosition = lightRotation.Rotate(worldViewPosition);
-
-					var worldToCascade = Float4x4.WorldToLocal(worldViewPosition, lightRotation);
-					worldToSunShadow = Float4x4.OrthoReverseZSample(-viewBounds.extents.x, viewBounds.extents.x, -viewBounds.extents.y, viewBounds.extents.y, 0, viewBounds.Size.z).Mul(worldToCascade);
-
-					sunShadows = renderGraph.GetTexture(lighting.DirectionalShadowResolution, GraphicsFormat.D16_UNorm, isExactSize: true, clear: true);
-
-					var shadowSplitData = CalculateShadowSplitData(viewToClip.Mul(worldToCascade), lightDirection, true);
+					var shadowSplitData = CalculateShadowSplitData(worldToLightClip, lightDirection, true);
 					shadowSplitData.shadowCascadeBlendCullingFactor = 1;
 					splitBuffer.Add(shadowSplitData);
 
 					splitRange = new RangeInt(perLightInfos.Length, 1);
 					sunShadowsEnabled = true;
 
-					var perCascadeData = renderGraph.SetConstantBuffer(viewToClip.Mul(worldToCascade));
+					var perCascadeData = renderGraph.SetConstantBuffer(worldToLightClip);
 					using var pass = renderGraph.AddShadowRenderPass("Directional Shadows");
+					sunShadows = renderGraph.GetTexture(lighting.DirectionalShadowResolution, GraphicsFormat.D16_UNorm, isExactSize: true, clear: true);
 					pass.Initialize(context, cullingResults, mainLightIndex, lighting.DirectionalShadowBias, lighting.DirectionalShadowSlopeBias, false, false, lighting.DirectionalShadowResolution, 1);
 					pass.ReadBuffer("CascadeData", perCascadeData);
 					pass.WriteDepth(sunShadows);
@@ -131,6 +124,7 @@ public class SetupLighting : ViewRenderFeature
 
 				// Convert to view space
 				cullingSphere.xyz = viewPassData.rotation.InverseRotate(cullingSphere.xyz - viewPassData.position);
+				position = viewPassData.rotation.InverseRotate(position - viewPassData.position);
 
 				// Reject lights that are fully behind the near plane since Unity doesn't do it automatically..
 				if (cullingSphere.z + cullingSphere.w <= viewPassData.near)
@@ -154,15 +148,17 @@ public class SetupLighting : ViewRenderFeature
 		var sunShadowFadeScale = -1.0f / lighting.DirectionalFadeLength;
 		var sunShadowFadeOffset = lighting.DirectionalShadowDistance / lighting.DirectionalFadeLength;
 
+		var viewSunDirection = viewPassData.rotation.InverseRotate(sunDirection);
+
 		var lightingDataBuffer = renderGraph.SetConstantBuffer
 		((
-			sunDirection,
+			viewSunDirection,
 			sunShadowFadeScale,
 
 			sunColor,
 			sunShadowFadeOffset,
 
-			worldToSunShadow,
+			viewToSunShadow,
 
 			Rcp(lighting.DirectionalShadowResolution),
 			(float)lighting.DirectionalShadowResolution,

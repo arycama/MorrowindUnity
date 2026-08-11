@@ -12,7 +12,7 @@ struct VertexInput
 struct FragmentInput
 {
 	float4 position : SV_Position;
-	float3 worldPosition : POSITION1;
+	float3 viewPosition : POSITION1;
 	float2 uv : TEXCOORD;
 	float3 normal : NORMAL;
 	float3 color : COLOR;
@@ -42,10 +42,10 @@ cbuffer UnityPerMaterial
 FragmentInput Vertex(VertexInput input)
 {
 	FragmentInput output;
-	output.worldPosition = ObjectToWorld(input.position, input.instanceId);
-	output.position = WorldToClipPosition(output.worldPosition);
+	output.viewPosition = ObjectToViewPosition(input.position, input.instanceId);
+	output.position = ObjectToClipPosition(input.position, input.instanceId);
 	output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
-	output.normal = ObjectToWorldNormal(input.normal, input.instanceId);
+	output.normal = ObjectToViewNormal(input.normal, input.instanceId);
 	output.color = AmbientLight * GammaToLinear(input.color) + _EmissionColor;
 	return output;
 }
@@ -55,20 +55,22 @@ FragmentOutput Fragment(FragmentInput input)
 	FragmentOutput output;
 
 	float4 color = _MainTex.Sample(sampler_MainTex, input.uv);
-	float3 normal = normalize(input.normal);
 	
 	#ifdef SHADOW
 		clip(color.a - 0.5);
 	#endif
 	
 	#ifdef GBUFFER
-		output.gbuffer = OutputGbuffer(color.rgb, normal, input.color * color.rgb);
+		float3 emissive = input.color * color.rgb;
+		if (ViewPosition.y < 0)
+			emissive = lerp(emissive, emissive * UnderwaterColor, UnderwaterColorWeight);
+	
+		emissive *= 1.0 - FogFactor(input.viewPosition);
+		output.gbuffer = OutputGbuffer(color.rgb, input.normal, emissive);
 	#endif
 	
 	#ifdef FORWARD
-		float viewDistance = distance(ViewPosition, input.worldPosition);
-		bool isPremultiplied = _SrcBlend == 1.0;
-		output.color = GetLuminanceAndFog(color, input.color, normal, input.position.xy, input.position.w, viewDistance, isPremultiplied, input.worldPosition);
+		output.color = GetLuminanceAndFog(color, input.color, normalize(input.normal), input.position.xy, input.viewPosition);
 	#endif
 	
 	return output;

@@ -68,6 +68,9 @@ public class WeatherManager : Singleton<WeatherManager>
 	[SerializeField]
 	private Material atmosphereMaterial;
 
+    [SerializeField] private Color32 underwaterColor;
+	[SerializeField] private float underwaterColorWeight;
+
 	private Mesh skyboxMesh, atmosphereMesh;
     private bool shouldUpdate;
     private Matrix4x4 skyMatrix, atmosphereMatrix;
@@ -139,11 +142,17 @@ public class WeatherManager : Singleton<WeatherManager>
 
         minimumTimeBetweenEnvironmentalSounds = IniManager.GetFloat("Weather", "Minimum Time Between Environmental Sounds");
         maximumTimeBetweenEnvironmentalSounds = IniManager.GetFloat("Weather", "Maximum Time Between Environmental Sounds");
-    }
 
-    private void OnCameraPreCull(ScriptableRenderContext context, Camera camera)
+		underwaterColor = IniManager.GetColor("Water", "UnderwaterColor");
+        underwaterColorWeight = IniManager.GetFloat("Water", "UnderwaterColorWeight");
+	}
+
+	private void OnCameraPreCull(ScriptableRenderContext context, Camera camera)
     {
-        if (!shouldUpdate)
+		var time = SecondsPerDayRecip * SecondsOfDay;
+		currentWeatherSettings?.UpdateWeather(time, camera, underwaterColor, underwaterColorWeight);
+
+		if (!shouldUpdate)
             return;
 
 		Graphics.DrawMesh(atmosphereMesh, Matrix4x4.Translate(camera.transform.position) * atmosphereMatrix, atmosphereMaterial, 0, camera);
@@ -219,8 +228,6 @@ public class WeatherManager : Singleton<WeatherManager>
         //// A nice fade in/out equation (y = 1 - ((x - 12)/ 6) ^ 2);
         ////var intensity = (SecondsOfDay - midDaySeconds) / sunriseSeconds;
         ////sun.shadowStrength = 1 - intensity * intensity;
-
-        currentWeatherSettings?.UpdateWeather(time);
     }
 
     private void UpdateTime(float time)
@@ -263,8 +270,6 @@ public class WeatherManager : Singleton<WeatherManager>
         currentWeatherSettings = ScriptableObject.CreateInstance<WeatherSettings>();
         currentWeatherSettings.name = weatherType.ToString();
         currentWeatherSettings.Create(weatherType, skyboxMaterial);
-
-        currentWeatherSettings.UpdateWeather(SecondsOfDay / SecondsPerDay);
 
         // Rain
         if (weatherType == WeatherType.Rain || weatherType == WeatherType.Thunderstorm)

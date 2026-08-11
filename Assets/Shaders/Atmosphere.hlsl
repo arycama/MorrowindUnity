@@ -28,7 +28,7 @@ cbuffer UnityPerMaterial
 
 FragmentInput Vertex(VertexInput input)
 {
-	float3 worldPosition = ObjectToWorld(input.position * 6, 0);
+	float3 worldPosition = ObjectToWorldPosition(input.position * 6, 0);
 
 	FragmentInput output;
 	output.worldPosition = worldPosition;
@@ -43,5 +43,10 @@ FragmentInput Vertex(VertexInput input)
 
 float4 Fragment(FragmentInput input) : SV_Target
 {
-	return input.color;
+	float4 color = input.color;
+	
+	if (ViewPosition.y < 0)
+		color.rgb = lerp(color.rgb, UnderwaterColor, UnderwaterColorWeight);
+	
+	return color;
 }

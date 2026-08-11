@@ -11,27 +11,27 @@
 RWTexture3D<float4> Result;
 Texture3D<float4> Input;
 
-float4x4 PixelToWorldViewDir;
+float4x4 PixelToViewDir;
 
 [numthreads(8, 8, 1)]
 void Compute(uint3 id : SV_DispatchThreadID)
 {
 	float jitter = Noise1D(id.xy);
-	float3 worldDir = MultiplyVector(PixelToWorldViewDir, float3(id.xy + 0.5, 1.0));
-	float rcpWorldDirLength = RcpLength(worldDir);
-	worldDir *= rcpWorldDirLength;
+	float3 viewDir = MultiplyVector(PixelToViewDir, float3(id.xy + 0.5, 1.0));
+	float rcpViewDirLength = RcpLength(viewDir);
+	viewDir *= rcpViewDirLength;
 	
 	float eyeDepth = (id.z + jitter) / VolumeSize.z * MaxDepth;
 	
-	float viewDistance = eyeDepth * rcp(rcpWorldDirLength);
-	float3 worldPosition = ViewPosition + worldDir * viewDistance;
+	float viewDistance = eyeDepth * rcp(rcpViewDirLength);
+	float3 viewPosition = viewDir * viewDistance;
 	
 	float2 screenPosition = (id.xy + 0.5) / VolumeSize.xy;
 	screenPosition.y = 1 - screenPosition.y;
 	float2 pixelPosition = screenPosition * ViewSize;
 	
 	float3 illuminance;
-	GetLuminance(0.0, worldPosition, pixelPosition, eyeDepth, illuminance);
+	GetLuminance(0.0, viewPosition, pixelPosition, illuminance);
 	illuminance += AmbientLight;
 	
 	float extinction = viewDistance > FogStart && viewDistance < FogEnd ? rcp(FogEnd - viewDistance) : 0.0;
@@ -43,8 +43,8 @@ void Compute(uint3 id : SV_DispatchThreadID)
 [numthreads(8, 8, 1)]
 void Accumulate(uint2 id : SV_DispatchThreadID)
 {
-	float3 worldDirection = MultiplyVector(PixelToWorldViewDir, float3(id + 0.5, 1.0));
-	float rayLength = MaxDepth * length(worldDirection);
+	float3 viewDirection = MultiplyVector(PixelToViewDir, float3(id + 0.5, 1.0));
+	float rayLength = MaxDepth * length(viewDirection);
 	float ds = rayLength / VolumeSize.z;
 	
 	float4 result = float2(0.0, 1.0).xxxy;

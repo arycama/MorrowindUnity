@@ -10,13 +10,13 @@ public class Water : Singleton<Water>
 	private float surfaceFps;
     private int surfaceFrameCount;
     private float worldAlpha;
-    private Color underwaterColor;
+    private Color32 underwaterColor;
     private float underwaterColorWeight;
     private float tileTextureDivisor;
 
 	private Texture2D[] textures;
     private int lastTextureIndex;
-    private float nextUpdateTime;
+    private double lastUpdateTime;
     private Matrix4x4 interpolation;
 
     private MeshFilter meshFilter;
@@ -121,23 +121,26 @@ public class Water : Singleton<Water>
 
         mesh.SetVertices(vertices);
 
-        if (Time.time > nextUpdateTime)
+        var updateInterval = 1.0 / surfaceFps;
+        var delta = (Time.time - lastUpdateTime) / updateInterval;
+
+		if (Time.time > lastUpdateTime + updateInterval)
         {
-            lastTextureIndex++;
-            if (lastTextureIndex == textures.Length)
-            {
+			lastUpdateTime = Time.time;
+
+			if (++lastTextureIndex == textures.Length)
                 lastTextureIndex = 0;
-            }
 
             meshRenderer.sharedMaterial.mainTexture = textures[lastTextureIndex];
-            nextUpdateTime = Time.time + 1 / surfaceFps;
+            meshRenderer.sharedMaterial.SetTexture("FadeTexture", textures[(lastTextureIndex + 1) % textures.Length]);
         }
 
         meshRenderer.sharedMaterial.SetFloat("Alpha", worldAlpha);
         meshRenderer.sharedMaterial.SetColor("Albedo", underwaterColor);
         meshRenderer.sharedMaterial.SetFloat("Scale", 1.0f / tileTextureDivisor);
+        meshRenderer.sharedMaterial.SetFloat("Fade", (float)delta);
 
-        Shader.SetGlobalVector("UnderwaterColor", underwaterColor.linear);
+        Shader.SetGlobalVector("UnderwaterColor", ((Color)underwaterColor).linear);
         Shader.SetGlobalFloat("UnderwaterColorWeight", underwaterColorWeight);
 	}
 

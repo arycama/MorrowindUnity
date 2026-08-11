@@ -34,7 +34,7 @@ public class VolumetricLighting : ViewRenderFeature
 		var volumeWidth = DivRoundUp(viewPassData.viewSize.x, settings.TileSize);
 		var volumeHeight = DivRoundUp(viewPassData.viewSize.y, settings.TileSize);
 		var volumeDepth = settings.DepthSlices;
-		var pixelToWorldViewDir = Float4x4.PixelToWorldViewDirectionMatrix(new(volumeWidth, volumeHeight), 0, viewPassData.tanHalfFov, Matrix4x4.Rotate(viewPassData.rotation), true);
+		var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, viewPassData.tanHalfFov, true, false);
 
 		var volumetricLightingData = renderGraph.SetConstantBuffer
 		((
@@ -58,7 +58,7 @@ public class VolumetricLighting : ViewRenderFeature
 
 			pass.SetRenderFunction((command, pass) =>
 			{
-				pass.SetMatrix("PixelToWorldViewDir", pixelToWorldViewDir);
+				pass.SetMatrix("PixelToViewDir", pixelToViewDir);
 				pass.SetVector("VolumeSize", new Float3(volumeWidth, volumeHeight, volumeDepth));
 				pass.SetFloat("MaxDepth", settings.MaxDistance);
 			});
@@ -66,7 +66,7 @@ public class VolumetricLighting : ViewRenderFeature
 
 		// Accumulate
 		var volumetricLight = renderGraph.GetTexture(new(volumeWidth, volumeHeight), GraphicsFormat.R16G16B16A16_SFloat, settings.DepthSlices, TextureDimension.Tex3D, isExactSize: true);
-		using (var pass = renderGraph.AddComputeRenderPass("Accumulate", pixelToWorldViewDir))
+		using (var pass = renderGraph.AddComputeRenderPass("Accumulate", pixelToViewDir))
 		{
 			pass.Initialize(computeShader, 1, volumeWidth, volumeHeight, 1);
 			pass.WriteTexture("Result", volumetricLight);
@@ -78,7 +78,7 @@ public class VolumetricLighting : ViewRenderFeature
 
 			pass.SetRenderFunction((command, pass, data) =>
 			{
-				pass.SetMatrix("PixelToWorldViewDir", data);
+				pass.SetMatrix("PixelToViewDir", data);
 				pass.SetFloat("MaxDepth", settings.MaxDistance);
 				pass.SetVector("VolumeSize", new Float3(volumeWidth, volumeHeight, volumeDepth));
 			});

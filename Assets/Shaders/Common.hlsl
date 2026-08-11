@@ -47,7 +47,7 @@ cbuffer EnvironmentData
 	float Time;
 	float FogStart;
 	float FogEnd;
-	float FrameDataPadding;
+	float FogDensity;
 };
 
 cbuffer ViewData
@@ -58,6 +58,7 @@ cbuffer ViewData
 	matrix PixelToClip;
 	matrix ScreenToWorld; 
 	matrix WorldToPreviousScreen;
+	matrix UiOverlayMatrix;
 	
 	float LinearDepthScale, LinearDepthOffset, Near, Far;
 	
@@ -133,22 +134,26 @@ float UnderwaterColorWeight;
 		unity_Builtins0Array[2];
 	};
 #else
-cbuffer UnityPerDraw
-{
-	float3x4 unity_ObjectToWorld, unity_WorldToObject;
-	float4 unity_LODFade; // x is the fade value ranging within [0,1]. y is x quantized into 16 levels
-	float4 unity_WorldTransformParams; // w is usually 1.0, or -1.0 for odd-negative scale transforms
-};
+	cbuffer UnityPerDraw
+	{
+		float3x4 unity_ObjectToWorld, unity_WorldToObject;
+		float4 unity_LODFade; // x is the fade value ranging within [0,1]. y is x quantized into 16 levels
+		float4 unity_WorldTransformParams; // w is usually 1.0, or -1.0 for odd-negative scale transforms
+	};
 #endif
 
-float3 ObjectToWorld(float3 position, uint instanceId)
+float3x4 GetObjectToWorld(uint instanceId)
 {
 	#ifdef INSTANCING_ON
-		float3x4 objectToWorld = (float3x4)unity_Builtins0Array[unity_BaseInstanceID + instanceId].unity_ObjectToWorldArray;
+		return (float3x4)unity_Builtins0Array[unity_BaseInstanceID + instanceId].unity_ObjectToWorldArray;
 	#else
-		float3x4 objectToWorld = unity_ObjectToWorld;
+		return unity_ObjectToWorld;
 	#endif
-	
+}
+
+float3 ObjectToWorldPosition(float3 position, uint instanceId)
+{
+	float3x4 objectToWorld = GetObjectToWorld(instanceId);
 	return MultiplyPoint3x4(objectToWorld, position);
 }
 
@@ -159,34 +164,40 @@ float3 WorldToViewPosition(float3 position)
 
 float3 ObjectToViewPosition(float3 position, uint instanceId)
 {
-	return WorldToViewPosition(ObjectToWorld(position, instanceId));
+	float3 worldPosition = ObjectToWorldPosition(position, instanceId);
+	return WorldToViewPosition(worldPosition);
+}
+
+float4 ViewToClipPosition(float3 position)
+{
+	return MultiplyPoint(ViewToClip, position);
 }
 
 float4 WorldToClipPosition(float3 position)
 {
-#ifdef UNITY_PASS_SHADOWCASTER
+	#ifdef UNITY_PASS_SHADOWCASTER
 		return MultiplyPoint(WorldToShadowClip, position);
-#else
-	return MultiplyPoint(WorldToClip, position);
-#endif
+	#else
+		return MultiplyPoint(WorldToClip, position);
+	#endif
 }
 
-float4 ObjectToClip(float3 position, uint instanceId)
+float4 ObjectToClipPosition(float3 position, uint instanceId)
 {
-	return WorldToClipPosition(ObjectToWorld(position, instanceId));
+	float3 worldPosition = ObjectToWorldPosition(position, instanceId);
+	return WorldToClipPosition(worldPosition);
 }
 
-float3 ObjectToWorldNormal(float3 normal, uint instanceId)
+float3 WorldToViewNormal(float3 normal)
 {
-	// Source: https://www.shadertoy.com/view/3s33zj
-#ifdef INSTANCING_ON
-		float3x4 objectToWorld = (float3x4)unity_Builtins0Array[unity_BaseInstanceID + instanceId].unity_ObjectToWorldArray;
-#else
-	float3x4 objectToWorld = unity_ObjectToWorld;
-#endif
-	
-	float3x3 adjoint = float3x3(cross(objectToWorld[1].xyz, objectToWorld[2].xyz), cross(objectToWorld[2].xyz, objectToWorld[0].xyz), cross(objectToWorld[0].xyz, objectToWorld[1].xyz));
-	return normalize(mul(adjoint, normal));
+	return MultiplyVector(WorldToView, normal);
+}
+
+float3 ObjectToViewNormal(float3 normal, uint instanceId)
+{
+	float3x4 objectToWorld = GetObjectToWorld(instanceId);
+	float3 worldNormal = normalize(MultiplyVector(objectToWorld, normal));
+	return WorldToViewNormal(worldNormal);
 }
 
 float4 BilinearWeights(float2 uv, float2 textureSize)
@@ -231,15 +242,15 @@ uint3 GetClusterIndex(float3 screenPosition)
 	return float3(screenPosition.xy * RcpTileSize, screenPosition.z * RcpBinWidth);
 }
 
-float3 GetLuminance(float3 normal, float3 worldPosition, float2 screenPosition, float eyeDepth, out float3 illuminance)
+float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, out float3 illuminance)
 {
 	// Directional light
 	illuminance = SunColor;
 	
 	// Shadow
 	#ifdef SHADOWS_ON
-		float fade = saturate(eyeDepth * SunShadowFadeScale + SunShadowFadeOffset);
-		float3 shadowPosition = MultiplyPoint3x4((float3x4) WorldToSunShadow, worldPosition);
+		float fade = saturate(viewPosition.z * SunShadowFadeScale + SunShadowFadeOffset);
+		float3 shadowPosition = MultiplyPoint3x4((float3x4) WorldToSunShadow, viewPosition);
 		if (fade && all(saturate(shadowPosition.xy) == shadowPosition.xy))
 			illuminance *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
 	#endif
@@ -249,7 +260,7 @@ float3 GetLuminance(float3 normal, float3 worldPosition, float2 screenPosition, 
 	
 	#ifdef POINT_LIGHTS_ON
 		// Flat bit array iterator scalarized on entity with Z-Bin masked words
-		float3 cluster = GetClusterIndex(float3(screenPosition, eyeDepth));
+		float3 cluster = GetClusterIndex(float3(screenPosition, viewPosition.z));
 		uint2 lightRange = BitUnpack(LightDepthMinMax[cluster.z], 16, uint2(0, 16));
 		uint2 mergedRange = uint2(WaveActiveMin(lightRange.x), WaveActiveMax(lightRange.y)) >> 5u;
 	
@@ -277,7 +288,7 @@ float3 GetLuminance(float3 normal, float3 worldPosition, float2 screenPosition, 
 				Light light = PointLights[lightIndex];
 	
 				// Attenuation
-				float3 lightVector = light.position - worldPosition;
+				float3 lightVector = light.position - viewPosition;
 				float distanceSquared = dot(lightVector, lightVector);
 				float attenuation = saturate(1.0h - distanceSquared * light.rcpRangeSquared);
 		
@@ -294,10 +305,10 @@ float3 GetLuminance(float3 normal, float3 worldPosition, float2 screenPosition, 
 	return luminance;
 }
 
-float3 GetLuminance(float3 normal, float3 worldPosition, float2 screenPosition, float eyeDepth)
+float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition)
 {
 	float3 illuminance;
-	return GetLuminance(normal, worldPosition, screenPosition, eyeDepth, illuminance);
+	return GetLuminance(normal, viewPosition, screenPosition, illuminance);
 }
 
 float3 GetFrustumCorner(uint id)
@@ -305,33 +316,36 @@ float3 GetFrustumCorner(uint id)
 	return FrustumCorners[id];
 }
 
-float FogFactor(float viewDistance)
+float FogFactor(float3 viewPosition)
 {
-	return saturate(viewDistance * FogScale + FogOffset);
+	//return saturate(viewPosition.z * FogScale + FogOffset);
+	return saturate(length(viewPosition) * FogScale + FogOffset);
 }
 
-float4 GetLuminanceAndFog(float4 color, float3 ambient, float3 normal, float2 screenPosition, float eyeDepth, float viewDistance, bool isPremultiplied, float3 worldPosition)
+float4 GetLuminanceAndFog(float4 color, float3 ambient, float3 normal, float2 screenPosition, float3 viewPosition)
 {
-	color.rgb *= ambient + GetLuminance(normal, worldPosition, screenPosition, eyeDepth);
+	color.rgb *= ambient + GetLuminance(normal, viewPosition, screenPosition);
+	
+	if (ViewPosition.y < 0)
+		color.rgb = lerp(color.rgb, color.rgb * UnderwaterColor, UnderwaterColorWeight);
 	
 	// Fog
 	#ifdef VOLUMETRIC_LIGHT_ON
-		float3 volumetricUv = float3(screenPosition / ViewSize, eyeDepth / MaxDepth);
+		float3 volumetricUv = float3(screenPosition / ViewSize, viewPosition.z / MaxDepth);
 		volumetricUv.y = 1 - volumetricUv.y;
 	
 		float4 volumetricLight = VolumetricLighting.Sample(LinearClampSampler, volumetricUv);
 		float3 fogLuminance = volumetricLight.rgb;
 		float fogTransmittance = volumetricLight.a;
 	#else
-		float fogOpacity = FogFactor(viewDistance);
-		float3 fogLuminance = FogColor * fogOpacity;
+		float fogOpacity = FogFactor(viewPosition);
+		float3 fogColor = FogColor;
+		float3 fogLuminance = fogColor * fogOpacity;
 		float fogTransmittance = 1.0 - fogOpacity;
 	#endif
-	
-	if (isPremultiplied)
-		fogLuminance *= color.a;
 		
 	color.rgb = color.rgb * fogTransmittance + fogLuminance;
+	
 	return color;
 }
 

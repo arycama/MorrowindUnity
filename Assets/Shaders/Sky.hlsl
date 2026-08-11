@@ -28,7 +28,7 @@ cbuffer UnityPerMaterial
 
 FragmentInput Vertex(VertexInput input)
 {
-	float3 worldPosition = ObjectToWorld(input.position, 0);
+	float3 worldPosition = ObjectToWorldPosition(input.position, 0);
 
 	FragmentInput output;
 	output.worldPosition = worldPosition;
@@ -43,11 +43,16 @@ FragmentInput Vertex(VertexInput input)
 	else if (i >= 33 && i <= 48)
 		alpha = 0.25098; // second row
 		
-	output.color = float4(1.0, 1.0, 1.0, alpha);
+	output.color = float4(SunColor.rgb, alpha);
 	return output;
 }
 
 float4 Fragment(FragmentInput input) : SV_Target
 {
-	return _MainTex.Sample(sampler_MainTex, input.uv) * input.color;
+	float4 color = _MainTex.Sample(sampler_MainTex, input.uv) * input.color;
+	
+	if(ViewPosition.y < 0)
+		color.rgb = lerp(color.rgb, UnderwaterColor, UnderwaterColorWeight);
+	
+	return color;
 }

@@ -26,16 +26,14 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 	private static readonly int BlueNoise3DUnitId = Shader.PropertyToID("BlueNoise3DUnit");
 	private static readonly int BlueNoise3DCosineId = Shader.PropertyToID("BlueNoise3DCosine");
 
-
 	protected override bool RenderUiOverlay => false;
 	protected override bool RenderWireframe => false;
 
-	private readonly Material tonemap, pointLightMaterial, deferredLightingMaterial;
+	private readonly Material tonemap, deferredLightingMaterial;
 
 	public MorrowindRenderPipeline(MorrowindRenderPipelineAsset renderPipelineAsset) : base(renderPipelineAsset)
 	{
 		tonemap = new Material(Shader.Find("Hidden/Morrowind Tonemap")) { hideFlags = HideFlags.HideAndDontSave };
-		pointLightMaterial = new Material(Shader.Find("Hidden/Point Light")) { hideFlags = HideFlags.HideAndDontSave };
 		deferredLightingMaterial = new Material(Shader.Find("Hidden/Morrowind Deferred")) { hideFlags = HideFlags.HideAndDontSave };
 	}
 
@@ -45,7 +43,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 	protected override List<ViewRenderFeature> InitializePerCameraRenderFeatures() => new()
 	{
-		new SetupCamera(renderGraph, asset.LightingSettings),
+		new SetupCamera(renderGraph, asset.LightingSettings, asset),
 		new SetupLighting(renderGraph, asset.LightingSettings, asset.LightCulling),
 
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
@@ -178,6 +176,15 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 				pass.PreventNewSubPass = true;
 				pass.ReadRtHandle<CameraTarget>();
 			}
+
+			//using (var pass = renderGraph.AddObjectScreenRenderPass("UI"))
+			//{
+			//	pass.Initialize("UI", context, cullingResults, RenderQueueRange.all, viewPassData.viewSize, viewPassData.position, viewPassData.rotation, viewPassData.sortAxis, viewPassData.distanceMetric, SortingCriteria.CommonTransparent, viewCount: viewPassData.viewCount, stereoMode: viewPassData.stereoMode, frameBufferFormat: viewPassData.format, frameBufferTarget: new RenderTargetIdentifier(viewPassData.target, 0, CubemapFace.Unknown, -1));
+
+			//	pass.PreventNewSubPass = true;
+			//	pass.WriteRtHandleDepth<CameraDepth>();
+			//	pass.ReadResource<ViewData>();
+			//}
 		}),
 
 		#if UNITY_EDITOR

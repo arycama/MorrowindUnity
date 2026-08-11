@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -19,6 +20,9 @@ public class WeatherSettings : ScriptableObject
 	[SerializeField]
 	private Gradient sunGradient;
 
+	[SerializeField]
+	private AnimationCurve underwaterFog;
+
 	[Header("Data")]
 	[SerializeField]
 	private AnimationCurve landFogDepth;
@@ -38,6 +42,14 @@ public class WeatherSettings : ScriptableObject
 	[SerializeField]
 	private string ambientLoopSoundID;
 
+	[SerializeField]
+	private float landFogDayDepth;
+
+	private float underwaterSunriseFog;
+	private float underwaterDayFog;
+	private float underwaterSunsetFog;
+	private float underwaterNightFog;
+
 	public void Create(WeatherType weatherType, Material material)
 	{
 		var section = $"Weather {weatherType}";
@@ -47,6 +59,11 @@ public class WeatherSettings : ScriptableObject
 		fogGradient = GetGradient(section, "Fog");
 		ambientGradient = GetGradient(section, "Ambient");
 		sunGradient = GetGradient(section, "Sun");
+
+		underwaterSunriseFog = IniManager.GetFloat("Water", "UnderwaterSunriseFog");
+		underwaterDayFog = IniManager.GetFloat("Water", "UnderwaterDayFog");
+		underwaterSunsetFog = IniManager.GetFloat("Water", "UnderwaterSunsetFog");
+		underwaterNightFog = IniManager.GetFloat("Water", "UnderwaterNightFog");
 
 		// Sky needs alpha keys for fading to night sky too
 		skyGradient.alphaKeys = new GradientAlphaKey[]
@@ -74,8 +91,10 @@ public class WeatherSettings : ScriptableObject
 		RenderSettings.fog = true;
 		RenderSettings.fogMode = FogMode.Linear;
 
+		landFogDayDepth = IniManager.GetFloat(section, $"Land Fog Day Depth");
+
 		RenderSettings.fogEndDistance = 8192;
-		RenderSettings.fogStartDistance = RenderSettings.fogEndDistance * (1 - IniManager.GetFloat(section, $"Land Fog Day Depth"));
+		RenderSettings.fogStartDistance = RenderSettings.fogEndDistance * (1 - landFogDayDepth);
 	}
 
 	private Gradient GetGradient(string section, string key)
@@ -130,21 +149,19 @@ public class WeatherSettings : ScriptableObject
 		return gradient;
 	}
 
-	public void UpdateWeather(float time)
+	public void UpdateWeather(float time, Camera camera, Color32 underwaterColor, float underwaterColorWeight)
 	{
 		Shader.SetGlobalVector("_SkyColor", skyGradient.Evaluate(time).linear);
-		Camera.main.backgroundColor = fogGradient.Evaluate(time);
-
-		// Sun glare
-		// RenderSettings.sun.GetComponent<LensFlare>().brightness = IniManager.GetFloat(weatherName, "Glare View");
-
-		// Sun Light
 		RenderSettings.sun.color = sunGradient.Evaluate(time);
-
-		// Ambient Light
 		RenderSettings.ambientLight = ambientGradient.Evaluate(time);
+		RenderSettings.fogColor = Color.Lerp(fogGradient.Evaluate(time), underwaterColor, camera.transform.position.y <= 0 ? underwaterColorWeight : 0.0f);
 
-		// Calculate Fog
-		RenderSettings.fogColor = fogGradient.Evaluate(time);
+		var fogDepth = landFogDayDepth;
+		if(camera.transform.position.y <= 0)
+		{
+			fogDepth *= underwaterDayFog;
+		}
+
+		RenderSettings.fogStartDistance = RenderSettings.fogEndDistance * (1 - fogDepth);
 	}
 }
