@@ -30,7 +30,7 @@ public class SetupLighting : ViewRenderFeature
 	{
 		var cullingResults = renderGraph.GetResource<CullingResultsData>().cullingResults;
 
-		var sunDirection = Float3.Up;
+		var sunDirection = viewPassData.rotation.InverseRotate(Float3.Up);
 		var sunColor = Float3.One * Pi;
 		var mainLightIndex = -1;
 		var sunShadows = renderGraph.EmptyTexture;
@@ -38,6 +38,7 @@ public class SetupLighting : ViewRenderFeature
 		var sunShadowsEnabled = false;
 
 		var lightCount = cullingResults.visibleLights.Length;
+		var worldToView = Float4x4.WorldToLocal(viewPassData.position, viewPassData.rotation);
 
 		Array.Resize(ref pointLights, Max(pointLights.Length, lightCount));
 		Array.Resize(ref pointLightDepths, Max(pointLightDepths.Length, lightCount));
@@ -50,24 +51,26 @@ public class SetupLighting : ViewRenderFeature
 			var lightColor = visibleLight.finalColor.Float3();
 			var lightDirection = -lightToWorld.Forward;
 			var splitRange = new RangeInt(0, 0);
+			var lightRotation = lightToWorld.Rotation;
+			var viewSpaceLightRotation = viewPassData.rotation.InverseRotate(lightRotation);
 
 			if (visibleLight.lightType == LightType.Directional && mainLightIndex == -1)
 			{
 				mainLightIndex = i;
-				sunDirection = lightDirection;
+				sunDirection = -viewSpaceLightRotation.Forward;
 				sunColor = lightColor;
 
 				if (cullingResults.GetShadowCasterBounds(mainLightIndex, out _))
 				{
-					var viewToWorld = Float4x4.TRS(viewPassData.position, viewPassData.rotation, 1);
-					var worldToLight = Float4x4.Rotate(lightToWorld.Rotation.Inverse);
-					var viewToLight = worldToLight.Mul(viewToWorld);
+					// Transform from view space to light space
+					var viewToLight = Float4x4.Rotate(viewSpaceLightRotation.Inverse);
 
-					var lightBounds = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, viewPassData.near, lighting.DirectionalShadowDistance, viewToLight);
-					var lightToLightClip = Float4x4.OrthoReverseZ(lightBounds);
+					// Rotate corners from view into light space
+					var lightBoundsView = Geometry.GetFrustumBounds(viewPassData.tanHalfFov, viewPassData.near, lighting.DirectionalShadowDistance, viewToLight);
 
-					var worldToLightClip = lightToLightClip.Mul(worldToLight);
-					viewToSunShadow = Float4x4.OrthoReverseZSample(lightBounds).Mul(viewToLight);
+					// Matrix that goes from world space to light-rotated view space
+					var worldToLightView = Float4x4.WorldToLocal(viewPassData.position, lightRotation);
+					var worldToLightClip = Float4x4.OrthoReverseZ(lightBoundsView).Mul(worldToLightView);
 
 					var shadowSplitData = CalculateShadowSplitData(worldToLightClip, lightDirection, true);
 					shadowSplitData.shadowCascadeBlendCullingFactor = 1;
@@ -77,6 +80,10 @@ public class SetupLighting : ViewRenderFeature
 					sunShadowsEnabled = true;
 
 					var perCascadeData = renderGraph.SetConstantBuffer(worldToLightClip);
+
+					// Matrix that converts from view space to shadow-sampling space
+					viewToSunShadow = Float4x4.OrthoReverseZSample(lightBoundsView).Mul(viewToLight);
+
 					using var pass = renderGraph.AddShadowRenderPass("Directional Shadows");
 					sunShadows = renderGraph.GetTexture(lighting.DirectionalShadowResolution, GraphicsFormat.D16_UNorm, isExactSize: true, clear: true);
 					pass.Initialize(context, cullingResults, mainLightIndex, lighting.DirectionalShadowBias, lighting.DirectionalShadowSlopeBias, false, false, lighting.DirectionalShadowResolution, 1);
@@ -148,7 +155,7 @@ public class SetupLighting : ViewRenderFeature
 		var sunShadowFadeScale = -1.0f / lighting.DirectionalFadeLength;
 		var sunShadowFadeOffset = lighting.DirectionalShadowDistance / lighting.DirectionalFadeLength;
 
-		var viewSunDirection = viewPassData.rotation.InverseRotate(sunDirection);
+		var viewSunDirection = sunDirection;
 
 		var lightingDataBuffer = renderGraph.SetConstantBuffer
 		((
@@ -251,27 +258,25 @@ public class SetupLighting : ViewRenderFeature
 		renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, pointLightCount, lightDepthMinMaxBuffer, visibleLightBits, intersectingLightCount));
 	}
 
-	private static ShadowSplitData CalculateShadowSplitData(Float4x4 viewProjectionMatrix, bool skipNearPlane)
+	private static ShadowSplitData CalculateShadowSplitData(Float4x4 matrix, Float3 lightDirection, bool skipNearPlane)
 	{
 		var shadowSplitData = new ShadowSplitData() { shadowCascadeBlendCullingFactor = 1 };
 		for (var i = FrustumPlane.Left; i < FrustumPlane.Count; i++)
 		{
 			if (!skipNearPlane || i != FrustumPlane.Near)
-				shadowSplitData.SetCullingPlane(shadowSplitData.cullingPlaneCount++, viewProjectionMatrix.GetFrustumPlane(i));
+			{
+				var plane = matrix.GetFrustumPlane(i);
+				shadowSplitData.SetCullingPlane(shadowSplitData.cullingPlaneCount++, plane);
+			}
 		}
 
-		return shadowSplitData;
-	}
-
-	/// <summary> Add any planes that face away from the light direction. This avoids rendering shadowcasters that can never cast a visible shadow </summary>
-	private static ShadowSplitData CalculateShadowSplitData(Float4x4 viewProjectionMatrix, Float3 lightDirection, bool skipNearPlane)
-	{
-		var shadowSplitData = CalculateShadowSplitData(viewProjectionMatrix, skipNearPlane);
 		for (var i = FrustumPlane.Left; i < FrustumPlane.Count; i++)
 		{
-			var plane = viewProjectionMatrix.GetFrustumPlane(i);
+			var plane = matrix.GetFrustumPlane(i);
 			if (plane.normal.Dot(lightDirection) > 0.0f)
+			{
 				shadowSplitData.SetCullingPlane(shadowSplitData.cullingPlaneCount++, plane);
+			}
 		}
 
 		return shadowSplitData;

@@ -175,7 +175,7 @@ float4 ViewToClipPosition(float3 position)
 
 float4 WorldToClipPosition(float3 position)
 {
-	#ifdef UNITY_PASS_SHADOWCASTER
+	#ifdef SHADOW
 		return MultiplyPoint(WorldToShadowClip, position);
 	#else
 		return MultiplyPoint(WorldToClip, position);
