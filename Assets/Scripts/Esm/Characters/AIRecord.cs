@@ -57,9 +57,6 @@ public abstract class AIRecord : CreatableRecord, IInventoryRecord
 
 		gameObject.name = name;
 
-        var rb = gameObject.AddComponent<Rigidbody>();
-        rb.isKinematic = true;
-
         CharacterInventory.Create(gameObject, this, referenceData);
 
 		var equipment = gameObject.AddComponent<CharacterEquipment>();

@@ -136,6 +136,8 @@ public class TerrainFactory
 		mesh.SetSubMesh(0, new SubMeshDescriptor(0, indexLength));
         mesh.RecalculateBounds();
 
+		gameObject.AddComponent<MeshCollider>().sharedMesh = mesh;
+
 		mesh.UploadMeshData(true);
         meshFilter.sharedMesh = mesh;
 
@@ -186,8 +188,6 @@ public class TerrainFactory
 
         meshRenderer.sharedMaterial.SetTexture("_MainTex", LandTextureRecord.GetTexture2DArray());
         meshRenderer.sharedMaterial.SetTexture("_Control", control);
-
-        gameObject.AddComponent<MeshCollider>();
     }
 
     private static int[,] GetBorderIndices(Directions cellDirections, TextureData[,] borderCells)
