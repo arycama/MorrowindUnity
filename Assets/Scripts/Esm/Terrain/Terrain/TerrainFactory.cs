@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Esm;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -21,28 +22,6 @@ public class TerrainFactory
         N = 0x80,
         NE = 0x100
     };
-
-	// Vertex structure with sequential memory layout containing position, compressed 16-bit normal, 32-bit color, and half-precision texture coordinates
-	[StructLayout(LayoutKind.Sequential)]
-	struct Vertex
-	{
-		public sbyte normalX, normalY, normalZ, normalPadding;
-		public Color32 color;
-		public ushort uvX, uvY, uvZ, uvW;
-
-		public Vertex(sbyte normalX, sbyte normalY, sbyte normalZ, Color32 color, Vector4 uv)
-		{
-			this.normalX = normalX;
-			this.normalY = normalY;
-			this.normalZ = normalZ;
-            normalPadding = 0;
-			this.color = color;
-            uvX = Mathf.FloatToHalf(uv.x);
-            uvY = Mathf.FloatToHalf(uv.y);
-            uvZ = Mathf.FloatToHalf(uv.z);
-            uvW = Mathf.FloatToHalf(uv.w);
-		}
-	}
 
 	public static void Create(Vector2Int coordinates)
     {
@@ -65,23 +44,25 @@ public class TerrainFactory
 
         // Generate vertices and appropriate heights
         var nextColHeight = record.HeightData.ReferenceHeight;
-        var positions = new NativeArray<Vector3>(65 * 65, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-        var vertices = new NativeArray<Vertex>(65 * 65, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+        var vertexCount = 65 * 65;
+        var positions = new NativeArray<Vector3>(vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+        var normals = new NativeArray<(sbyte, sbyte, sbyte, sbyte)>(vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+        var uvs = new NativeArray<(ushort, ushort, ushort, ushort)>(vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+		var colors = new NativeArray<Color32>(vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
 		// Create mesh with predefined bounds to avoid recalculation
 		var mesh = new Mesh();
 
         // Create and assign triangle vertices
         // Configure vertex buffer layout and allocate space
-        var vertexAttributeDescriptors = new NativeArray<VertexAttributeDescriptor>(4, Allocator.Temp);
+        Span<VertexAttributeDescriptor> vertexAttributeDescriptors = stackalloc VertexAttributeDescriptor[4];
         vertexAttributeDescriptors[0] = new(VertexAttribute.Position, VertexAttributeFormat.Float32, 3, 0);
         vertexAttributeDescriptors[1] = new(VertexAttribute.Normal, VertexAttributeFormat.SNorm8, 4, 1);
-        vertexAttributeDescriptors[2] = new(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4, 1);
-        vertexAttributeDescriptors[3] = new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float16, 4, 1);
+        vertexAttributeDescriptors[2] = new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float16, 4, 2);
+        vertexAttributeDescriptors[3] = new(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4, 3);
+		mesh.SetVertexBufferParams(vertexCount, vertexAttributeDescriptors.AsNativeArray());
 
-		mesh.SetVertexBufferParams(vertices.Length, vertexAttributeDescriptors);
-
-		var colors = record.ColorData?.Colors;
+		var recordColors = record.ColorData?.Colors;
 		for (int y = 0, i = 0; y < 65; y++)
         {
             var previousHeight = nextColHeight;
@@ -102,21 +83,20 @@ public class TerrainFactory
 				var uvZ = x / 64f;
 				var uvW = y / 64f;
 
-                var color = colors != null ? colors[i] : new Color32(255, 255, 255, 255);
+                var color = recordColors != null ? recordColors[i] : new Color32(255, 255, 255, 255);
 
-				vertices[i] = new Vertex
-                (
-                    record.NormalData.Normals[i * 3 + 0], record.NormalData.Normals[i * 3 + 2], record.NormalData.Normals[i * 3 + 1],
-                    color,
-					new Vector4(uvX, uvY, uvZ, uvW)
-				);
+                normals[i] = new(record.NormalData.Normals[i * 3 + 0], record.NormalData.Normals[i * 3 + 2], record.NormalData.Normals[i * 3 + 1], 0);
+                uvs[i] = new(Mathf.FloatToHalf(uvX), Mathf.FloatToHalf(uvY), Mathf.FloatToHalf(uvZ), Mathf.FloatToHalf(uvW));
+                colors[i] = color;
                 previousHeight = height;
             }
         }
 
 		// Assigns the generated vertices to the mesh
-		mesh.SetVertexBufferData(positions, 0, 0, positions.Length, 0);
-		mesh.SetVertexBufferData(vertices, 0, 0, vertices.Length, 1);
+		mesh.SetVertexBufferData(positions, 0, 0, vertexCount, 0);
+		mesh.SetVertexBufferData(normals, 0, 0, vertexCount, 1);
+		mesh.SetVertexBufferData(uvs, 0, 0, vertexCount, 2);
+		mesh.SetVertexBufferData(colors, 0, 0, vertexCount, 3);
 
 		// Indices, Needs to be seperate from previous loop
 		var indexLength = 64 * 64 * 6;

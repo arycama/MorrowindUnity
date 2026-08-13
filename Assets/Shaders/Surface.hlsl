@@ -4,18 +4,30 @@ struct VertexInput
 {
 	uint instanceId : SV_InstanceID;
 	float3 position : POSITION;
-	float3 normal : NORMAL;
-	float2 uv : TEXCOORD;
-	float3 color : COLOR;
+	
+	#if defined(GBUFFER) || defined(FORWARD)
+		float3 normal : NORMAL;
+		float3 color : COLOR;
+	#endif
+	
+	#if defined(GBUFFER) || defined(FORWARD) || (defined(SHADOW) && defined(_ALPHABLEND_ON))
+		float2 uv : TEXCOORD;
+	#endif
 };
 
 struct FragmentInput
 {
 	float4 position : SV_Position;
-	float3 viewPosition : POSITION1;
-	float2 uv : TEXCOORD;
-	float3 normal : NORMAL;
-	float3 color : COLOR;
+	
+	#if defined(GBUFFER) || defined(FORWARD)
+		float3 viewPosition : POSITION1;
+		float3 normal : NORMAL;
+		float3 color : COLOR;
+	#endif
+	
+	#if defined(GBUFFER) || defined(FORWARD) || (defined(SHADOW) && defined(_ALPHABLEND_ON))
+		float2 uv : TEXCOORD;
+	#endif
 };
 
 struct FragmentOutput
@@ -42,11 +54,18 @@ cbuffer UnityPerMaterial
 FragmentInput Vertex(VertexInput input)
 {
 	FragmentInput output;
-	output.viewPosition = ObjectToViewPosition(input.position, input.instanceId);
 	output.position = ObjectToClipPosition(input.position, input.instanceId);
-	output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
-	output.normal = ObjectToViewNormal(input.normal, input.instanceId);
-	output.color = AmbientLight * GammaToLinear(input.color) + _EmissionColor;
+	
+	#if defined(GBUFFER) || defined(FORWARD)
+		output.viewPosition = ObjectToViewPosition(input.position, input.instanceId);
+		output.normal = ObjectToViewNormal(input.normal, input.instanceId);
+		output.color = AmbientLight * GammaToLinear(input.color) + _EmissionColor;
+	#endif
+	
+	#if defined(GBUFFER) || defined(FORWARD) || (defined(SHADOW) && defined(_ALPHABLEND_ON))
+		output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
+	#endif
+	
 	return output;
 }
 
@@ -54,9 +73,11 @@ FragmentOutput Fragment(FragmentInput input)
 {
 	FragmentOutput output;
 
-	float4 color = _MainTex.Sample(sampler_MainTex, input.uv);
+	#if defined(GBUFFER) || defined(FORWARD) || (defined(SHADOW) && defined(_ALPHABLEND_ON))
+		float4 color = _MainTex.Sample(sampler_MainTex, input.uv);
+	#endif
 	
-	#ifdef SHADOW
+	#if defined(SHADOW) && defined(_ALPHABLEND_ON)
 		clip(color.a - 0.5);
 	#endif
 	

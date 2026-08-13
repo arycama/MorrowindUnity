@@ -82,7 +82,7 @@ MonoBehaviour:
       type: 3}
   <VolumetricLighting>k__BackingField:
     <Enabled>k__BackingField: 1
-    <TileSize>k__BackingField: 4
+    <TileSize>k__BackingField: 8
     <DepthSlices>k__BackingField: 128
     <BlurSigma>k__BackingField: 0
     <MaxDistance>k__BackingField: 8192
