@@ -17,21 +17,22 @@ float4x4 PixelToViewDir;
 void Compute(uint3 id : SV_DispatchThreadID)
 {
 	float jitter = Noise1D(id.xy);
-	float3 viewDir = MultiplyVector(PixelToViewDir, float3(id.xy + 0.5, 1.0));
-	float eyeDepth = (id.z + jitter) / VolumeSize.z * MaxDepth;
+	float3 pixelPosition = id + float2(0.5, jitter).xxy;
+	float3 viewDir = MultiplyVector(PixelToViewDir, float3(pixelPosition.xy, 1.0));
+	float eyeDepth = pixelPosition.z / VolumeSize.z * MaxDepth;
 	
 	float3 viewPosition = viewDir * eyeDepth;
 	
-	float2 screenPosition = (id.xy + 0.5) / VolumeSize.xy;
+	float2 screenPosition = pixelPosition.xy / VolumeSize.xy;
 	screenPosition.y = 1 - screenPosition.y;
-	float2 pixelPosition = screenPosition * ViewSize;
+	pixelPosition.xy = screenPosition * ViewSize;
 	
 	float3 illuminance;
-	GetLuminance(0.0, viewPosition, pixelPosition, illuminance);
+	GetLuminance(0.0, viewPosition, pixelPosition.xy, illuminance);
 	illuminance += AmbientLight;
 	
 	float viewDistance = length(viewPosition);
-	float extinction = viewDistance > FogStart && viewDistance < FogEnd ? rcp(FogEnd - viewDistance) : 0.0;
+	float extinction = viewDistance >= FogStart && viewDistance <= FogEnd ? rcp(FogEnd - viewDistance) : 0.0;
 	float3 albedo = FogColor / (SunColor + AmbientLight);
 	
 	Result[id] = float4(albedo * illuminance, extinction);
@@ -43,8 +44,10 @@ void Accumulate(uint2 id : SV_DispatchThreadID)
 	float3 viewDirection = MultiplyVector(PixelToViewDir, float3(id + 0.5, 1.0));
 	float ds = length(viewDirection) / VolumeSize.z * MaxDepth;
 	
-	float4 result = float2(0.0, 1.0).xxxy;
-	for (float i = 0.0; i < VolumeSize.z; i++)
+	float initialTransmittance = FogEnd == 0.0 ? 1.0 : saturate(FogEnd * rcp(FogEnd - FogStart));
+	float3 initialLuminance = FogColor * saturate(1.0 - initialTransmittance);
+	float4 result = float4(initialLuminance, initialTransmittance);
+	for (uint i = 0; i < VolumeSize.z; i++)
 	{
 		float4 luminanceExtinction = Input[uint3(id, i)];
 		float transmittance = exp(-luminanceExtinction.a * ds);

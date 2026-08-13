@@ -17,8 +17,13 @@ float3 Fragment(VertexFullscreenTriangleOutput input) : SV_Target
 	float depth = CameraDepth[input.position.xy];
 	float4 albedoMetallic = GBufferAlbedoMetallic[input.position.xy];
 	float4 normalOcclusionRoughness = GBufferNormalOcclusionRoughness[input.position.xy];
+	
 	float eyeDepth = LinearEyeDepth(depth);
 	float3 viewPosition = eyeDepth * input.worldDirection;
-	float3 normal = normalize(normalOcclusionRoughness.xyz * 2.0 - 1.0);
-	return GetLuminanceAndFog(float4(albedoMetallic.rgb, 1.0), 0.0, normal, input.position.xy, viewPosition).rgb;
+	float3 V = normalize(-viewPosition);
+	
+	float3 N = PyramidUvToNormal(normalOcclusionRoughness.xy);
+	N = -FromToRotationZ(-V, N, false);
+	
+	return GetLuminanceAndFog(float4(albedoMetallic.rgb, 1.0), 0.0, N, input.position.xy, viewPosition).rgb;
 }

@@ -231,11 +231,13 @@ float LinearToDeviceDepth(float eyeDepth)
 	return rcp(eyeDepth) * ViewToClip._m23 + ViewToClip._m22;
 }
 
-GbufferOutput OutputGbuffer(float3 albedo, float3 normal, float3 emission)
+GbufferOutput OutputGbuffer(float3 albedo, float3 normal, float3 emission, float3 V)
 {
+	normal = FromToRotationZInverse(-V, -normal, false);
+
 	GbufferOutput gbuffer;
 	gbuffer.albedoMetallic = float4(albedo, 0.0);
-	gbuffer.normalOcclusionRoughness = float4(normal * 0.5 + 0.5, 1.0);
+	gbuffer.normalOcclusionRoughness = float4(NormalToPyramidUv(normal), 1.0, 1.0);
 	gbuffer.emission = float4(emission, 0.0);
 	return gbuffer;
 }

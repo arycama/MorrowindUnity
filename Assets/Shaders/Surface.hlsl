@@ -66,7 +66,7 @@ FragmentOutput Fragment(FragmentInput input)
 			emissive = lerp(emissive, emissive * UnderwaterColor, UnderwaterColorWeight);
 	
 		emissive *= 1.0 - FogFactor(input.viewPosition);
-		output.gbuffer = OutputGbuffer(color.rgb, input.normal, emissive);
+		output.gbuffer = OutputGbuffer(color.rgb, input.normal, emissive, -normalize(input.viewPosition));
 	#endif
 	
 	#ifdef FORWARD

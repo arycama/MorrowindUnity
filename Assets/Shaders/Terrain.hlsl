@@ -20,6 +20,7 @@ struct FragmentInput
 	float4 position : SV_Position;
 	
 	#ifdef GBUFFER
+		float3 viewPosition : POSITION1;
 		float3 normal : NORMAL;
 		float3 color : COLOR;
 		float4 uv : TEXCOORD;
@@ -48,6 +49,7 @@ FragmentInput Vertex(VertexInput input)
 	output.position = ObjectToClipPosition(input.position, 0);
 	
 	#ifdef GBUFFER
+		output.viewPosition = ObjectToViewPosition(input.position, 0);
 		output.uv = float4(input.uv.xy, input.uv.zw * _MainTex_ST.xy + _MainTex_ST.zw);
 		output.color = GammaToLinear(input.color);
 		output.normal = WorldToViewNormal(input.normal);
@@ -74,7 +76,7 @@ FragmentOutput Fragment(FragmentInput input)
 		if (ViewPosition.y < 0)
 			emissive = lerp(emissive, emissive * UnderwaterColor, UnderwaterColorWeight);
 		
-		output.gbuffer = OutputGbuffer(color, normalize(input.normal), emissive);
+		output.gbuffer = OutputGbuffer(color, input.normal, emissive, normalize(-input.viewPosition));
 	#endif
 	
 	return output;

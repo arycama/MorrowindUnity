@@ -81,7 +81,7 @@ public class TerrainFactory
 
 		mesh.SetVertexBufferParams(vertices.Length, vertexAttributeDescriptors);
 
-		var colors = record.ColorData.Colors;
+		var colors = record.ColorData?.Colors;
 		for (int y = 0, i = 0; y < 65; y++)
         {
             var previousHeight = nextColHeight;
