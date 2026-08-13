@@ -43,7 +43,7 @@ FragmentInput Vertex(VertexInput input)
 	else if (i >= 33 && i <= 48)
 		alpha = 0.25098; // second row
 		
-	output.color = float4(SunColor.rgb, alpha);
+	output.color = float4(FogColor.rgb, alpha);
 	return output;
 }
 

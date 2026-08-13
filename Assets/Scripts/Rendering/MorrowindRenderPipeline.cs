@@ -48,10 +48,10 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
 		{
-			var cameraDepth = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.D32_SFloat_S8_UInt, clear: true, isCcw: viewPassData.isFlipped, isScreenTexture: true);
-			var albedoMetallic = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.R8G8B8A8_SRGB, isCcw: viewPassData.isFlipped, isScreenTexture: true);
-			var normalOcclusionRoughness = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.R8G8B8A8_UNorm, isCcw: viewPassData.isFlipped, isScreenTexture: true);
-			var cameraTarget = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.B10G11R11_UFloatPack32, clear: true, clearColor: RenderSettings.fogColor.linear, isCcw: viewPassData.isFlipped, isScreenTexture: true);
+			var cameraDepth = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.D32_SFloat_S8_UInt, clear: true, isScreenTexture: true);
+			var albedoMetallic = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.R8G8B8A8_SRGB, isScreenTexture: true);
+			var normalOcclusionRoughness = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.R8G8B8A8_UNorm, isScreenTexture: true);
+			var cameraTarget = renderGraph.GetTexture(viewPassData.viewSize, GraphicsFormat.B10G11R11_UFloatPack32, clear: true, clearColor: RenderSettings.fogColor.linear, isScreenTexture: true);
 
 			renderGraph.SetRTHandle<CameraDepth>(cameraDepth);
 			renderGraph.SetRTHandle<GBufferAlbedoMetallic>(albedoMetallic);
@@ -175,6 +175,10 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 				pass.Initialize(tonemap, viewPassData.viewSize, 1, 0, 1, viewPassData.target, viewPassData.format);
 				pass.PreventNewSubPass = true;
 				pass.ReadRtHandle<CameraTarget>();
+				pass.ReadResource<ViewData>();
+
+				if(viewPassData.isFlipped)
+					pass.AddKeyword("FLIP");
 			}
 
 			//using (var pass = renderGraph.AddObjectScreenRenderPass("UI"))

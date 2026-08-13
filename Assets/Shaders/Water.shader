@@ -20,6 +20,7 @@
 			Tags { "LightMode" = "Forward" }
 
 			Blend SrcAlpha OneMinusSrcAlpha
+			Cull Off
 			ZWrite Off
 
 			HLSLPROGRAM

@@ -69,13 +69,14 @@ public class SetupCamera : ViewRenderFeature
 		var pixelToScreen = Float4x4.Scale(new Float3(1 / (Float2)viewPassData.viewSize, 1));
 
 		// Clip
-		var clipToScreen = Float4x4.ScaleOffset(new Float3(0.5f, viewPassData.isFlipped ? -0.5f : 0.5f, 1), new Float2(0.5f, 0).xxy);
-		var screenToClip = Float4x4.ScaleOffset(new Float3(2, viewPassData.isFlipped ? -2 : 2, 1), new Float3(-1, viewPassData.isFlipped ? 1 : -1, 0));
+		var clipToScreen = Float4x4.ScaleOffset(new Float3(0.5f, 0.5f, 1), new Float2(0.5f, 0).xxy);
+		var clipToScreen1 = Float4x4.ScaleOffset(new Float3(0.5f, -0.5f, 1), new Float2(0.5f, 0).xxy);
+		var screenToClip = Float4x4.ScaleOffset(new Float3(2, -2, 1), new Float3(-1, 1, 0));
 		var clipToPixel = screenToPixel.Mul(clipToScreen);
 		var pixelToClip = screenToClip.Mul(pixelToScreen);
 
 		// View
-		var viewToClip = Float4x4.PerspectiveReverseZ(viewPassData.tanHalfFov, viewPassData.near, viewPassData.far, 0, viewPassData.isFlipped);
+		var viewToClip = Float4x4.PerspectiveReverseZ(viewPassData.tanHalfFov, viewPassData.near, viewPassData.far, 0);
 		var clipToView = Float4x4.PerspectiveReverseZInverse(viewPassData.tanHalfFov, viewPassData.near, viewPassData.far);
 
 		var viewToScreen = clipToScreen.Mul(viewToClip);
@@ -98,7 +99,7 @@ public class SetupCamera : ViewRenderFeature
 		var pixelToWorld = viewToWorld.Mul(pixelToView);
 
 		// Previous frame matrices
-		var viewToNonJitteredScreen = clipToScreen.Mul(viewToClip);
+		var viewToNonJitteredScreen = clipToScreen1.Mul(viewToClip);
 		if (!previousCameraTransform.TryGetValue(viewPassData.viewId, out var previousTransform))
 			previousTransform = (viewPassData.position, viewPassData.rotation, viewToNonJitteredScreen);
 
@@ -106,14 +107,6 @@ public class SetupCamera : ViewRenderFeature
 
 		var worldToPreviousView = Float4x4.WorldToLocal(previousTransform.Item1 - viewPassData.position, previousTransform.Item2);
 		var worldToPreviousScreen = previousTransform.Item3.Mul(worldToPreviousView);
-
-		var isFlipped = viewPassData.isFlipped;
-
-		var corner0 = isFlipped ? new Float2(-1, 1) : new Float2(-1, -1);
-		var corner1 = isFlipped ? new Float2(-1, -3) : new Float2(-1, 3);
-		var corner2 = isFlipped ? new Float2(3, 1) : new Float2(3, -1);
-		var tanHalfFov = viewPassData.tanHalfFov;
-
 		var overlayMatrix = Float4x4.Ortho(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
 		overlayMatrix = GL.GetGPUProjectionMatrix(overlayMatrix, false);
 
@@ -133,9 +126,11 @@ public class SetupCamera : ViewRenderFeature
 			1.0f / (Float2)viewPassData.viewSize,
 			viewPassData.position,
 			0f,
-			new Float3(tanHalfFov * corner0, 1), 0,
-			new Float3(tanHalfFov * corner1, 1), 0,
-			new Float3(tanHalfFov * corner2, 1), 0
+
+			// TODO: Is it even worth calculating these
+			new Float3(viewPassData.tanHalfFov * new Float2(-1, -1), 1), 0,
+			new Float3(viewPassData.tanHalfFov * new Float2(-1, 3), 1), 0,
+			new Float3(viewPassData.tanHalfFov * new Float2(3, -1), 1), 0
 		))));
 	}
 }

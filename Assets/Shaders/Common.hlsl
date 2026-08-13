@@ -210,17 +210,6 @@ float4 BilinearWeights(float2 uv, float2 textureSize)
 	return weights.zzww * weights.xyyx;
 }
 
-float4 WorldToPreviousScreenPosition(float3 position)
-{
-	return MultiplyPoint(WorldToPreviousScreen, position);
-}
-
-float4 ScreenToPreviousScreenPosition(float2 uv, float depth)
-{
-	float3 worldPosition = MultiplyPointProj(ScreenToWorld, float3(uv, depth)).xyz;
-	return WorldToPreviousScreenPosition(worldPosition);
-}
-
 float LinearEyeDepth(float depth)
 {
 	return rcp(LinearDepthScale * depth + LinearDepthOffset);
@@ -323,7 +312,6 @@ float3 GetFrustumCorner(uint id)
 
 float FogFactor(float3 viewPosition)
 {
-	//return saturate(viewPosition.z * FogScale + FogOffset);
 	return saturate(length(viewPosition) * FogScale + FogOffset);
 }
 
@@ -337,8 +325,6 @@ float4 GetLuminanceAndFog(float4 color, float3 ambient, float3 normal, float2 sc
 	// Fog
 	#ifdef VOLUMETRIC_LIGHT_ON
 		float3 volumetricUv = float3(screenPosition / ViewSize, viewPosition.z / MaxDepth);
-		volumetricUv.y = 1 - volumetricUv.y;
-	
 		float4 volumetricLight = VolumetricLighting.Sample(LinearClampSampler, volumetricUv);
 		float3 fogLuminance = volumetricLight.rgb;
 		float fogTransmittance = volumetricLight.a;

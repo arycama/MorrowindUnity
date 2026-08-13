@@ -20,11 +20,18 @@ public class VolumetricLighting : ViewRenderFeature
 
 	private readonly Settings settings;
 	private readonly ComputeShader computeShader;
+	private readonly PersistentRTHandleCache colorHistory;
 
 	public VolumetricLighting(Settings settings, RenderGraph renderGraph) : base(renderGraph)
 	{
 		this.settings = settings;
+		colorHistory = new(GraphicsFormat.R16G16B16A16_SFloat, renderGraph, "Volumetric Lighting", TextureDimension.Tex3D);
 		computeShader = Resources.Load<ComputeShader>("VolumetricLight");
+	}
+
+	protected override void Cleanup(bool disposing)
+	{
+		colorHistory.Dispose();
 	}
 
 	public override void Render(in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context)
@@ -42,9 +49,13 @@ public class VolumetricLighting : ViewRenderFeature
 			settings.MaxDistance
 		));
 
-		var current = renderGraph.GetTexture(new(volumeWidth, volumeHeight), GraphicsFormat.R16G16B16A16_SFloat, settings.DepthSlices, TextureDimension.Tex3D, isExactSize: true);
+		ResourceHandle<RenderTexture> current, history = default;
+		bool wasCreated = false;
+
 		using (var pass = renderGraph.AddComputeRenderPass("Volumetric Lighting"))
 		{
+			(current, history, wasCreated) = colorHistory.GetTextures(new(volumeWidth, volumeHeight), pass.Index, viewPassData.viewId, settings.DepthSlices);
+
 			pass.Initialize(computeShader, 0, volumeWidth, volumeHeight, settings.DepthSlices);
 			pass.WriteTexture("Result", current);
 
@@ -52,6 +63,7 @@ public class VolumetricLighting : ViewRenderFeature
 			pass.ReadResource<EnvironmentData>();
 			pass.ReadResource<LightingData>();
 			pass.ReadBuffer("VolumetricLightingData", volumetricLightingData);
+			pass.ReadTexture("Input", history);
 
 			if (pass.TryReadResource<PointLightData>())
 				pass.AddKeyword("POINT_LIGHTS_ON");

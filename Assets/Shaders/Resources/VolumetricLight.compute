@@ -12,6 +12,12 @@ RWTexture3D<float4> Result;
 Texture3D<float4> Input;
 
 float4x4 PixelToViewDir;
+float IsFirst;
+
+float SliceToLinearDepth(float slice)
+{
+	return slice / VolumeSize.z * MaxDepth;
+}
 
 [numthreads(8, 8, 1)]
 void Compute(uint3 id : SV_DispatchThreadID)
@@ -19,12 +25,10 @@ void Compute(uint3 id : SV_DispatchThreadID)
 	float jitter = Noise1D(id.xy);
 	float3 pixelPosition = id + float2(0.5, jitter).xxy;
 	float3 viewDir = MultiplyVector(PixelToViewDir, float3(pixelPosition.xy, 1.0));
-	float eyeDepth = pixelPosition.z / VolumeSize.z * MaxDepth;
-	
+	float eyeDepth = SliceToLinearDepth(pixelPosition.z);
 	float3 viewPosition = viewDir * eyeDepth;
 	
 	float2 screenPosition = pixelPosition.xy / VolumeSize.xy;
-	screenPosition.y = 1 - screenPosition.y;
 	pixelPosition.xy = screenPosition * ViewSize;
 	
 	float3 illuminance;
@@ -32,10 +36,24 @@ void Compute(uint3 id : SV_DispatchThreadID)
 	illuminance += AmbientLight;
 	
 	float viewDistance = length(viewPosition);
-	float extinction = viewDistance >= FogStart && viewDistance <= FogEnd ? rcp(FogEnd - viewDistance) : 0.0;
+	float extinction = viewDistance > FogStart && viewDistance < FogEnd ? rcp(FogEnd - viewDistance) : 0.0;
 	float3 albedo = FogColor / (SunColor + AmbientLight);
+	float4 luminanceExtinction = float4(albedo * illuminance, extinction);
 	
-	Result[id] = float4(albedo * illuminance, extinction);
+	// Reproject previous frame. Needs to use unjittered world position
+	float linearUnjitteredDepth = SliceToLinearDepth(id.z + 0.5);
+	float3 worldPosition = MultiplyPointProj(ScreenToWorld, float3(screenPosition, LinearToDeviceDepth(linearUnjitteredDepth))).xyz;
+	float4 previousScreenPosition = MultiplyPoint(WorldToPreviousScreen, worldPosition);
+	previousScreenPosition.xy = PerspectiveDivide(previousScreenPosition).xy;
+	
+	float3 volumeUv = float3(previousScreenPosition.xy, previousScreenPosition.w / MaxDepth);
+	if (!IsFirst && all(saturate(volumeUv) == volumeUv))
+	{
+		float4 previousLuminanceExtinction = Input.SampleLevel(TrilinearClampSampler, volumeUv, 0.0);
+		luminanceExtinction = lerp(previousLuminanceExtinction, luminanceExtinction, 0.05);
+	}
+	
+	Result[id] = luminanceExtinction;
 }
 
 [numthreads(8, 8, 1)]
