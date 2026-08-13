@@ -34,6 +34,10 @@ struct Light
 	float3 color;
 	float angleOffset;
 	float4 cullingSphere;
+	uint shadowIndex;
+	float shadowProjectionX;
+	float shadowProjectionY;
+	float lightPadding;
 };
 
 cbuffer EnvironmentData
@@ -55,6 +59,7 @@ cbuffer ViewData
 	matrix WorldToClip;
 	matrix ViewToClip;
 	row_major float3x4 WorldToView;
+	matrix ViewToWorld;
 	matrix PixelToClip;
 	matrix ScreenToWorld; 
 	matrix WorldToPreviousScreen;
@@ -113,10 +118,12 @@ StructuredBuffer<Light> PointLights;
 StructuredBuffer<uint> LightDepthMinMax;
 Texture2D<float> SunShadow;
 Texture2DArray<uint> VisibleLightBits;
+Texture2DArray<float> PointShadows;
 Texture3D<float4> VolumetricLighting;
 
 float3 UnderwaterColor;
 float UnderwaterColorWeight;
+float WaterHeight;
 
 #ifdef INSTANCING_ON
 	cbuffer UnityDrawCallInfo
@@ -289,6 +296,20 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, o
 				float3 L = lightVector * rsqrt(distanceSquared);
 				attenuation *= saturate(dot(light.forward, L) * light.angleScale + light.angleOffset);
 				attenuation = Sq(attenuation);
+				
+				float3 worldL = mul((float3x3)ViewToWorld, lightVector);
+				
+				if(light.shadowIndex != UintMax && !light.angleScale)
+				{
+					// Point light
+					float dominantAxis = Max3(abs(worldL));
+					float depth = (dominantAxis * light.shadowProjectionX + light.shadowProjectionY) / dominantAxis;
+			
+					float faceIndex = CubeMapFaceID(-worldL);
+					float2 uv = CubeMapFaceUv(-worldL, faceIndex);
+					float shadowIndex = light.shadowIndex + faceIndex;
+					attenuation *= PointShadows.SampleCmpLevelZero(LinearClampCompareSampler, float3(uv, shadowIndex), depth);
+				}
 			
 				illuminance += attenuation * light.color;
 				luminance += saturate(dot(normal, L)) * attenuation * light.color;
@@ -319,7 +340,7 @@ float4 GetLuminanceAndFog(float4 color, float3 ambient, float3 normal, float2 sc
 {
 	color.rgb *= ambient + GetLuminance(normal, viewPosition, screenPosition);
 	
-	if (ViewPosition.y < 0)
+	if (ViewPosition.y < WaterHeight)
 		color.rgb = lerp(color.rgb, color.rgb * UnderwaterColor, UnderwaterColorWeight);
 	
 	// Fog

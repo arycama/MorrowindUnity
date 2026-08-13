@@ -70,8 +70,8 @@ MonoBehaviour:
     <DirectionalShadowBias>k__BackingField: 5
     <DirectionalShadowSlopeBias>k__BackingField: 1
     <PointShadowResolution>k__BackingField: 256
-    <PointShadowBias>k__BackingField: 0
-    <PointShadowSlopeBias>k__BackingField: 0
+    <PointShadowBias>k__BackingField: 5
+    <PointShadowSlopeBias>k__BackingField: 1
     <SpotShadowResolution>k__BackingField: 512
     <SpotShadowBias>k__BackingField: 0
     <SpotShadowSlopeBias>k__BackingField: 0
@@ -81,7 +81,7 @@ MonoBehaviour:
     <PointLightMesh>k__BackingField: {fileID: -1732264862850525403, guid: 47996dfb8af93f44b8c55e697e3ea42e,
       type: 3}
   <VolumetricLighting>k__BackingField:
-    <Enabled>k__BackingField: 1
+    <Enabled>k__BackingField: 0
     <TileSize>k__BackingField: 8
     <DepthSlices>k__BackingField: 128
     <BlurSigma>k__BackingField: 0

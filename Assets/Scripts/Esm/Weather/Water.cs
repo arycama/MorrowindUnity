@@ -25,6 +25,8 @@ public class Water : Singleton<Water>
 
     private Vector3[] vertices;
     private Vector2[] uvs;
+    private float waterHeight;
+    private bool hasWater;
 
     private void Start()
     {
@@ -140,6 +142,8 @@ public class Water : Singleton<Water>
         meshRenderer.sharedMaterial.SetFloat("Scale", 1.0f / tileTextureDivisor);
         meshRenderer.sharedMaterial.SetFloat("Fade", (float)delta);
 
+        meshRenderer.enabled = hasWater;
+		Shader.SetGlobalFloat("WaterHeight", waterHeight);
         Shader.SetGlobalVector("UnderwaterColor", ((Color)underwaterColor).linear);
         Shader.SetGlobalFloat("UnderwaterColorWeight", underwaterColorWeight);
 	}
@@ -148,9 +152,12 @@ public class Water : Singleton<Water>
     {
         if (cell.CellData.IsInterior)
         {
-            if (cell.CellData.HasWater)
+            hasWater = cell.CellData.HasWater;
+
+			if (cell.CellData.HasWater)
             {
-                projection.OceanLevel = cell.WaterHeight;
+                waterHeight = cell.WaterHeight;
+				projection.OceanLevel = cell.WaterHeight;
             }
             else
             {
@@ -159,7 +166,9 @@ public class Water : Singleton<Water>
         }
         else
         {
-            gameObject.SetActive(true);
+			hasWater = true;
+			gameObject.SetActive(true);
+            waterHeight = 0;
         }
     }
 }

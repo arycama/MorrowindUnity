@@ -40,8 +40,17 @@ namespace Nif
 			{
 				var name = reader.ReadLengthPrefixedString();
 
-				var type = Type.GetType("Nif." + name, true);
-				niObjects[i] = (NiObject)Activator.CreateInstance(type, this);
+				try
+				{
+					var type = Type.GetType("Nif." + name, true);
+					niObjects[i] = (NiObject)Activator.CreateInstance(type, this);
+				}
+				catch (Exception ex)
+				{
+					// We don't support all Nif types currently, eg NiBSPArrayController. So just stop loading th emodel. Otherwise this might break other components depending on it
+					Debug.LogError(ex.Message);
+					return;
+				}
 			}
 
 			RootCount = reader.ReadInt32();
@@ -62,7 +71,7 @@ namespace Nif
 		// Creates a GameObject hierachy from a NiFile. If a root GameObject is specified, it will attempt to "load" the NiFile into the existing hierachy, modifying mesh transforms and such. (Can be used for loading Npcs, and armour etc.)
 		public GameObject CreateGameObject(Transform parent = null)
 		{
-			if(roots == null || roots.Length < 1)
+			if (roots == null || roots.Length < 1)
 			{
 				return null;
 			}

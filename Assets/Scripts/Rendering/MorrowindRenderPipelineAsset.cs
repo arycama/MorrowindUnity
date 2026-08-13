@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.Rendering;
 using CustomRenderPipeline;
+using System;
 
 [CreateAssetMenu(menuName = "Morrowind Render Pipeline Asset")]
 public class MorrowindRenderPipelineAsset : CustomRenderPipelineAssetBase
@@ -15,6 +16,9 @@ public class MorrowindRenderPipelineAsset : CustomRenderPipelineAssetBase
 	[field: SerializeField] public VolumetricLighting.Settings VolumetricLighting { get; private set; }
 
 	public override bool UseSrpBatching => useSrpBatching;
+
+	public override string renderPipelineShaderTag => "MorrowindRenderPipeline";
+	public override Type pipelineType => typeof(MorrowindRenderPipeline);
 
 	public override SupportedRenderingFeatures SupportedRenderingFeatures => new()
 	{

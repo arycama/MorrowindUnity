@@ -117,6 +117,7 @@ public class SetupCamera : ViewRenderFeature
 			worldToView.r0,
 			worldToView.r1,
 			worldToView.r2,
+			viewToWorld,
 			pixelToClip,
 			screenToWorld,
 			worldToPreviousScreen,

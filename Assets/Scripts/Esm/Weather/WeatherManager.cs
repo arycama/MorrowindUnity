@@ -150,11 +150,11 @@ public class WeatherManager : Singleton<WeatherManager>
 	private void OnCameraPreCull(ScriptableRenderContext context, Camera camera)
     {
 		var time = SecondsPerDayRecip * SecondsOfDay;
-		currentWeatherSettings?.UpdateWeather(time, camera, underwaterColor, underwaterColorWeight);
 
 		if (!shouldUpdate)
             return;
 
+		currentWeatherSettings?.UpdateWeather(time, camera, underwaterColor, underwaterColorWeight);
 		Graphics.DrawMesh(atmosphereMesh, Matrix4x4.Translate(camera.transform.position) * atmosphereMatrix, atmosphereMaterial, 0, camera);
 		Graphics.DrawMesh(skyboxMesh, Matrix4x4.Translate(camera.transform.position) * skyMatrix, skyboxMaterial, 0, camera);
     }

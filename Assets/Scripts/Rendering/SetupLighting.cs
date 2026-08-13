@@ -4,14 +4,20 @@ using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.Pool;
 using UnityEngine.Rendering;
 using Unmath;
 using static Unmath.Math;
+using Quaternion = Unmath.Quaternion;
 
 public class SetupLighting : ViewRenderFeature
 {
 	private readonly NativeList<LightShadowCasterCullingInfo> perLightInfos = new(1, Allocator.Persistent);
 	private readonly NativeList<ShadowSplitData> splitBuffer = new(1, Allocator.Persistent);
+
+	private static IndexedString directionalCascadeIds = new("Directional Cascade "),
+		pointLightIds = new("Point Light "),
+		SpotLightIds = new("Spot Light ");
 
 	private LightData[] pointLights = new LightData[8];
 	private float[] pointLightDepths = new float[8];
@@ -43,6 +49,9 @@ public class SetupLighting : ViewRenderFeature
 		Array.Resize(ref pointLightDepths, Max(pointLightDepths.Length, lightCount));
 		var pointLightCount = 0;
 
+		var pointShadowRequests = ListPool<ShadowRequest>.Get();
+		var spotShadowRequests = ListPool<ShadowRequest>.Get();
+
 		for (var i = 0; i < lightCount; i++)
 		{
 			var visibleLight = cullingResults.visibleLights[i];
@@ -52,6 +61,7 @@ public class SetupLighting : ViewRenderFeature
 			var splitRange = new RangeInt(0, 0);
 			var lightRotation = lightToWorld.Rotation;
 			var viewSpaceLightRotation = viewPassData.rotation.InverseRotate(lightRotation);
+			var hasShadows = visibleLight.light.shadows != LightShadows.None;
 
 			if (visibleLight.lightType == LightType.Directional && mainLightIndex == -1)
 			{
@@ -59,7 +69,7 @@ public class SetupLighting : ViewRenderFeature
 				sunDirection = -viewSpaceLightRotation.Forward;
 				sunColor = lightColor;
 
-				if (cullingResults.GetShadowCasterBounds(mainLightIndex, out _))
+				if (hasShadows && cullingResults.GetShadowCasterBounds(mainLightIndex, out _))
 				{
 					// Transform from view space to light space
 					var viewToLight = Float4x4.Rotate(viewSpaceLightRotation.Inverse);
@@ -88,13 +98,6 @@ public class SetupLighting : ViewRenderFeature
 					pass.WriteDepth(sunShadows);
 				}
 			}
-
-			perLightInfos.Add(new LightShadowCasterCullingInfo
-			{
-				projectionType = visibleLight.lightType == LightType.Directional ? BatchCullingProjectionType.Orthographic : BatchCullingProjectionType.Perspective,
-				splitExclusionMask = 0,
-				splitRange = splitRange
-			});
 
 			// Calculate view depth
 			if (visibleLight.lightType == LightType.Spot || visibleLight.lightType == LightType.Point)
@@ -128,16 +131,53 @@ public class SetupLighting : ViewRenderFeature
 
 				// Convert to view space
 				cullingSphere.xyz = viewPassData.rotation.InverseRotate(cullingSphere.xyz - viewPassData.position);
-				position = viewPassData.rotation.InverseRotate(position - viewPassData.position);
 
 				// Reject lights that are fully behind the near plane since Unity doesn't do it automatically..
 				if (cullingSphere.z + cullingSphere.w <= viewPassData.near)
 					continue;
 
-				pointLights[pointLightCount] = new(position, distanceScale, forward, angleScale, visibleLight.finalColor.Float3(), angleOffset, cullingSphere);
+				// Shadows
+				var shadowIndex = uint.MaxValue;
+				var nearPlane = visibleLight.light.shadowNearPlane;
+				if (hasShadows && cullingResults.GetShadowCasterBounds(i, out _) && visibleLight.lightType == LightType.Point)
+				{
+					shadowIndex = (uint)pointShadowRequests.Count;
+					splitRange = new RangeInt(splitBuffer.Length, 6);
+
+					for (var j = 0; j < 6; j++)
+					{
+						var faceForward = Float4x4.lookAtList[j];
+						var rotation = Quaternion.LookRotation(faceForward, Float4x4.upVectorList[j]);
+						var worldToView = Float4x4.WorldToLocal(position, rotation);
+						var viewToClip = Float4x4.PerspectiveReverseZ(1, nearPlane, radius);
+						var worldToClip = viewToClip.Mul(worldToView);
+						var shadowSplitData = CalculateShadowSplitData(worldToClip, faceForward, false);
+
+						// Convert to camera relative
+						var cameraInverseTranslation = Float4x4.Translate(viewPassData.position);
+						worldToView = worldToView.Mul(cameraInverseTranslation);
+
+						pointShadowRequests.Add(new(i, worldToView, viewToClip, shadowSplitData, j, position, true, nearPlane, radius, position, lightRotation, 1, 1, lighting.PointShadowResolution));
+						splitBuffer.Add(shadowSplitData);
+					}
+				}
+
+				position = viewPassData.rotation.InverseRotate(position - viewPassData.position);
+
+				var shadowProjectionX = 1.0f + radius / (nearPlane - radius);
+				var shadowProjectionY = nearPlane * radius / (radius - nearPlane);
+
+				pointLights[pointLightCount] = new(position, distanceScale, forward, angleScale, visibleLight.finalColor.Float3(), angleOffset, cullingSphere, shadowIndex, shadowProjectionX, shadowProjectionY);
 				pointLightDepths[pointLightCount] = cullingSphere.z - cullingSphere.w * 1.075f;
 				pointLightCount++;
 			}
+
+			perLightInfos.Add(new LightShadowCasterCullingInfo
+			{
+				projectionType = visibleLight.lightType == LightType.Directional ? BatchCullingProjectionType.Orthographic : BatchCullingProjectionType.Perspective,
+				splitExclusionMask = 0,
+				splitRange = splitRange
+			});
 		}
 
 		context.CullShadowCasters(cullingResults, new ShadowCastersCullingInfos
@@ -148,6 +188,35 @@ public class SetupLighting : ViewRenderFeature
 
 		perLightInfos.Clear();
 		splitBuffer.Clear();
+
+		var pointShadowCount = Max(1, pointShadowRequests.Count);
+		var pointShadows = renderGraph.GetTexture(lighting.PointShadowResolution, GraphicsFormat.D16_UNorm, pointShadowCount, TextureDimension.Tex2DArray, isExactSize: true);
+		using (var pass = renderGraph.AddGenericRenderPass("Render Shadows Setup", pointShadows))
+		{
+			pass.WriteTexture(pointShadows);
+
+			if (pointShadowRequests.Count > 0)
+			{
+				pass.SetRenderFunction(static (command, pass, pointShadows) =>
+				{
+					command.SetRenderTarget(pass.GetRenderTexture(pointShadows), 0, CubemapFace.Unknown, -1);
+					command.ClearRenderTarget(true, false, default);
+				});
+			}
+		}
+
+		for (var i = 0; i < pointShadowRequests.Count; i++)
+		{
+			var request = pointShadowRequests[i];
+			var perCascadeData = renderGraph.SetConstantBuffer(request.ProjectionMatrix.Mul(request.ViewMatrix));
+			using var pass = renderGraph.AddShadowRenderPass("Render Shadow");
+			pass.ReadBuffer("CascadeData", perCascadeData);
+			pass.Initialize(context, cullingResults, request.LightIndex, lighting.PointShadowBias, lighting.PointShadowSlopeBias, true, true, lighting.PointShadowResolution, pointShadowCount);
+			pass.DepthSlice = i;
+			pass.WriteDepth(pointShadows);
+		}
+
+		ListPool<ShadowRequest>.Release(pointShadowRequests);
 
 		var sunShadowFadeScale = -1.0f / lighting.DirectionalFadeLength;
 		var sunShadowFadeOffset = lighting.DirectionalShadowDistance / lighting.DirectionalFadeLength;
@@ -254,7 +323,7 @@ public class SetupLighting : ViewRenderFeature
 			Rcp(binWidth)
 		));
 
-		renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, pointLightCount, lightDepthMinMaxBuffer, visibleLightBits, intersectingLightCount));
+		renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, pointLightCount, lightDepthMinMaxBuffer, visibleLightBits, intersectingLightCount, pointShadows));
 	}
 
 	private static ShadowSplitData CalculateShadowSplitData(Float4x4 matrix, Float3 lightDirection, bool skipNearPlane)
@@ -269,14 +338,14 @@ public class SetupLighting : ViewRenderFeature
 			}
 		}
 
-		for (var i = FrustumPlane.Left; i < FrustumPlane.Count; i++)
-		{
-			var plane = matrix.GetFrustumPlane(i);
-			if (plane.normal.Dot(lightDirection) > 0.0f)
-			{
-				shadowSplitData.SetCullingPlane(shadowSplitData.cullingPlaneCount++, plane);
-			}
-		}
+		//for (var i = FrustumPlane.Left; i < FrustumPlane.Count; i++)
+		//{
+		//	var plane = matrix.GetFrustumPlane(i);
+		//	if (plane.normal.Dot(lightDirection) > 0.0f)
+		//	{
+		//		shadowSplitData.SetCullingPlane(shadowSplitData.cullingPlaneCount++, plane);
+		//	}
+		//}
 
 		return shadowSplitData;
 	}

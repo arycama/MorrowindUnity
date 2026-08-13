@@ -36,7 +36,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 {
 	float3 color = input.color;
 	
-	if (ViewPosition.y < 0)
+	if (ViewPosition.y < WaterHeight)
 		color = lerp(color, UnderwaterColor, UnderwaterColorWeight);
 	
 	return color;

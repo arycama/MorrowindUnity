@@ -441,7 +441,7 @@ Light:
   m_Enabled: 1
   serializedVersion: 12
   m_Type: 1
-  m_Color: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
+  m_Color: {r: 0, g: 0, b: 0, a: 1}
   m_Intensity: 1
   m_Range: 10
   m_SpotAngle: 30
@@ -846,6 +846,10 @@ MonoBehaviour:
   month: 7
   skyboxMaterial: {fileID: 1600696161}
   atmosphereMaterial: {fileID: 0}
+  underwaterColor:
+    serializedVersion: 2
+    rgba: 0
+  underwaterColorWeight: 0
 --- !u!114 &1594392080
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1235,7 +1239,7 @@ Camera:
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
-    m_Bits: 4294967039
+    m_Bits: 7735
   m_RenderingPath: -1
   m_TargetTexture: {fileID: 0}
   m_TargetDisplay: 0
