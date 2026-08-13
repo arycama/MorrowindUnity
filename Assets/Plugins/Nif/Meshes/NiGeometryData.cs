@@ -16,9 +16,7 @@ namespace Nif
 			var attributeCount = 0;
 			Span<VertexAttributeDescriptor> vertexAttributeDescriptors = stackalloc VertexAttributeDescriptor[7];
 
-			Vector3[] vertices = null, normals = null;
-			Vector2[] uv0 = null, uv1 = null, uv2 = null, uv3 = null;
-			Color[] colors = null;
+			long vertexPosition = -1, normalPosition = -1, colorPosition = -1, uv0Position = -1, uv1Position = -1, uv2Position = -1, uv3Position = -1;
 
 			// Read Vertices
 			vertexCount = niFile.Reader.ReadInt16();
@@ -26,7 +24,8 @@ namespace Nif
 			if (hasVertices)
 			{
 				vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.Position, VertexAttributeFormat.Float32, 3, attributeCount++);
-				vertices = niFile.Reader.ReadVertexArray(vertexCount);
+				vertexPosition = niFile.Reader.BaseStream.Position;
+				niFile.Reader.BaseStream.Position += vertexCount * 3 * sizeof(float); 
 			}
 
 			// Read Normals
@@ -34,7 +33,8 @@ namespace Nif
 			if (hasNormals)
 			{
 				vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.Normal, VertexAttributeFormat.Float32, 3, attributeCount++);
-				normals = niFile.Reader.ReadVector3Array(vertexCount);
+				normalPosition = niFile.Reader.BaseStream.Position;
+				niFile.Reader.BaseStream.Position += vertexCount * 3 * sizeof(float);
 			}
 
 			// Center position
@@ -45,8 +45,9 @@ namespace Nif
 			hasColors = niFile.Reader.ReadInt32() != 0;
 			if (hasColors)
 			{
-				vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.Color, VertexAttributeFormat.Float32, 4, attributeCount++);
-				colors = niFile.Reader.ReadColor4Array(vertexCount);
+				vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4, attributeCount++);
+				colorPosition = niFile.Reader.BaseStream.Position;
+				niFile.Reader.BaseStream.Position += vertexCount * 4 * sizeof(float); 
 			}
 
 			// Read UV Sets
@@ -57,59 +58,102 @@ namespace Nif
 				if (uvSetCount > 0)
 				{
 					vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2, attributeCount++);
-					uv0 = niFile.Reader.ReadUvArray(vertexCount);
+					uv0Position = niFile.Reader.BaseStream.Position;
+					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float); 
 				}
 
 				if (uvSetCount > 1)
 				{
 					vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 2, attributeCount++);
-					uv1 = niFile.Reader.ReadUvArray(vertexCount);
+					uv1Position = niFile.Reader.BaseStream.Position;
+					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float); 
 				}
 
 				if (uvSetCount > 2)
 				{
 					vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.TexCoord2, VertexAttributeFormat.Float32, 2, attributeCount++);
-					uv2 = niFile.Reader.ReadUvArray(vertexCount);
+					uv2Position = niFile.Reader.BaseStream.Position;
+					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float); 
 				}
 
 				if (uvSetCount > 3)
 				{
 					vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.TexCoord3, VertexAttributeFormat.Float32, 2, attributeCount++);
-					uv3 = niFile.Reader.ReadUvArray(vertexCount);
+					uv3Position = niFile.Reader.BaseStream.Position;
+					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float); 
 				}
 			}
 
-			Mesh = new Mesh();
-			Mesh.SetVertexBufferParams(vertexCount, vertexAttributeDescriptors.AsNativeArray(attributeCount));
+			var endPosition = niFile.Reader.BaseStream.Position;
+
+			MeshDataArray = Mesh.AllocateWritableMeshData(1);
+			HasMeshData = true;
+			MeshDataArray[0].SetVertexBufferParams(vertexCount, vertexAttributeDescriptors.AsNativeArray(attributeCount));
 
 			var n = 0;
 			if (hasVertices)
-				Mesh.SetVertexBufferData(vertices, 0, 0, vertexCount, n++);
+			{
+				niFile.Reader.BaseStream.Position = vertexPosition;
+				var vertices = MeshDataArray[0].GetVertexData<Vector3>(n++);
+				for(var i = 0; i < vertexCount; i++)
+					vertices[i] = niFile.Reader.ReadVector3();
+			}
 
 			if (hasNormals)
-				Mesh.SetVertexBufferData(normals, 0, 0, vertexCount, n++);
+			{
+				niFile.Reader.BaseStream.Position = normalPosition;
+				var normals = MeshDataArray[0].GetVertexData<Vector3>(n++);
+				for (var i = 0; i < vertexCount; i++)
+					normals[i] = niFile.Reader.ReadVector3();
+			}
 
 			if (hasColors)
-				Mesh.SetVertexBufferData(colors, 0, 0, vertexCount, n++);
+			{
+				niFile.Reader.BaseStream.Position = colorPosition;
+				var colors = MeshDataArray[0].GetVertexData<Color32>(n++);
+				for (var i = 0; i < vertexCount; i++)
+					colors[i] = niFile.Reader.GetReadColor4();
+			}
 
 			if (hasUVs)
 			{
 				if (uvSetCount > 0)
-					Mesh.SetVertexBufferData(uv0, 0, 0, vertexCount, n++);
+				{
+					niFile.Reader.BaseStream.Position = uv0Position;
+					var uv0 = MeshDataArray[0].GetVertexData<Vector2>(n++);
+					for (var i = 0; i < vertexCount; i++)
+						uv0[i] = new Vector2(niFile.Reader.ReadSingle(), niFile.Reader.ReadSingle());
+				}
 
 				if (uvSetCount > 1)
-					Mesh.SetVertexBufferData(uv1, 0, 0, vertexCount, n++);
+				{
+					niFile.Reader.BaseStream.Position = uv1Position;
+					var uv1 = MeshDataArray[0].GetVertexData<Vector2>(n++);
+					for (var i = 0; i < vertexCount; i++)
+						uv1[i] = new Vector2(niFile.Reader.ReadSingle(), niFile.Reader.ReadSingle());
+				}
 
 				if (uvSetCount > 2)
-					Mesh.SetVertexBufferData(uv2, 0, 0, vertexCount, n++);
+				{
+					niFile.Reader.BaseStream.Position = uv2Position;
+					var uv2 = MeshDataArray[0].GetVertexData<Vector2>(n++);
+					for (var i = 0; i < vertexCount; i++)
+						uv2[i] = new Vector2(niFile.Reader.ReadSingle(), niFile.Reader.ReadSingle());
+				}
 
 				if (uvSetCount > 3)
-					Mesh.SetVertexBufferData(uv3, 0, 0, vertexCount, n++);
+				{
+					niFile.Reader.BaseStream.Position = uv3Position;
+					var uv3 = MeshDataArray[0].GetVertexData<Vector2>(n++);
+					for (var i = 0; i < vertexCount; i++)
+						uv3[i] = new Vector2(niFile.Reader.ReadSingle(), niFile.Reader.ReadSingle());
+				}
 			}
 
-			Mesh.RecalculateBounds();
+			niFile.Reader.BaseStream.Position = endPosition;
 		}
 
-		public Mesh Mesh { get; protected set; }
+		public bool HasMeshData{ get; set; }
+		public Mesh.MeshDataArray MeshDataArray { get; protected set; }
 	}
 }

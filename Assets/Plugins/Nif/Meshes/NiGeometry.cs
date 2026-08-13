@@ -10,6 +10,8 @@ namespace Nif
 		private readonly Ref<NiGeometryData> data;
 		private readonly Ref<NiSkinInstance> skin;
 
+		private bool isCleared;
+
 		public NiGeometry(NiFile niFile) : base(niFile)
 		{
 			data = new Ref<NiGeometryData>(niFile);
@@ -24,7 +26,19 @@ namespace Nif
 			if (data.Target != null)
 			{
 				data.Target.NiParent = this;
-				Mesh = data.Target.Mesh;
+				Mesh = new Mesh() { name = this.Name };
+
+				if(data.Target.HasMeshData)
+				{
+					Mesh.ApplyAndDisposeWritableMeshData(data.Target.MeshDataArray, Mesh);
+					Mesh.RecalculateBounds();
+					data.Target.HasMeshData = false;
+					isCleared = true;
+				}
+				else
+				{
+					Debug.LogError($"{Name} has no mesh data. Has been cleared: {isCleared}");
+				}
 			}
 
 			if(skin.Target != null)

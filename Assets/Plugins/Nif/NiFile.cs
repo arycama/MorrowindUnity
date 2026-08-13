@@ -40,17 +40,8 @@ namespace Nif
 			{
 				var name = reader.ReadLengthPrefixedString();
 
-				try
-				{
-					var type = Type.GetType("Nif." + name, true);
-					niObjects[i] = (NiObject)Activator.CreateInstance(type, this);
-				}
-				catch(Exception ex)
-				{
-					// We don't support all Nif types currently, eg NiBSPArrayController. So just stop loading th emodel. Otherwise this might break other components depending on it
-					Debug.LogError(ex.Message);
-					return;
-				}
+				var type = Type.GetType("Nif." + name, true);
+				niObjects[i] = (NiObject)Activator.CreateInstance(type, this);
 			}
 
 			RootCount = reader.ReadInt32();
