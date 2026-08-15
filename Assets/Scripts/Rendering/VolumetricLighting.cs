@@ -54,6 +54,7 @@ public class VolumetricLighting : ViewRenderFeature
 
 		using (var pass = renderGraph.AddComputeRenderPass("Volumetric Lighting"))
 		{
+			pass.PreventNewSubPass = true;
 			(current, history, wasCreated) = colorHistory.GetTextures(new(volumeWidth, volumeHeight), pass.Index, viewPassData.viewId, settings.DepthSlices);
 
 			pass.Initialize(computeShader, 0, volumeWidth, volumeHeight, settings.DepthSlices);
@@ -80,6 +81,7 @@ public class VolumetricLighting : ViewRenderFeature
 		var volumetricLight = renderGraph.GetTexture(new(volumeWidth, volumeHeight), GraphicsFormat.R16G16B16A16_SFloat, settings.DepthSlices, TextureDimension.Tex3D, isExactSize: true);
 		using (var pass = renderGraph.AddComputeRenderPass("Accumulate", pixelToViewDir))
 		{
+			pass.PreventNewSubPass = true;
 			pass.Initialize(computeShader, 1, volumeWidth, volumeHeight, 1);
 			pass.WriteTexture("Result", volumetricLight);
 			pass.ReadTexture("Input", current);

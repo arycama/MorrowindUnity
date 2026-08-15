@@ -1,0 +1,60 @@
+#include "../../Common.hlsl"
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Raytracing.hlsl"
+
+#pragma max_recursion_depth 1
+
+RWTexture2D<float3> HitResult;
+
+[shader("miss")]
+void MissShader(inout RayColorPayload payload : SV_RayPayload)
+{
+	payload.color += FogColor * payload.transmittance;
+}
+
+[shader("raygeneration")]
+void RayGeneration()
+{
+	uint2 position = DispatchRaysIndex().xy;
+	float depth = CameraDepth[position];
+	if (depth == 0.0)
+		return;
+		
+	float4 normalOcclusionRoughness = GBufferNormalOcclusionRoughness[position];
+	float2 noise2D = Noise2D(position);
+	
+	float3 N = PyramidUvToNormal(normalOcclusionRoughness.xy);
+	
+	float3 worldPosition = MultiplyPointProj(PixelToWorld, float3(position + 0.5, depth)).xyz;
+	float3 V = MultiplyPoint3x4(WorldToView, normalize(-worldPosition));
+	N = -FromToRotationZ(-V, N, false);
+	N = MultiplyVector(ViewToWorld, N);
+	
+	worldPosition += ViewPosition;
+	
+	float3 luminance = 0.0;
+	uint samples = 8;
+	for (uint i = 0; i < samples; i++)
+	{
+		RayColorPayload payload;
+		payload.color = 0.0;
+		payload.transmittance = 1.0;
+		
+		float2 u = Hammersley2dSeq(i, samples);
+		u = frac(u + noise2D);
+	
+		float3 L = SampleHemisphereCosine(u, N);
+		
+		RayDesc ray;
+		ray.Origin = worldPosition;
+		ray.Direction = L;
+		ray.TMin = 0.1;
+		ray.TMax = 8192;
+		
+		uint flags = 0;
+		TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 0, ray, payload);
+		
+		luminance += payload.color;
+	}
+	
+	HitResult[position] = luminance / samples;
+}

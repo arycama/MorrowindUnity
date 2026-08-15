@@ -5,6 +5,7 @@ using Esm;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 
 public class TerrainFactory
@@ -33,6 +34,9 @@ public class TerrainFactory
 
         var meshRenderer = gameObject.AddComponent<MeshRenderer>();
         meshRenderer.shadowCastingMode = ShadowCastingMode.TwoSided;
+        meshRenderer.staticShadowCaster = true;
+        meshRenderer.rayTracingMode = RayTracingMode.Static;
+
 		meshRenderer.sharedMaterial = new Material(MaterialManager.Instance.TerrainShader)
 		{
 			enableInstancing = true,

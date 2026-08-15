@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Pool;
 
 public class StaticRecord : CreatableRecord
@@ -32,9 +33,10 @@ public class StaticRecord : CreatableRecord
         {
             meshRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
             meshRenderer.staticShadowCaster = true;
-            //childGameObjects[i].gameObject.isStatic = true;
-            //CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
-        }
+			meshRenderer.rayTracingMode = RayTracingMode.Static;
+			//childGameObjects[i].gameObject.isStatic = true;
+			//CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
+		}
         ListPool<MeshRenderer>.Release(meshRenderers);
 
         return gameObject;

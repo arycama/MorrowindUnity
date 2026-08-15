@@ -7,6 +7,7 @@ using System;
 public class MorrowindRenderPipelineAsset : CustomRenderPipelineAssetBase
 {
 	[SerializeField] private bool useSrpBatching = true;
+    [field: SerializeField] public RaytracingSystem.Settings RayTracingSettings { get; private set; }
 	[field: SerializeField] public float ShadowFadeDistance { get; private set; } = 8f;
 	[field: SerializeField, Range(0, 1)] public float FogStartDensity { get; private set; } = 0.95f;
 	[field: SerializeField, Range(0, 1)] public float FogAtDensity { get; private set; } = 0.0f;

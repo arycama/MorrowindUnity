@@ -92,6 +92,8 @@ public class SetupLighting : ViewRenderFeature
 					viewToSunShadow = Float4x4.OrthoReverseZSample(viewSpaceLightBounds).Mul(viewToLight);
 
 					using var pass = renderGraph.AddShadowRenderPass("Directional Shadows");
+					pass.PreventNewSubPass = true;
+
 					sunShadows = renderGraph.GetTexture(lighting.DirectionalShadowResolution, GraphicsFormat.D16_UNorm, isExactSize: true, clear: true);
 					pass.Initialize(context, cullingResults, mainLightIndex, lighting.DirectionalShadowBias, lighting.DirectionalShadowSlopeBias, false, false, lighting.DirectionalShadowResolution, 1);
 					pass.ReadBuffer("CascadeData", perCascadeData);
@@ -193,6 +195,7 @@ public class SetupLighting : ViewRenderFeature
 		var pointShadows = renderGraph.GetTexture(lighting.PointShadowResolution, GraphicsFormat.D16_UNorm, pointShadowCount, TextureDimension.Tex2DArray, isExactSize: true);
 		using (var pass = renderGraph.AddGenericRenderPass("Render Shadows Setup", pointShadows))
 		{
+			pass.PreventNewSubPass = true;
 			pass.WriteTexture(pointShadows);
 
 			if (pointShadowRequests.Count > 0)
@@ -207,13 +210,16 @@ public class SetupLighting : ViewRenderFeature
 
 		for (var i = 0; i < pointShadowRequests.Count; i++)
 		{
-			var request = pointShadowRequests[i];
-			var perCascadeData = renderGraph.SetConstantBuffer(request.ProjectionMatrix.Mul(request.ViewMatrix));
-			using var pass = renderGraph.AddShadowRenderPass("Render Shadow");
-			pass.ReadBuffer("CascadeData", perCascadeData);
-			pass.Initialize(context, cullingResults, request.LightIndex, lighting.PointShadowBias, lighting.PointShadowSlopeBias, true, true, lighting.PointShadowResolution, pointShadowCount);
-			pass.DepthSlice = i;
-			pass.WriteDepth(pointShadows);
+			using (renderGraph.AddProfileScope(pointLightIds[i]))
+			{
+				var request = pointShadowRequests[i];
+				var perCascadeData = renderGraph.SetConstantBuffer(request.ProjectionMatrix.Mul(request.ViewMatrix));
+				using var pass = renderGraph.AddShadowRenderPass("Render Shadow");
+				pass.ReadBuffer("CascadeData", perCascadeData);
+				pass.Initialize(context, cullingResults, request.LightIndex, lighting.PointShadowBias, lighting.PointShadowSlopeBias, true, true, lighting.PointShadowResolution, pointShadowCount);
+				pass.DepthSlice = i;
+				pass.WriteDepth(pointShadows);
+			}
 		}
 
 		ListPool<ShadowRequest>.Release(pointShadowRequests);
@@ -296,6 +302,7 @@ public class SetupLighting : ViewRenderFeature
 
 		using (var pass = renderGraph.AddGenericRenderPass("Set Light Data", (pointLights, pointLightCount, pointLightBuffer, lightDepthMinMaxBuffer, lightDepthMinMax, visibleLightBits)))
 		{
+			pass.PreventNewSubPass = true;
 			pass.WriteBuffer("", pointLightBuffer);
 			pass.WriteBuffer("", lightDepthMinMaxBuffer);
 			pass.WriteTexture(visibleLightBits);
@@ -338,14 +345,17 @@ public class SetupLighting : ViewRenderFeature
 			}
 		}
 
-		//for (var i = FrustumPlane.Left; i < FrustumPlane.Count; i++)
-		//{
-		//	var plane = matrix.GetFrustumPlane(i);
-		//	if (plane.normal.Dot(lightDirection) > 0.0f)
-		//	{
-		//		shadowSplitData.SetCullingPlane(shadowSplitData.cullingPlaneCount++, plane);
-		//	}
-		//}
+		for (var i = FrustumPlane.Left; i < FrustumPlane.Count; i++)
+		{
+			var plane = matrix.GetFrustumPlane(i);
+			if (plane.normal.Dot(lightDirection) > 0.0f)
+			{
+				shadowSplitData.SetCullingPlane(shadowSplitData.cullingPlaneCount++, plane);
+
+				if (shadowSplitData.cullingPlaneCount == 10)
+					break;
+			}
+		}
 
 		return shadowSplitData;
 	}

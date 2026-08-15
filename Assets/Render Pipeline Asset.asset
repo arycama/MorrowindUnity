@@ -53,6 +53,13 @@ MonoBehaviour:
     <TerrainDetailLitShader>k__BackingField: {fileID: 4800000, guid: 3ccccb8a788d20845becb2c612e8b454,
       type: 3}
   useSrpBatching: 0
+  <RayTracingSettings>k__BackingField:
+    <Enabled>k__BackingField: 0
+    <RaytracingBias>k__BackingField: 0.001
+    <RaytracingDistantBias>k__BackingField: 0.001
+    <RaytracingLayers>k__BackingField:
+      serializedVersion: 2
+      m_Bits: 3585
   <ShadowFadeDistance>k__BackingField: 32
   <FogStartDensity>k__BackingField: 0.95
   <FogAtDensity>k__BackingField: 0.5

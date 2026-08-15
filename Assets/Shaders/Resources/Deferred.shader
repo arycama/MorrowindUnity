@@ -4,7 +4,7 @@ Shader "Hidden/Morrowind Deferred"
     {
         Pass
         {
-            Blend One One
+            Blend One SrcAlpha
             Cull Off
             ZWrite Off
             ZTest Greater
@@ -16,6 +16,12 @@ Shader "Hidden/Morrowind Deferred"
             #pragma multi_compile _ VOLUMETRIC_LIGHT_ON
             #pragma multi_compile _ SHADOWS_ON
             #pragma multi_compile _ POINT_LIGHTS_ON
+            #pragma multi_compile _ RAYTRACING_ON
+
+            #ifdef RAYTRACING_ON
+                #define SCREEN_SPACE_SHADOWS
+            #endif
+
             #include "Deferred.hlsl"
             ENDHLSL
         }

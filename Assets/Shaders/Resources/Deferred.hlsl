@@ -1,9 +1,8 @@
 #include "Assets/Shaders/Common.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/CommonShaders.hlsl"
 
-Texture2D<float> CameraDepth;
-Texture2D<float3> CameraTarget;
-Texture2D<float4> GBufferAlbedoMetallic, GBufferNormalOcclusionRoughness;
+Texture2D<float> ScreenSpaceOcclusion;
+Texture2D<float3> ScreenSpaceDiffuse;
 
 VertexFullscreenTriangleOutput Vertex(VertexInput input)
 {
@@ -12,7 +11,7 @@ VertexFullscreenTriangleOutput Vertex(VertexInput input)
 	return output;
 }
 
-float3 Fragment(VertexFullscreenTriangleOutput input) : SV_Target
+float4 Fragment(VertexFullscreenTriangleOutput input) : SV_Target
 {
 	float depth = CameraDepth[input.position.xy];
 	float4 albedoMetallic = GBufferAlbedoMetallic[input.position.xy];
@@ -25,5 +24,12 @@ float3 Fragment(VertexFullscreenTriangleOutput input) : SV_Target
 	float3 N = PyramidUvToNormal(normalOcclusionRoughness.xy);
 	N = -FromToRotationZ(-V, N, false);
 	
-	return GetLuminanceAndFog(float4(albedoMetallic.rgb, 1.0), 0.0, N, input.position.xy, viewPosition).rgb;
+	float3 result = GetLuminanceAndFog(float4(albedoMetallic.rgb, 1.0), 0.0, N, input.position.xy, viewPosition).rgb;
+	
+	#ifdef RAYTRACING_ON
+		float occlusion = ScreenSpaceOcclusion[input.position.xy];
+		result += ScreenSpaceDiffuse[input.position.xy] * albedoMetallic.rgb;
+	#endif
+	
+	return float4(result, 0);
 }

@@ -76,5 +76,29 @@
 			#include "Surface.hlsl"
 			ENDHLSL
 		}
+
+		// Pass
+  //       {
+  //           Name "RaytracedTransmittance"
+  //           Tags{ "LightMode" = "RaytracedTransmittance" }
+
+  //           HLSLPROGRAM
+  //           #pragma raytracing Raytracing
+		// 	#pragma multi_compile _ _ALPHABLEND_ON
+  //           #include "SurfaceRaytracing.hlsl"
+  //           ENDHLSL
+  //       }
+
+		// Pass
+  //       {
+  //           Name "RaytracedDiffuse"
+  //           Tags{ "LightMode" = "RaytracedDiffuse" }
+
+  //           HLSLPROGRAM
+  //           #pragma raytracing Raytracing
+		// 	#pragma multi_compile _ _ALPHABLEND_ON
+  //           #include "SurfaceRaytracingLuminance.hlsl"
+  //           ENDHLSL
+  //       }
 	}
 }

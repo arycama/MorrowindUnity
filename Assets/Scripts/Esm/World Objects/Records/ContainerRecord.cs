@@ -2,6 +2,7 @@
 using System.IO;
 using Esm;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
 using UnityEngine.Pool;
 
 public class ContainerRecord : CreatableRecord, IInventoryRecord
@@ -62,11 +63,12 @@ public class ContainerRecord : CreatableRecord, IInventoryRecord
 		foreach(var meshRenderer in meshRenderers)
 		{
 			meshRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
-            meshRenderer.staticShadowCaster = true;
+			meshRenderer.staticShadowCaster = true;
+			meshRenderer.rayTracingMode = RayTracingMode.Static;
 
-            //childGameObjects[i].gameObject.isStatic = true;
-            //CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
-        }
+			//childGameObjects[i].gameObject.isStatic = true;
+			//CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
+		}
         ListPool<MeshRenderer>.Release(meshRenderers);
 
 		//var lockData = new LockData(referenceData.LockLevel, referenceData.Trap, referenceData.Key);

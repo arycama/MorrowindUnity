@@ -121,6 +121,7 @@ public class SetupCamera : ViewRenderFeature
 			pixelToClip,
 			screenToWorld,
 			worldToPreviousScreen,
+			pixelToWorld,
 			overlayMatrix,
 			(viewPassData.far - viewPassData.near) * Rcp(viewPassData.near * viewPassData.far), Rcp(viewPassData.far), viewPassData.near, viewPassData.far,
 			(Float2)viewPassData.viewSize,

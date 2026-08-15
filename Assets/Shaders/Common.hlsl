@@ -40,6 +40,17 @@ struct Light
 	float lightPadding;
 };
 
+struct RayTransmittancePayload
+{
+	float transmittance;
+};
+
+struct RayColorPayload
+{
+	float3 color;
+	float transmittance;
+};
+
 cbuffer EnvironmentData
 {
 	float3 AmbientLight;
@@ -63,6 +74,7 @@ cbuffer ViewData
 	matrix PixelToClip;
 	matrix ScreenToWorld; 
 	matrix WorldToPreviousScreen;
+	matrix PixelToWorld;
 	matrix UiOverlayMatrix;
 	
 	float LinearDepthScale, LinearDepthOffset, Near, Far;
@@ -120,6 +132,9 @@ Texture2D<float> SunShadow;
 Texture2DArray<uint> VisibleLightBits;
 Texture2DArray<float> PointShadows;
 Texture3D<float4> VolumetricLighting;
+Texture2D<float> CameraDepth;
+Texture2D<float> ScreenShadows;
+Texture2D<float4> GBufferAlbedoMetallic, GBufferNormalOcclusionRoughness;
 
 float3 UnderwaterColor;
 float UnderwaterColorWeight;
@@ -249,11 +264,15 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, o
 	illuminance = SunColor;
 	
 	// Shadow
-	#ifdef SHADOWS_ON
-		float fade = saturate(viewPosition.z * SunShadowFadeScale + SunShadowFadeOffset);
-		float3 shadowPosition = MultiplyPoint3x4(ViewToSunShadow, viewPosition);
-		if (fade && all(saturate(shadowPosition.xy) == shadowPosition.xy))
-			illuminance *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
+	#ifdef SCREEN_SPACE_SHADOWS
+		illuminance *= ScreenShadows[screenPosition.xy];
+	#else
+		#ifdef SHADOWS_ON
+			float fade = saturate(viewPosition.z * SunShadowFadeScale + SunShadowFadeOffset);
+			float3 shadowPosition = MultiplyPoint3x4(ViewToSunShadow, viewPosition);
+			if (fade && all(saturate(shadowPosition.xy) == shadowPosition.xy))
+				illuminance *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
+		#endif
 	#endif
 	
 	float NdotL = saturate(dot(normal, SunDirection));
@@ -328,7 +347,7 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition)
 
 float3 GetFrustumCorner(uint id)
 {
-	return FrustumCorners[id];
+	return FrustumCorners[id].xyz;
 }
 
 float FogFactor(float3 viewPosition)
@@ -364,6 +383,11 @@ float4 GetLuminanceAndFog(float4 color, float3 ambient, float3 normal, float2 sc
 float3 GammaToLinear(float3 color)
 {
 	return select(color <= 0.04045, color * rcp(12.92), pow((color + 0.055) * rcp(1.055), 2.4));
+}
+
+float4 GammaToLinear(float4 color)
+{
+	return float4(GammaToLinear(color.rgb), color.a);
 }
 
 #endif

@@ -187,8 +187,8 @@ public class CharacterMovement : MonoBehaviour
 
         var vel = Vector2.Distance(new Vector2(transform.position.x, transform.position.z), new Vector2(prev.x, prev.z));
 
-        if(input is PlayerInput)
-            Debug.Log(vel / Time.deltaTime);
+        //if(input is PlayerInput)
+        //    Debug.Log(vel / Time.deltaTime);
 	}
 
 	private void Move(Vector3 direction, float movementSpeed)

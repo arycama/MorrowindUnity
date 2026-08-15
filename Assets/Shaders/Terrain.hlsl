@@ -36,12 +36,13 @@ struct FragmentOutput
 
 Texture2D _Control;
 Texture2DArray<float3> _MainTex;
-SamplerState sampler_Control, sampler_MainTex;
 
 cbuffer UnityPerMaterial
 {
-	float4 _Control_ST, _MainTex_ST, _Control_TexelSize;
+	float4 _MainTex_ST;
 };
+
+float4 _Control_TexelSize;
 
 FragmentInput Vertex(VertexInput input)
 {
@@ -63,13 +64,13 @@ FragmentOutput Fragment(FragmentInput input)
 	FragmentOutput output;
 
 	#ifdef GBUFFER
-		float4 terrainData = _Control.Gather(sampler_Control, input.uv.xy) * 255.0;
+		float4 terrainData = _Control.Gather(LinearClampSampler, input.uv.xy) * 255.0;
 		float4 weights = BilinearWeights(input.uv.xy, _Control_TexelSize.zw);
 	
-		float3 color = _MainTex.Sample(sampler_MainTex, float3(input.uv.zw, terrainData.x)) * weights.x;
-		color += _MainTex.Sample(sampler_MainTex, float3(input.uv.zw, terrainData.y)) * weights.y;
-		color += _MainTex.Sample(sampler_MainTex, float3(input.uv.zw, terrainData.z)) * weights.z;
-		color += _MainTex.Sample(sampler_MainTex, float3(input.uv.zw, terrainData.w)) * weights.w;
+		float3 color = _MainTex.Sample(LinearRepeatSampler, float3(input.uv.zw, terrainData.x)) * weights.x;
+		color += _MainTex.Sample(LinearRepeatSampler, float3(input.uv.zw, terrainData.y)) * weights.y;
+		color += _MainTex.Sample(LinearRepeatSampler, float3(input.uv.zw, terrainData.z)) * weights.z;
+		color += _MainTex.Sample(LinearRepeatSampler, float3(input.uv.zw, terrainData.w)) * weights.w;
 		color *= input.color;
 		
 		float3 emissive = AmbientLight * color;

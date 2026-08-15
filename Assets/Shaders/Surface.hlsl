@@ -74,7 +74,7 @@ FragmentOutput Fragment(FragmentInput input)
 	FragmentOutput output;
 
 	#if defined(GBUFFER) || defined(FORWARD) || (defined(SHADOW) && defined(_ALPHABLEND_ON))
-		float4 color = _MainTex.Sample(sampler_MainTex, input.uv);
+		float4 color = _MainTex.Sample(sampler_MainTex, input.uv) * _Color;
 	#endif
 	
 	#if defined(SHADOW) && defined(_ALPHABLEND_ON)

@@ -2,24 +2,21 @@ Shader "Terrain"
 {
 	Properties
 	{
-		_Control("Control", 2D) = "clear" {}
+		[NoScaleOffset] _Control("Control", 2D) = "clear" {}
 		_MainTex("Tex", 2DArray) = "" {}
 	}
 
 	SubShader
 	{
-		HLSLINCLUDE
-		#pragma vertex Vertex
-		#pragma fragment Fragment
-		#pragma use_dxc
-		#pragma multi_compile_instancing
-		ENDHLSL
-
 		Pass
 		{
 			Tags { "LightMode" = "Gbuffer" }
 
 			HLSLPROGRAM
+			#pragma vertex Vertex
+			#pragma fragment Fragment
+			#pragma use_dxc
+			#pragma multi_compile_instancing
 			#define GBUFFER
 			#include "Terrain.hlsl"
 			ENDHLSL
@@ -33,9 +30,35 @@ Shader "Terrain"
 			Tags { "LightMode" = "ShadowCaster" }
 
 			HLSLPROGRAM
+			#pragma vertex Vertex
+			#pragma fragment Fragment
+			#pragma use_dxc
+			#pragma multi_compile_instancing
 			#define SHADOW
 			#include "Terrain.hlsl"
 			ENDHLSL
 		}
+
+		// Pass
+  //       {
+  //           Name "RaytracedTransmittance"
+  //           Tags{ "LightMode" = "RaytracedTransmittance" }
+
+  //           HLSLPROGRAM
+  //           #pragma raytracing Raytracing
+  //           #include "TerrainRaytracing.hlsl"
+  //           ENDHLSL
+  //       }
+
+		// Pass
+  //       {
+  //           Name "RaytracedDiffuse"
+  //           Tags{ "LightMode" = "RaytracedDiffuse" }
+
+  //           HLSLPROGRAM
+  //           #pragma raytracing Raytracing
+  //           #include "TerrainRaytracingLuminance.hlsl"
+  //           ENDHLSL
+  //       }
 	}
 }

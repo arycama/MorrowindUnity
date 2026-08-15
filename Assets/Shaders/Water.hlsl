@@ -16,7 +16,6 @@ struct FragmentInput
 	float3 normal : NORMAL;
 };
 
-Texture2D<float> CameraDepth;
 Texture2D<float3> _MainTex, CameraColor, FadeTexture;
 SamplerState sampler_MainTex;
 

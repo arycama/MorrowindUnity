@@ -1,0 +1,55 @@
+#include "../../Common.hlsl"
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Raytracing.hlsl"
+
+#pragma max_recursion_depth 1
+
+RWTexture2D<float> HitResult;
+
+[shader("miss")]
+void MissShader(inout RayTransmittancePayload payload : SV_RayPayload)
+{
+}
+
+[shader("raygeneration")]
+void RayGeneration()
+{
+	uint2 position = DispatchRaysIndex().xy;
+	float depth = CameraDepth[position];
+	if (depth == 0.0)
+		return;
+		
+	float4 normalOcclusionRoughness = GBufferNormalOcclusionRoughness[position];
+	float2 u = Noise2D(position);
+	
+	float3 N = PyramidUvToNormal(normalOcclusionRoughness.xy);
+	
+	float3 worldPosition = MultiplyPointProj(PixelToWorld, float3(position + 0.5, depth)).xyz;
+	float3 V = MultiplyPoint3x4(WorldToView, normalize(-worldPosition));
+	N = -FromToRotationZ(-V, N, false);
+	
+	worldPosition += ViewPosition;
+	
+	RayTransmittancePayload payload;
+	payload.transmittance = 1.0;
+	
+	float SunCosAngle = AngularDiameterToConeCosAngle(radians(0.52));
+	
+	float NdotL = dot(N, SunDirection);
+	if (NdotL > 0.0)
+	{
+		float3 L = MultiplyVector(ViewToWorld, SunDirection);
+		L = SampleConeUniform(u.x, u.y, SunCosAngle, L);
+	
+		// Skip tracing rays where NdotL <= 0.0, as this will always be in shadow
+		RayDesc ray;
+		ray.Origin = worldPosition;
+		ray.Direction = L;
+		ray.TMin = 0.1;
+		ray.TMax = 1e10f;
+		
+		uint flags = RAY_FLAG_CULL_BACK_FACING_TRIANGLES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
+		TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 0, ray, payload);
+	}
+	
+	HitResult[position] = payload.transmittance;
+}
