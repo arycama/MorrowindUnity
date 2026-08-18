@@ -69,7 +69,7 @@ cbuffer ViewData
 {
 	matrix WorldToClip;
 	matrix ViewToClip;
-	row_major float3x4 WorldToView;
+	matrix WorldToView;
 	matrix ViewToWorld;
 	matrix PixelToClip;
 	matrix ScreenToWorld; 

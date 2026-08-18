@@ -6,7 +6,6 @@ using System;
 using UnityEngine.Experimental.Rendering;
 using System.Reflection;
 
-
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
