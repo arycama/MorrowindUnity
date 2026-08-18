@@ -12,3 +12,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c73c316ca4131a946968d619942dca11, type: 3}
   m_Name: New Pipeline
   m_EditorClassIdentifier: Rendering::NewPipelineAsset
+  <Samples>k__BackingField: 4
