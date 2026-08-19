@@ -1,3 +1,6 @@
+[submodule "customrenderpipeline"]
+	path = Packages/com.arycama.customrenderpipeline
+	url = https://github.com/arycama/customrenderpipeline.git
 [submodule "unmath"]
 	path = Packages/com.arycama.unmath
 	url = https://github.com/arycama/unmath.git
