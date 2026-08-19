@@ -15,6 +15,9 @@ public class NewPipeline : RenderPipeline
 	private readonly NewPipelineAsset asset;
 	private readonly CommandBuffer command;
 	private readonly Material blitMaterial;
+	private readonly List<RenderTargetDescriptor> targetDescriptors = new();
+	private readonly List<RenderTargetIdentifier?> targets = new();
+	private readonly List<bool> targetsRead = new();
 
 	public NewPipeline(NewPipelineAsset asset)
 	{
@@ -66,8 +69,28 @@ public class NewPipeline : RenderPipeline
 		};
 	}
 
+	private int GetTexture(RenderTargetDescriptor desc)
+	{
+		targetDescriptors.Add(desc);
+		targets.Add(default);
+		targetsRead.Add(false);
+		return targetDescriptors.Count - 1;
+	}
+
+	private void ReadTexture(string propertyName, int index)
+	{
+		targetsRead[index] = true;
+		command.SetGlobalTexture(propertyName, targets[index].Value);
+	}
+
 	protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
 	{
+		// Cleanup from last frame. We do this incase there was an error which would cause any code at the end of the last frame to not be called
+		command.Clear();
+		targetDescriptors.Clear();
+		targets.Clear();
+		targetsRead.Clear();
+
 		foreach (var camera in cameras)
 		{
 			if (!camera.TryGetCullingParameters(out var cullingParameters))
@@ -87,25 +110,25 @@ public class NewPipeline : RenderPipeline
 
 			// Setup depth target
 			var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
-			var cameraDepthDescriptor = new RenderTargetDescriptor(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true);
+			var cameraDepthIndex = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true));
 
 			// For scene view we need depth for wireframe (Note that msaa depth can not be resolved automatically so we need to store and manually resolve later)
 			var requiresDepthResolve = camera.cameraType == CameraType.SceneView;
-			RenderTargetIdentifier cameraDepth = requiresDepthResolve ? cameraDepthId : BuiltinRenderTextureType.None;
+			targets[cameraDepthIndex] = requiresDepthResolve ? cameraDepthId : BuiltinRenderTextureType.None;
 			if (requiresDepthResolve)
-				command.GetTemporaryRT(cameraDepthId, GetRenderTextureDescriptor(cameraDepthDescriptor, false));
+				command.GetTemporaryRT(cameraDepthId, GetRenderTextureDescriptor(targetDescriptors[cameraDepthIndex], false));
 
 			// TODO: This should also account for HDR
 			var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 			var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
-			var cameraTargetDescriptor = new RenderTargetDescriptor(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear);
+			var cameraColorIndex = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear));
 
 			// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 			// TODO: Check for hardware msaa backbuffer resolve support
 			var directToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
-			RenderTargetIdentifier cameraTarget = directToBackbuffer ? BuiltinRenderTextureType.CameraTarget : cameraTargetId;
+			targets[cameraColorIndex]= directToBackbuffer ? BuiltinRenderTextureType.CameraTarget : cameraTargetId;
 			if (!directToBackbuffer)
-				command.GetTemporaryRT(cameraTargetId, GetRenderTextureDescriptor(cameraTargetDescriptor, true));
+				command.GetTemporaryRT(cameraTargetId, GetRenderTextureDescriptor(targetDescriptors[cameraColorIndex], true));
 
 			// Pass 0
 			{
@@ -143,8 +166,8 @@ public class NewPipeline : RenderPipeline
 				}))
 				{
 					// TODO: This should just be a list of things passed to the struct. (Span?)
-					colorPass.WriteAttachment(cameraDepthDescriptor, cameraDepth, false);
-					colorPass.WriteAttachment(cameraTargetDescriptor, cameraTarget, true);
+					colorPass.WriteAttachment(targetDescriptors[cameraDepthIndex], targets[cameraDepthIndex], false);
+					colorPass.WriteAttachment(targetDescriptors[cameraColorIndex], targets[cameraColorIndex], true);
 				}
 
 				if (asset.Samples > 1 && camera.targetTexture == null)
@@ -155,14 +178,14 @@ public class NewPipeline : RenderPipeline
 			if (!directToBackbuffer)
 			{
 				command.SetWireframe(false);
-
-				// Can't really be a subpass since it requires resolving or flipping
-				command.SetGlobalTexture("CameraTarget", cameraTargetId);
 				command.SetGlobalVector("ViewSize", new(camera.pixelWidth, camera.pixelHeight));
 
-				if (camera.cameraType == CameraType.SceneView)
+				// Can't really be a subpass since it requires resolving or flipping
+				ReadTexture("CameraTarget", cameraColorIndex);
+
+				if (requiresDepthResolve)
 				{
-					command.SetGlobalTexture("CameraDepth", cameraDepthId);
+					ReadTexture("CameraDepth", cameraDepthIndex);
 
 					switch (asset.Samples)
 					{
@@ -190,16 +213,16 @@ public class NewPipeline : RenderPipeline
 					command.DrawProcedural(Matrix4x4.identity, blitMaterial, 0, MeshTopology.Triangles, 3);
 				}))
 				{
-					if (camera.cameraType == CameraType.SceneView)
-						blitPass.WriteAttachment(cameraDepthDescriptor, camera.targetTexture, false);
+					if (requiresDepthResolve)
+						blitPass.WriteAttachment(targetDescriptors[cameraDepthIndex], camera.targetTexture, false);
 
-					blitPass.WriteAttachment(cameraTargetDescriptor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture, false);
+					blitPass.WriteAttachment(targetDescriptors[cameraColorIndex], camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture, false);
 				}
 
 				if (camera.targetTexture == null)
 					command.DisableShaderKeyword("FLIP");
 
-				if (camera.cameraType == CameraType.SceneView)
+				if (requiresDepthResolve)
 				{
 					switch (asset.Samples)
 					{
