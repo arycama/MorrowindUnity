@@ -7,11 +7,10 @@
       "dependencies": {}
     },
     "com.arycama.unmath": {
-      "version": "https://github.com/arycama/unmath.git",
+      "version": "file:com.arycama.unmath",
       "depth": 0,
-      "source": "git",
-      "dependencies": {},
-      "hash": "18c94be2c151012cbdd8b02cf27e77872d669b59"
+      "source": "embedded",
+      "dependencies": {}
     },
     "com.arycama.webglnoiseunity": {
       "version": "https://github.com/arycama/WebGLNoiseUnity.git",
