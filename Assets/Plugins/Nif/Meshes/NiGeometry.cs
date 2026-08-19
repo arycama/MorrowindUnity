@@ -37,7 +37,7 @@ namespace Nif
 				}
 				else
 				{
-					Debug.LogError($"{Name} has no mesh data. Has been cleared: {isCleared}");
+					//Debug.LogError($"{Name} has no mesh data. Has been cleared: {isCleared}");
 				}
 			}
 

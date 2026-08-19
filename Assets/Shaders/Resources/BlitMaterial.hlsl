@@ -15,8 +15,31 @@ float4 Vertex(uint vertexId : SV_VertexID, out float2 uv : TEXCOORD) : SV_Positi
 
 Texture2D<float4> CameraTarget;
 SamplerState PointClampSampler;
+float2 ViewSize;
 
-float3 Fragment(float4 position : SV_Position, float2 uv : TEXCOORD) : SV_Target
+#ifdef DEPTH
+	Texture2D<float> CameraDepth;
+#elif defined(DEPTH_MSAA_2)
+	Texture2DMS<float, 2> CameraDepth;
+#elif defined(DEPTH_MSAA_4)
+	Texture2DMS<float, 4> CameraDepth;
+#elif defined(DEPTH_MSAA_8)
+	Texture2DMS<float, 8> CameraDepth;
+#endif
+
+float4 Fragment(float4 position : SV_Position, 
+#if defined(DEPTH) || defined(DEPTH_MSAA_2) || defined(DEPTH_MSAA_4) || defined(DEPTH_MSAA_8)
+	out float depth : SV_Depth,
+#endif
+	float2 uv : TEXCOORD) : SV_Target
 {
-	return CameraTarget.Sample(PointClampSampler, uv).rgb;
+	#ifdef DEPTH
+		depth = CameraDepth.Sample(PointClampSampler, uv);
+	#elif defined(DEPTH_MSAA_2) || defined(DEPTH_MSAA_4) || defined(DEPTH_MSAA_8)
+		float2 coord = position.xy;
+		coord.y = ViewSize.y - coord.y;
+		depth = CameraDepth.Load(coord, 0);
+	#endif
+
+	return CameraTarget.Sample(PointClampSampler, uv);
 }

@@ -42,9 +42,9 @@
 		{
             Tags { "LightMode" = "Forward" }
 
-			Blend [_SrcBlend] [_DstBlend]
-			ZTest [_ZTest]
-			ZWrite [_ZWrite]
+			//Blend [_SrcBlend] [_DstBlend]
+			//ZTest [_ZTest]
+			//ZWrite [_ZWrite]
 
 			HLSLPROGRAM
 			#pragma vertex Vertex
