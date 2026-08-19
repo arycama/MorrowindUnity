@@ -11,12 +11,12 @@ public readonly struct EnvironmentData : IRenderPassData
 		this.buffer = buffer;
 	}
 
-	void IRenderPassData.SetInputs(RenderPass pass)
+	void IRenderPassData.SetInputs(CustomRenderPipeline.RenderPass pass)
 	{
 		pass.ReadBuffer("EnvironmentData", buffer);
 	}
 
-	void IRenderPassData.SetProperties(RenderPass pass, CommandBuffer command)
+	void IRenderPassData.SetProperties(CustomRenderPipeline.RenderPass pass, CommandBuffer command)
 	{
 	}
 }

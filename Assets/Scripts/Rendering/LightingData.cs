@@ -15,7 +15,7 @@ public readonly struct LightingData : IRenderPassData
 		this.sunShadowEnabled = sunShadowEnabled;
 	}
 
-	void IRenderPassData.SetInputs(RenderPass pass)
+	void IRenderPassData.SetInputs(CustomRenderPipeline.RenderPass pass)
 	{
 		pass.ReadTexture("SunShadow", sunShadow);
 		pass.ReadBuffer("LightingData", lightingDataBuffer);
@@ -24,7 +24,7 @@ public readonly struct LightingData : IRenderPassData
 			pass.AddKeyword("SHADOWS_ON");
 	}
 
-	void IRenderPassData.SetProperties(RenderPass pass, CommandBuffer command)
+	void IRenderPassData.SetProperties(CustomRenderPipeline.RenderPass pass, CommandBuffer command)
 	{
 	}
 }

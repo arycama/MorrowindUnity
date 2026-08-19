@@ -115,13 +115,13 @@ public class VolumetricLighting : ViewRenderFeature
 			this.volumetricLightingData = volumetricLightingData;
 		}
 
-		public readonly void SetInputs(RenderPass pass)
+		public readonly void SetInputs(CustomRenderPipeline.RenderPass pass)
 		{
 			pass.ReadTexture("VolumetricLighting", volumetricLighting);
 			pass.ReadBuffer("VolumetricLightingData", volumetricLightingData);
 		}
 
-		public readonly void SetProperties(RenderPass pass, CommandBuffer command)
+		public readonly void SetProperties(CustomRenderPipeline.RenderPass pass, CommandBuffer command)
 		{
 		}
 	}
