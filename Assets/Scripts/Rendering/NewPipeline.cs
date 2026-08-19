@@ -114,9 +114,6 @@ public class NewPipeline : RenderPipeline
 
 			// For scene view we need depth for wireframe (Note that msaa depth can not be resolved automatically so we need to store and manually resolve later)
 			var requiresDepthResolve = camera.cameraType == CameraType.SceneView;
-			targets[cameraDepthIndex] = requiresDepthResolve ? cameraDepthId : BuiltinRenderTextureType.None;
-			if (requiresDepthResolve)
-				command.GetTemporaryRT(cameraDepthId, GetRenderTextureDescriptor(targetDescriptors[cameraDepthIndex], false));
 
 			// TODO: This should also account for HDR
 			var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
@@ -126,9 +123,6 @@ public class NewPipeline : RenderPipeline
 			// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 			// TODO: Check for hardware msaa backbuffer resolve support
 			var directToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
-			targets[cameraColorIndex]= directToBackbuffer ? BuiltinRenderTextureType.CameraTarget : cameraTargetId;
-			if (!directToBackbuffer)
-				command.GetTemporaryRT(cameraTargetId, GetRenderTextureDescriptor(targetDescriptors[cameraColorIndex], true));
 
 			// Pass 0
 			{
@@ -165,8 +159,26 @@ public class NewPipeline : RenderPipeline
 					command.DrawRendererList(context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque }));
 				}))
 				{
+					// TODO: This logic should be deferred 
+					if (requiresDepthResolve)
+					{
+						command.GetTemporaryRT(cameraDepthId, GetRenderTextureDescriptor(targetDescriptors[cameraDepthIndex], false));
+						targets[cameraDepthIndex] = cameraDepthId;
+					}
+
 					// TODO: This should just be a list of things passed to the struct. (Span?)
 					colorPass.WriteAttachment(targetDescriptors[cameraDepthIndex], targets[cameraDepthIndex], false);
+
+					if (directToBackbuffer)
+					{
+						targets[cameraColorIndex] = BuiltinRenderTextureType.CameraTarget;
+					}
+					else
+					{
+						command.GetTemporaryRT(cameraTargetId, GetRenderTextureDescriptor(targetDescriptors[cameraColorIndex], true));
+						targets[cameraColorIndex] = cameraTargetId;
+					}
+
 					colorPass.WriteAttachment(targetDescriptors[cameraColorIndex], targets[cameraColorIndex], true);
 				}
 
