@@ -4,19 +4,14 @@
     "com.arycama.unmath": "https://github.com/arycama/unmath.git",
     "com.arycama.webglnoiseunity": "https://github.com/arycama/WebGLNoiseUnity.git",
     "com.hecomi.hlsltoolsforvisualstudioconfiggenerator": "https://github.com/hecomi/HLSLToolsForVisualStudioConfigGenerator.git#upm",
-    "com.unity.collections": "2.6.7",
+    "com.unity.collections": "2.6.8",
     "com.unity.ide.visualstudio": "2.0.27",
     "com.unity.ugui": "2.0.0",
-    "com.unity.modules.accessibility": "1.0.0",
-    "com.unity.modules.adaptiveperformance": "1.0.0",
-    "com.unity.modules.ai": "1.0.0",
     "com.unity.modules.animation": "1.0.0",
     "com.unity.modules.audio": "1.0.0",
     "com.unity.modules.particlesystem": "1.0.0",
     "com.unity.modules.physics": "1.0.0",
     "com.unity.modules.terrain": "1.0.0",
-    "com.unity.modules.terrainphysics": "1.0.0",
-    "com.unity.modules.ui": "1.0.0",
-    "com.unity.modules.vectorgraphics": "1.0.0"
+    "com.unity.modules.ui": "1.0.0"
   }
 }

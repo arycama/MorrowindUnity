@@ -13,3 +13,26 @@ MonoBehaviour:
   m_Name: New Pipeline
   m_EditorClassIdentifier: Rendering::NewPipelineAsset
   <Samples>k__BackingField: 4
+  defaultMaterials:
+    <DefaultMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,
+      type: 2}
+    <DefaultUIMaterial>k__BackingField: {fileID: 2100000, guid: f3281f5f79abf5a4fa97071d934c1ee8,
+      type: 2}
+    <Default2DMaterial>k__BackingField: {fileID: 0}
+    <DefaultLineMaterial>k__BackingField: {fileID: 0}
+    <DefaultParticleMaterial>k__BackingField: {fileID: 0}
+    <DefaultTerrainMaterial>k__BackingField: {fileID: 0}
+    <DefaultUIETC1SupportedMaterial>k__BackingField: {fileID: 0}
+    <DefaultUIOverdrawMaterial>k__BackingField: {fileID: 0}
+    <Default2DMaskMaterial>k__BackingField: {fileID: 0}
+  defaultShaders:
+    <AutodeskInteractiveMaskedShader>k__BackingField: {fileID: 0}
+    <AutodeskInteractiveShader>k__BackingField: {fileID: 0}
+    <AutodeskInteractiveTransparentShader>k__BackingField: {fileID: 0}
+    <DefaultSpeedTree7Shader>k__BackingField: {fileID: 0}
+    <DefaultSpeedTree8Shader>k__BackingField: {fileID: 0}
+    <DefaultSpeedTree9Shader>k__BackingField: {fileID: 0}
+    <DefaultShader>k__BackingField: {fileID: 0}
+    <TerrainDetailGrassBillboardShader>k__BackingField: {fileID: 0}
+    <TerrainDetailGrassShader>k__BackingField: {fileID: 0}
+    <TerrainDetailLitShader>k__BackingField: {fileID: 0}
