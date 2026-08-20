@@ -92,11 +92,6 @@ public class NewPipeline : RenderPipeline
 		return renderPasses.Count;
 	}
 
-	private static NativeRenderPass<T> AddNativeRenderPass<T>(Int2 size, int samples, CommandBuffer command, string name, T data, Action<CommandBuffer, T> render)
-	{
-		return new NativeRenderPass<T>(size, samples, command, name, data, render);
-	}
-
 	protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
 	{
 		// Cleanup from last frame. We do this incase there was an error which would cause any code at the end of the last frame to not be called
@@ -173,33 +168,35 @@ public class NewPipeline : RenderPipeline
 
 			AddRenderPass((camera, asset, requiresDepthResolve, context, cullingResults, cameraDepthId, targetDescriptors, cameraDepthIndex, targets, directToBackbuffer, cameraColorIndex, cameraTargetId), static (command, data) =>
 			{
-				using (var colorPass = AddNativeRenderPass(new(data.camera.pixelWidth, data.camera.pixelHeight), data.asset.Samples, command, "Base Pass", (data.context, data.cullingResults, data.camera), static (command, data) =>
+				var colorPass = new NativeRenderPass(new(data.camera.pixelWidth, data.camera.pixelHeight), data.asset.Samples, command, "Base Pass");
+
+				// TODO: This logic should be deferred 
+				if (data.requiresDepthResolve)
 				{
-					command.DrawRendererList(((ScriptableRenderContext)data.context).CreateRendererList(new(new ShaderTagId("Forward"), data.cullingResults, data.camera) { renderQueueRange = RenderQueueRange.opaque }));
-				}))
-				{
-					// TODO: This logic should be deferred 
-					if (data.requiresDepthResolve)
-					{
-						command.GetTemporaryRT(data.cameraDepthId, GetRenderTextureDescriptor(data.targetDescriptors[data.cameraDepthIndex], false));
-						data.targets[data.cameraDepthIndex] = data.cameraDepthId;
-					}
-
-					// TODO: This should just be a list of things passed to the struct. (Span?)
-					colorPass.WriteAttachment(data.targetDescriptors[data.cameraDepthIndex], data.targets[data.cameraDepthIndex], false);
-
-					if (data.directToBackbuffer)
-					{
-						data.targets[data.cameraColorIndex] = BuiltinRenderTextureType.CameraTarget;
-					}
-					else
-					{
-						command.GetTemporaryRT(data.cameraTargetId, GetRenderTextureDescriptor(data.targetDescriptors[data.cameraColorIndex], true));
-						data.targets[data.cameraColorIndex] = data.cameraTargetId;
-					}
-
-					colorPass.WriteAttachment(data.targetDescriptors[data.cameraColorIndex], data.targets[data.cameraColorIndex], true);
+					command.GetTemporaryRT(data.cameraDepthId, GetRenderTextureDescriptor(data.targetDescriptors[data.cameraDepthIndex], false));
+					data.targets[data.cameraDepthIndex] = data.cameraDepthId;
 				}
+
+				// TODO: This should just be a list of things passed to the struct. (Span?)
+				colorPass.WriteAttachment(data.targetDescriptors[data.cameraDepthIndex], data.targets[data.cameraDepthIndex], false);
+
+				if (data.directToBackbuffer)
+				{
+					data.targets[data.cameraColorIndex] = BuiltinRenderTextureType.CameraTarget;
+				}
+				else
+				{
+					command.GetTemporaryRT(data.cameraTargetId, GetRenderTextureDescriptor(data.targetDescriptors[data.cameraColorIndex], true));
+					data.targets[data.cameraColorIndex] = data.cameraTargetId;
+				}
+
+				colorPass.WriteAttachment(data.targetDescriptors[data.cameraColorIndex], data.targets[data.cameraColorIndex], true);
+
+				colorPass.Render();
+
+				command.DrawRendererList(((ScriptableRenderContext)data.context).CreateRendererList(new(new ShaderTagId("Forward"), data.cullingResults, data.camera) { renderQueueRange = RenderQueueRange.opaque }));
+
+				command.EndRenderPass();
 
 				if (data.asset.Samples > 1 && data.camera.targetTexture == null)
 					command.SetInvertCulling(false);
@@ -240,17 +237,19 @@ public class NewPipeline : RenderPipeline
 					// When rendering to the backbuffer we need to avoid flipping (This is kind of inverted keyword)
 					if (data.camera.targetTexture == null)
 						command.EnableShaderKeyword("FLIP");
-				
-					using (var blitPass = AddNativeRenderPass(new(data.camera.pixelWidth, data.camera.pixelHeight), 1, command, "Blit", data.blitMaterial, static (command, blitMaterial) =>
-					{
-						command.DrawProcedural(Matrix4x4.identity, blitMaterial, 0, MeshTopology.Triangles, 3);
-					}))
-					{
-						if (data.requiresDepthResolve)
-							blitPass.WriteAttachment(data.targetDescriptors[data.cameraDepthIndex], data.camera.targetTexture, false);
 
-						blitPass.WriteAttachment(data.targetDescriptors[data.cameraColorIndex], data.camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : data.camera.targetTexture, false);
-					}
+					var blitPass = new NativeRenderPass(new(data.camera.pixelWidth, data.camera.pixelHeight), 1, command, "Blit");
+
+					if (data.requiresDepthResolve)
+						blitPass.WriteAttachment(data.targetDescriptors[data.cameraDepthIndex], data.camera.targetTexture, false);
+
+					blitPass.WriteAttachment(data.targetDescriptors[data.cameraColorIndex], data.camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : data.camera.targetTexture, false);
+
+					blitPass.Render();
+
+					command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
+
+					command.EndRenderPass();
 
 					if (data.camera.targetTexture == null)
 						command.DisableShaderKeyword("FLIP");

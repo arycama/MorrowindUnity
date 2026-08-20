@@ -1,12 +1,11 @@
 using System;
 using System.Text;
 using Unity.Collections;
-using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using Unmath;
 
-public struct NativeRenderPass<T> : IDisposable
+public struct NativeRenderPass
 {
 	private readonly Int2 size;
 	private readonly int samples;
@@ -17,17 +16,13 @@ public struct NativeRenderPass<T> : IDisposable
 	private readonly NativeList<SubPassDescriptor> subpasses;
 	private readonly NativeList<int> colorOutputs;
 	private int depthIndex;
-	private Action<CommandBuffer, T> render;
-	private T data;
 
-	public NativeRenderPass(Int2 size, int samples, CommandBuffer command, string name, T data, Action<CommandBuffer, T> render)
+	public NativeRenderPass(Int2 size, int samples, CommandBuffer command, string name)
 	{
 		this.size = size;
 		this.samples = samples;
 		this.command = command;
 		this.name = name;
-		this.data = data;
-		this.render = render;
 
 		depthIndex = -1;
 
@@ -73,7 +68,7 @@ public struct NativeRenderPass<T> : IDisposable
 			colorOutputs.Add(index);
 	}
 
-	void IDisposable.Dispose()
+	public void Render()
 	{
 		// End subpass
 		subpasses.Add(new() { colorOutputs = new(colorOutputs.AsArray()) });
@@ -86,9 +81,5 @@ public struct NativeRenderPass<T> : IDisposable
 		attachments.Clear();
 		depthIndex = -1;
 		subpasses.Clear();
-
-		render(command, data);
-
-		command.EndRenderPass();
 	}
 }
