@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unity.Collections;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -16,6 +17,10 @@ public class NewPipeline : RenderPipeline
 	private readonly List<RenderTargetIdentifier?> targets = new();
 	private readonly List<bool> targetsRead = new();
 	private readonly List<IRenderPass> renderPasses = new();
+	private readonly NativeList<AttachmentDescriptor> attachments = new(8, Allocator.Persistent);
+	private readonly NativeList<SubPassDescriptor> subpasses = new(8, Allocator.Persistent);
+	private readonly NativeList<int> colorOutputs = new(8, Allocator.Persistent);
+	private int depthIndex = -1;
 
 	public NewPipeline(NewPipelineAsset asset)
 	{
@@ -170,10 +175,7 @@ public class NewPipeline : RenderPipeline
 			{
 				using (var colorPass = AddNativeRenderPass(new(data.camera.pixelWidth, data.camera.pixelHeight), data.asset.Samples, command, "Base Pass", (data.context, data.cullingResults, data.camera), static (command, data) =>
 				{
-					var context = data.context;
-					var cullingResults = data.cullingResults;
-					var camera = data.camera;
-					command.DrawRendererList(context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque }));
+					command.DrawRendererList(((ScriptableRenderContext)data.context).CreateRendererList(new(new ShaderTagId("Forward"), data.cullingResults, data.camera) { renderQueueRange = RenderQueueRange.opaque }));
 				}))
 				{
 					// TODO: This logic should be deferred 
