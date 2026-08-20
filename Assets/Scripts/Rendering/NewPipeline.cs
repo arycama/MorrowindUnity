@@ -1,8 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using Unity.Collections;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -18,6 +15,7 @@ public class NewPipeline : RenderPipeline
 	private readonly List<RenderTargetDescriptor> targetDescriptors = new();
 	private readonly List<RenderTargetIdentifier?> targets = new();
 	private readonly List<bool> targetsRead = new();
+	private readonly List<IRenderPass> renderPasses = new();
 
 	public NewPipeline(NewPipelineAsset asset)
 	{
@@ -26,7 +24,7 @@ public class NewPipeline : RenderPipeline
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
 	}
 
-	public RenderTextureDescriptor GetRenderTextureDescriptor(RenderTargetDescriptor a, bool resolve)
+	private static RenderTextureDescriptor GetRenderTextureDescriptor(RenderTargetDescriptor a, bool resolve)
 	{
 		bool isColor = false, isDepth = false, isStencil = false;
 		switch (a.format)
@@ -77,10 +75,21 @@ public class NewPipeline : RenderPipeline
 		return targetDescriptors.Count - 1;
 	}
 
-	private void ReadTexture(string propertyName, int index)
+	private static void ReadTexture(string propertyName, int index, CommandBuffer command, List<bool> targetsRead, List<RenderTargetIdentifier?> targets)
 	{
 		targetsRead[index] = true;
 		command.SetGlobalTexture(propertyName, targets[index].Value);
+	}
+
+	private int AddRenderPass<T>(T data, Action<CommandBuffer, T> render)
+	{
+		renderPasses.Add(new RenderPass<T>(data, render));
+		return renderPasses.Count;
+	}
+
+	private static NativeRenderPass<T> AddNativeRenderPass<T>(Int2 size, int samples, CommandBuffer command, string name, T data, Action<CommandBuffer, T> render)
+	{
+		return new NativeRenderPass<T>(size, samples, command, name, data, render);
 	}
 
 	protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
@@ -90,6 +99,7 @@ public class NewPipeline : RenderPipeline
 		targetDescriptors.Clear();
 		targets.Clear();
 		targetsRead.Clear();
+		renderPasses.Clear();
 
 		foreach (var camera in cameras)
 		{
@@ -125,12 +135,13 @@ public class NewPipeline : RenderPipeline
 			var directToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
 
 			// Pass 0
+			AddRenderPass((camera, asset, requiresDepthResolve), static (command, data) =>
 			{
 				// Setup view data
-				var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
-				var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
-				var worldToView = Float4x4.WorldToLocal(0.0f, camera.transform.WorldRotation());
-				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, camera.nearClipPlane, camera.farClipPlane);
+				var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
+				var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
+				var worldToView = Float4x4.WorldToLocal(0.0f, data.camera.transform.WorldRotation());
+				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, data.camera.nearClipPlane, data.camera.farClipPlane);
 				var worldToClip = viewToClip.Mul(worldToView);
 
 				var fogEnabled = RenderSettings.fog;
@@ -141,8 +152,8 @@ public class NewPipeline : RenderPipeline
 
 				command.SetGlobalMatrix("WorldToView", worldToView);
 				command.SetGlobalMatrix("WorldToClip", worldToClip);
-				command.SetGlobalVector("ViewPosition", camera.transform.position);
-				command.SetGlobalVector("SunDirection", camera.transform.WorldRotation().InverseRotate(-RenderSettings.sun.transform.forward));
+				command.SetGlobalVector("ViewPosition", data.camera.transform.position);
+				command.SetGlobalVector("SunDirection", data.camera.transform.WorldRotation().InverseRotate(-RenderSettings.sun.transform.forward));
 				command.SetGlobalVector("SunColor", RenderSettings.sun.color.linear);
 				command.SetGlobalVector("AmbientLight", RenderSettings.ambientLight.linear);
 				command.SetGlobalVector("FogColor", RenderSettings.fogColor.linear);
@@ -151,139 +162,154 @@ public class NewPipeline : RenderPipeline
 
 				// This is basically only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
 				// TODO: Explain this betetr (I think its because we don't flip, but msaa causes culling to invert anyway? um
-				if (asset.Samples > 1 && camera.targetTexture == null)
+				if (data.asset.Samples > 1 && data.camera.targetTexture == null)
 					command.SetInvertCulling(true);
+			});
 
-				using (var colorPass = new RenderPass(new(camera.pixelWidth, camera.pixelHeight), asset.Samples, command, "Base Pass", () =>
+			AddRenderPass((camera, asset, requiresDepthResolve, context, cullingResults, cameraDepthId, targetDescriptors, cameraDepthIndex, targets, directToBackbuffer, cameraColorIndex, cameraTargetId), static (command, data) =>
+			{
+				using (var colorPass = AddNativeRenderPass(new(data.camera.pixelWidth, data.camera.pixelHeight), data.asset.Samples, command, "Base Pass", (data.context, data.cullingResults, data.camera), static (command, data) =>
 				{
+					var context = data.context;
+					var cullingResults = data.cullingResults;
+					var camera = data.camera;
 					command.DrawRendererList(context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque }));
 				}))
 				{
 					// TODO: This logic should be deferred 
-					if (requiresDepthResolve)
+					if (data.requiresDepthResolve)
 					{
-						command.GetTemporaryRT(cameraDepthId, GetRenderTextureDescriptor(targetDescriptors[cameraDepthIndex], false));
-						targets[cameraDepthIndex] = cameraDepthId;
+						command.GetTemporaryRT(data.cameraDepthId, GetRenderTextureDescriptor(data.targetDescriptors[data.cameraDepthIndex], false));
+						data.targets[data.cameraDepthIndex] = data.cameraDepthId;
 					}
 
 					// TODO: This should just be a list of things passed to the struct. (Span?)
-					colorPass.WriteAttachment(targetDescriptors[cameraDepthIndex], targets[cameraDepthIndex], false);
+					colorPass.WriteAttachment(data.targetDescriptors[data.cameraDepthIndex], data.targets[data.cameraDepthIndex], false);
 
-					if (directToBackbuffer)
+					if (data.directToBackbuffer)
 					{
-						targets[cameraColorIndex] = BuiltinRenderTextureType.CameraTarget;
+						data.targets[data.cameraColorIndex] = BuiltinRenderTextureType.CameraTarget;
 					}
 					else
 					{
-						command.GetTemporaryRT(cameraTargetId, GetRenderTextureDescriptor(targetDescriptors[cameraColorIndex], true));
-						targets[cameraColorIndex] = cameraTargetId;
+						command.GetTemporaryRT(data.cameraTargetId, GetRenderTextureDescriptor(data.targetDescriptors[data.cameraColorIndex], true));
+						data.targets[data.cameraColorIndex] = data.cameraTargetId;
 					}
 
-					colorPass.WriteAttachment(targetDescriptors[cameraColorIndex], targets[cameraColorIndex], true);
+					colorPass.WriteAttachment(data.targetDescriptors[data.cameraColorIndex], data.targets[data.cameraColorIndex], true);
 				}
 
-				if (asset.Samples > 1 && camera.targetTexture == null)
+				if (data.asset.Samples > 1 && data.camera.targetTexture == null)
 					command.SetInvertCulling(false);
-			}
+			});
 
 			// Pass 1
 			if (!directToBackbuffer)
 			{
-				command.SetWireframe(false);
-				command.SetGlobalVector("ViewSize", new(camera.pixelWidth, camera.pixelHeight));
-
-				// Can't really be a subpass since it requires resolving or flipping
-				ReadTexture("CameraTarget", cameraColorIndex);
-
-				if (requiresDepthResolve)
+				AddRenderPass((camera, cameraColorIndex, requiresDepthResolve, cameraDepthIndex, targetsRead, targets, asset, blitMaterial, targetDescriptors), static (command, data) =>
 				{
-					ReadTexture("CameraDepth", cameraDepthIndex);
+					command.SetWireframe(false);
+					command.SetGlobalVector("ViewSize", new(data.camera.pixelWidth, data.camera.pixelHeight));
 
-					switch (asset.Samples)
+					// Can't really be a subpass since it requires resolving or flipping
+					ReadTexture("CameraTarget", data.cameraColorIndex, command, data.targetsRead, data.targets);
+
+					if (data.requiresDepthResolve)
 					{
-						case 1:
-							command.EnableShaderKeyword("DEPTH");
-							break;
-						case 2:
-							command.EnableShaderKeyword("DEPTH_MSAA_2");
-							break;
-						case 4:
-							command.EnableShaderKeyword("DEPTH_MSAA_4");
-							break;
-						case 8:
-							command.EnableShaderKeyword("DEPTH_MSAA_8");
-							break;
+						ReadTexture("CameraDepth", data.cameraDepthIndex, command, data.targetsRead, data.targets);
+
+						switch (data.asset.Samples)
+						{
+							case 1:
+								command.EnableShaderKeyword("DEPTH");
+								break;
+							case 2:
+								command.EnableShaderKeyword("DEPTH_MSAA_2");
+								break;
+							case 4:
+								command.EnableShaderKeyword("DEPTH_MSAA_4");
+								break;
+							case 8:
+								command.EnableShaderKeyword("DEPTH_MSAA_8");
+								break;
+						}
 					}
-				}
 
-				// When rendering to the backbuffer we need to avoid flipping (This is kind of inverted keyword)
-				if (camera.targetTexture == null)
-					command.EnableShaderKeyword("FLIP");
-
-				using (var blitPass = new RenderPass(new(camera.pixelWidth, camera.pixelHeight), 1, command, "Blit", () =>
-				{
-					command.DrawProcedural(Matrix4x4.identity, blitMaterial, 0, MeshTopology.Triangles, 3);
-				}))
-				{
-					if (requiresDepthResolve)
-						blitPass.WriteAttachment(targetDescriptors[cameraDepthIndex], camera.targetTexture, false);
-
-					blitPass.WriteAttachment(targetDescriptors[cameraColorIndex], camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture, false);
-				}
-
-				if (camera.targetTexture == null)
-					command.DisableShaderKeyword("FLIP");
-
-				if (requiresDepthResolve)
-				{
-					switch (asset.Samples)
+					// When rendering to the backbuffer we need to avoid flipping (This is kind of inverted keyword)
+					if (data.camera.targetTexture == null)
+						command.EnableShaderKeyword("FLIP");
+				
+					using (var blitPass = AddNativeRenderPass(new(data.camera.pixelWidth, data.camera.pixelHeight), 1, command, "Blit", data.blitMaterial, static (command, blitMaterial) =>
 					{
-						case 1:
-							command.DisableShaderKeyword("DEPTH");
-							break;
-						case 2:
-							command.DisableShaderKeyword("DEPTH_MSAA_2");
-							break;
-						case 4:
-							command.DisableShaderKeyword("DEPTH_MSAA_4");
-							break;
-						case 8:
-							command.DisableShaderKeyword("DEPTH_MSAA_8");
-							break;
+						command.DrawProcedural(Matrix4x4.identity, blitMaterial, 0, MeshTopology.Triangles, 3);
+					}))
+					{
+						if (data.requiresDepthResolve)
+							blitPass.WriteAttachment(data.targetDescriptors[data.cameraDepthIndex], data.camera.targetTexture, false);
+
+						blitPass.WriteAttachment(data.targetDescriptors[data.cameraColorIndex], data.camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : data.camera.targetTexture, false);
 					}
-				}
+
+					if (data.camera.targetTexture == null)
+						command.DisableShaderKeyword("FLIP");
+
+					if (data.requiresDepthResolve)
+					{
+						switch (data.asset.Samples)
+						{
+							case 1:
+								command.DisableShaderKeyword("DEPTH");
+								break;
+							case 2:
+								command.DisableShaderKeyword("DEPTH_MSAA_2");
+								break;
+							case 4:
+								command.DisableShaderKeyword("DEPTH_MSAA_4");
+								break;
+							case 8:
+								command.DisableShaderKeyword("DEPTH_MSAA_8");
+								break;
+						}
+					}
+				});
 			}
 
+			AddRenderPass((camera, context), static (command, data) =>
 			{
 				// Editor-only, to make selection-wireframe render properly, we need to setup the same camera properties again but with a flipped matrix
-				var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
-				var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
-				var worldToView = Float4x4.WorldToLocal(0.0f, camera.transform.WorldRotation());
-				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, camera.nearClipPlane, camera.farClipPlane, 0, true);
+				var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
+				var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
+				var worldToView = Float4x4.WorldToLocal(0.0f, data.camera.transform.WorldRotation());
+				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, data.camera.nearClipPlane, data.camera.farClipPlane, 0, true);
 				var worldToClip = viewToClip.Mul(worldToView);
 				command.SetGlobalMatrix("WorldToClip", worldToClip);
 
 				// For selection outline to work, we need to also set this builtin matrix
-				var worldToViewAbs = Float4x4.WorldToLocal(camera.transform.WorldPosition(), camera.transform.WorldRotation());
+				var worldToViewAbs = Float4x4.WorldToLocal(data.camera.transform.WorldPosition(), data.camera.transform.WorldRotation());
 				var worldToClipAbs = viewToClip.Mul(worldToViewAbs);
 				command.SetGlobalMatrix("unity_MatrixVP", worldToClipAbs);
-			}
 
-			command.DrawRendererList(context.CreateWireOverlayRendererList(camera));
+				command.DrawRendererList(((ScriptableRenderContext)data.context).CreateWireOverlayRendererList(data.camera));
 
-			if (Handles.ShouldRenderGizmos())
-			{
-				command.DrawRendererList(context.CreateGizmoRendererList(camera, GizmoSubset.PreImageEffects));
-				command.DrawRendererList(context.CreateGizmoRendererList(camera, GizmoSubset.PostImageEffects));
-			}
+				if (Handles.ShouldRenderGizmos())
+				{
+					command.DrawRendererList(((ScriptableRenderContext)data.context).CreateGizmoRendererList(data.camera, GizmoSubset.PreImageEffects));
+					command.DrawRendererList(((ScriptableRenderContext)data.context).CreateGizmoRendererList(data.camera, GizmoSubset.PostImageEffects));
+				}
+			});
 		}
 
-		// Set matrices for UI rendering
-		var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
-		command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
+		AddRenderPass(0, static (command, data) =>
+		{
+			// Set matrices for UI rendering
+			var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
+			command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
+		});
+
+		foreach (var pass in renderPasses)
+			pass.Execute(command);
 
 		context.ExecuteCommandBuffer(command);
-		command.Clear();
 
 		if (context.SubmitForRenderPassValidation())
 			context.Submit();
