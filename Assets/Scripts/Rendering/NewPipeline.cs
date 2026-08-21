@@ -124,7 +124,7 @@ public class NewPipeline : RenderPipeline
 		}
 	}
 
-	private void BeginRenderPass(Int2 size, int depthBufferIndex, int samples, string name)
+	private void BeginRenderPass(Int2 size, int samples, string name)
 	{
 		subpasses.Add(new() { colorOutputs = new(colorOutputs.AsArray()) });
 		colorOutputs.Clear();
@@ -132,9 +132,10 @@ public class NewPipeline : RenderPipeline
 		Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(name)];
 		_ = Encoding.UTF8.GetBytes(name, debugNameUtf8);
 
-		command.BeginRenderPass(size.x, size.y, samples, attachments.AsArray(), depthBufferIndex, subpasses.AsArray(), debugNameUtf8);
+		command.BeginRenderPass(size.x, size.y, samples, attachments.AsArray(), depthIndex, subpasses.AsArray(), debugNameUtf8);
 		subpasses.Clear();
 		attachments.Clear();
+		depthIndex = -1;
 	}
 
 	private RenderPass<T> AddRenderPass<T>(T data)
@@ -251,7 +252,7 @@ public class NewPipeline : RenderPipeline
 				renderForward.WriteTexture(cameraDepth);
 				renderForward.WriteTexture(cameraTarget);
 
-				BeginRenderPass(new(camera.pixelWidth, camera.pixelHeight), 0, asset.Samples, "Base Pass");
+				BeginRenderPass(new(camera.pixelWidth, camera.pixelHeight), asset.Samples, "Base Pass");
 
 				renderForward.SetRenderFunction(static (command, data) =>
 				{
@@ -302,9 +303,6 @@ public class NewPipeline : RenderPipeline
 				var finalBlit = AddRenderPass((blitMaterial, camera, asset));
 				var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat));
 
-				// TODO: Remove
-				var depthIndex = camera.cameraType == CameraType.SceneView ? 1 : -1;
-
 				OutputTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
 				WriteTexture(backbufferColor);
 				finalBlit.WriteTexture(backbufferColor);
@@ -324,7 +322,7 @@ public class NewPipeline : RenderPipeline
 				if (camera.cameraType == CameraType.SceneView)
 					ReadTexture("CameraDepth", cameraDepth, command);
 
-				BeginRenderPass(new(camera.pixelWidth, camera.pixelHeight), depthIndex, 1, "Blit Pass");
+				BeginRenderPass(new(camera.pixelWidth, camera.pixelHeight), 1, "Blit Pass");
 				finalBlit.SetRenderFunction(static (command, data) =>
 				{
 					command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
