@@ -6,20 +6,25 @@ public readonly struct RenderPass<T> : IRenderPass
 {
 	private readonly T data;
 	private readonly Action<CommandBuffer, T> render;
-	private readonly List<int> inputs;
-	private readonly List<int> outputs;
+	private readonly List<(TextureHandle, int)> inputs;
+	private readonly List<TextureHandle> outputs;
 
-	public RenderPass(T data, Action<CommandBuffer, T> render)
+	public RenderPass(T data)
 	{
 		this.data = data;
-		this.render = render;
+		render = null;
 		inputs = new();
 		outputs = new();
 	}
 
-	public void ReadTexture()
+	public void ReadTexture(TextureHandle handle, int propertyId)
 	{
+		inputs.Add((handle, propertyId));
+	}
 
+	public void WriteTexture(TextureHandle handle)
+	{
+		outputs.Add(handle);
 	}
 
 	readonly void IRenderPass.Execute(CommandBuffer command)

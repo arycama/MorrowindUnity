@@ -15,8 +15,13 @@ public class NewPipeline : RenderPipeline
 	private readonly NewPipelineAsset asset;
 	private readonly CommandBuffer command;
 	private readonly Material blitMaterial;
+
+	// Renderpass
 	private readonly NativeList<AttachmentDescriptor> attachments = new(8, Allocator.Persistent);
 	private readonly NativeList<SubPassDescriptor> subpasses = new(8, Allocator.Persistent);
+	private readonly NativeList<int> colorOutputs = new(8, Allocator.Persistent);
+	private int depthIndex = -1;
+
 	private readonly List<RenderTargetDescriptor> targetDescriptors = new();
 	private readonly List<int> resourceIndices = new();
 	private readonly List<RenderTargetIdentifier> resources = new();
@@ -83,12 +88,12 @@ public class NewPipeline : RenderPipeline
 		return new(targetDescriptors.Count - 1);
 	}
 
-	private void WriteTexture(TextureHandle handle, bool resolve = true)
+	private void WriteTexture(TextureHandle handle, bool dontResolve = false)
 	{
 		var descriptor = targetDescriptors[handle.index];
 		var resourceIndex = resourceIndices[handle.index];
 		var hasTarget = resourceIndex != -1;
-		var requiresResolve = hasTarget && resolve && descriptor.samples > 1;
+		var requiresResolve = hasTarget && !dontResolve && descriptor.samples > 1;
 
 		attachments.Add(new AttachmentDescriptor
 		{
@@ -101,10 +106,29 @@ public class NewPipeline : RenderPipeline
 			clearDepth = descriptor.clearDepth,
 			clearStencil = descriptor.clearStencil
 		});
+
+		var index = attachments.Length - 1;
+		switch(descriptor.format)
+		{
+			case GraphicsFormat.D16_UNorm:
+			case GraphicsFormat.D24_UNorm:
+			case GraphicsFormat.D32_SFloat:
+			case GraphicsFormat.D16_UNorm_S8_UInt:
+			case GraphicsFormat.D24_UNorm_S8_UInt:
+			case GraphicsFormat.D32_SFloat_S8_UInt:
+				depthIndex = index;
+				break;
+			default:
+				colorOutputs.Add(index);
+				break;
+		}
 	}
 
 	private void BeginRenderPass(Int2 size, int depthBufferIndex, int samples, string name)
 	{
+		subpasses.Add(new() { colorOutputs = new(colorOutputs.AsArray()) });
+		colorOutputs.Clear();
+
 		Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(name)];
 		_ = Encoding.UTF8.GetBytes(name, debugNameUtf8);
 
@@ -195,14 +219,12 @@ public class NewPipeline : RenderPipeline
 
 			// TODO: This should also account for HDR
 			var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
-			var cameraDepthDescriptor = new RenderTargetDescriptor(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true);
 
 			var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 			var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
-			var cameraTargetDescriptor = new RenderTargetDescriptor(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear);
 
-			var cameraDepth = GetTexture(cameraDepthDescriptor);
-			var cameraTarget = GetTexture(cameraTargetDescriptor);
+			var cameraDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true));
+			var cameraTarget = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear));
 
 			// Pass 1: Render forward
 			var renderForward = AddRenderPass(0, (command, data) => { });
@@ -210,18 +232,17 @@ public class NewPipeline : RenderPipeline
 				// For scene view we need depth for wireframe (Note that msaa depth can not be resolved automatically so we need to store and manually resolve later)
 				if (camera.cameraType == CameraType.SceneView)
 					OutputTexture(cameraDepthId, cameraDepth, false);
-				WriteTexture(cameraDepth, false);
 
 				if (!renderToBackbuffer)
 					OutputTexture(cameraTargetId, cameraTarget, true);
 				else
 					OutputTexture(cameraTarget, BuiltinRenderTextureType.CameraTarget);
 
-				WriteTexture(cameraTarget, true);
+				WriteTexture(cameraDepth, true);
+				WriteTexture(cameraTarget);
 
-				var colorOutputs = new AttachmentIndexArray(1);
-				colorOutputs[0] = 1;
-				subpasses.Add(new() { colorOutputs = colorOutputs });
+				renderForward.WriteTexture(cameraDepth);
+				renderForward.WriteTexture(cameraTarget);
 				BeginRenderPass(new(camera.pixelWidth, camera.pixelHeight), 0, asset.Samples, "Base Pass");
 
 				// This is basically only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
@@ -238,24 +259,25 @@ public class NewPipeline : RenderPipeline
 
 			if (!renderToBackbuffer)
 			{
-				var finalBlit = AddRenderPass(0, (command, data) => { });
-
-				var backbufferColor = GetTexture(cameraTargetDescriptor);
-
 				// Pass 2: Final blit/resolve if needed
-				// Need to bind the camera's depth buffer 
+				var finalBlit = AddRenderPass(0, (command, data) => { });
+				var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat));
+
+				// TODO: Remove
 				var attachmentCount = camera.cameraType == CameraType.SceneView ? 2 : 1;
 				var depthIndex = camera.cameraType == CameraType.SceneView ? 1 : -1;
 
 				OutputTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
-				WriteTexture(backbufferColor, false);
+				WriteTexture(backbufferColor);
+				finalBlit.WriteTexture(backbufferColor);
 
 				// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 				if (camera.cameraType == CameraType.SceneView)
 				{
-					var sceneDepth = GetTexture(cameraDepthDescriptor);
+					var sceneDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat));
 					OutputTexture(sceneDepth, camera.targetTexture);
-					WriteTexture(sceneDepth, false);
+					WriteTexture(sceneDepth);
+					finalBlit.WriteTexture(sceneDepth);
 				}
 
 				// Can't really be a subpass since it requires resolving or flipping
@@ -289,9 +311,6 @@ public class NewPipeline : RenderPipeline
 				command.SetGlobalVector("ViewSize", new(camera.pixelWidth, camera.pixelHeight));
 				command.SetWireframe(false);
 
-				var colorOutputs = new AttachmentIndexArray(1);
-				colorOutputs[0] = 0;
-				subpasses.Add(new() { colorOutputs = colorOutputs });
 				BeginRenderPass(new(camera.pixelWidth, camera.pixelHeight), depthIndex, 1, "Blit Pass");
 				command.DrawProcedural(Matrix4x4.identity, blitMaterial, 0, MeshTopology.Triangles, 3);
 				command.EndRenderPass();
