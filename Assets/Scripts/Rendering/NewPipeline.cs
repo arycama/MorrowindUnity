@@ -108,7 +108,7 @@ public class NewPipeline : RenderPipeline
 		});
 
 		var index = attachments.Length - 1;
-		switch(descriptor.format)
+		switch (descriptor.format)
 		{
 			case GraphicsFormat.D16_UNorm:
 			case GraphicsFormat.D24_UNorm:
@@ -137,9 +137,9 @@ public class NewPipeline : RenderPipeline
 		attachments.Clear();
 	}
 
-	private RenderPass<T> AddRenderPass<T>(T data, Action<CommandBuffer, T> render)
+	private RenderPass<T> AddRenderPass<T>(T data)
 	{
-		return new RenderPass<T>(data, render);
+		return new RenderPass<T>(data);
 	}
 
 	private void OutputTexture(TextureHandle handle, RenderTargetIdentifier id)
@@ -185,33 +185,35 @@ public class NewPipeline : RenderPipeline
 			var cullingResults = context.Cull(ref cullingParameters);
 
 			// Pass 0: Setup view data
-			var setViewData = AddRenderPass(0, (command, data) => { });
-			{
-				var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
-				var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
-				var worldToView = Float4x4.WorldToLocal(0.0f, camera.transform.WorldRotation());
-				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, camera.nearClipPlane, camera.farClipPlane);
-				var worldToClip = viewToClip.Mul(worldToView);
-
-				var fogEnabled = RenderSettings.fog;
+			var fogEnabled = RenderSettings.fog;
 #if UNITY_EDITOR
-				if (SceneView.currentDrawingSceneView != null)
-					fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
+			if (SceneView.currentDrawingSceneView != null)
+				fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
-				command.SetGlobalMatrix("WorldToView", worldToView);
-				command.SetGlobalMatrix("WorldToClip", worldToClip);
-				command.SetGlobalVector("ViewPosition", camera.transform.position);
-				command.SetGlobalVector("SunDirection", camera.transform.WorldRotation().InverseRotate(-RenderSettings.sun.transform.forward));
-				command.SetGlobalVector("SunColor", RenderSettings.sun.color.linear);
-				command.SetGlobalVector("AmbientLight", RenderSettings.ambientLight.linear);
-				command.SetGlobalVector("FogColor", RenderSettings.fogColor.linear);
-				command.SetGlobalFloat("FogScale", fogEnabled ? 1 / (RenderSettings.fogEndDistance - RenderSettings.fogStartDistance) : 0);
-				command.SetGlobalFloat("FogOffset", fogEnabled ? RenderSettings.fogStartDistance / (RenderSettings.fogStartDistance - RenderSettings.fogEndDistance) : 0);
-			}
+			var setViewData = AddRenderPass((camera, fogEnabled));
+			{
+				setViewData.SetRenderFunction(static (command, data) =>
+				{
+					var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
+					var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
+					var worldToView = Float4x4.WorldToLocal(0.0f, data.camera.transform.WorldRotation());
+					var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, data.camera.nearClipPlane, data.camera.farClipPlane);
+					var worldToClip = viewToClip.Mul(worldToView);
 
-			var cameraTargetId = Shader.PropertyToID("CameraTarget");
-			var cameraDepthId = Shader.PropertyToID("CameraDepth");
+					command.SetGlobalMatrix("WorldToView", worldToView);
+					command.SetGlobalMatrix("WorldToClip", worldToClip);
+					command.SetGlobalVector("ViewPosition", data.camera.transform.position);
+					command.SetGlobalVector("SunDirection", data.camera.transform.WorldRotation().InverseRotate(-RenderSettings.sun.transform.forward));
+					command.SetGlobalVector("SunColor", RenderSettings.sun.color.linear);
+					command.SetGlobalVector("AmbientLight", RenderSettings.ambientLight.linear);
+					command.SetGlobalVector("FogColor", RenderSettings.fogColor.linear);
+					command.SetGlobalFloat("FogScale", data.fogEnabled ? 1 / (RenderSettings.fogEndDistance - RenderSettings.fogStartDistance) : 0);
+					command.SetGlobalFloat("FogOffset", data.fogEnabled ? RenderSettings.fogStartDistance / (RenderSettings.fogStartDistance - RenderSettings.fogEndDistance) : 0);
+				});
+
+				setViewData.Render(command);
+			}
 
 			// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 			// TODO: Check for hardware msaa backbuffer resolve support
@@ -227,14 +229,15 @@ public class NewPipeline : RenderPipeline
 			var cameraTarget = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear));
 
 			// Pass 1: Render forward
-			var renderForward = AddRenderPass(0, (command, data) => { });
+			var rendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque });
+			var renderForward = AddRenderPass((asset, camera, rendererList));
 			{
 				// For scene view we need depth for wireframe (Note that msaa depth can not be resolved automatically so we need to store and manually resolve later)
 				if (camera.cameraType == CameraType.SceneView)
-					OutputTexture(cameraDepthId, cameraDepth, false);
+					OutputTexture(Shader.PropertyToID("CameraDepth"), cameraDepth, false);
 
 				if (!renderToBackbuffer)
-					OutputTexture(cameraTargetId, cameraTarget, true);
+					OutputTexture(Shader.PropertyToID("CameraTarget"), cameraTarget, true);
 				else
 					OutputTexture(cameraTarget, BuiltinRenderTextureType.CameraTarget);
 
@@ -243,24 +246,60 @@ public class NewPipeline : RenderPipeline
 
 				renderForward.WriteTexture(cameraDepth);
 				renderForward.WriteTexture(cameraTarget);
+
 				BeginRenderPass(new(camera.pixelWidth, camera.pixelHeight), 0, asset.Samples, "Base Pass");
 
-				// This is basically only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
-				if (asset.Samples > 1 && camera.targetTexture == null)
-					command.SetInvertCulling(true);
+				renderForward.SetRenderFunction(static (command, data) =>
+				{
+					// This is basically only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
+					if (data.asset.Samples > 1 && data.camera.targetTexture == null)
+						command.SetInvertCulling(true);
 
-				command.DrawRendererList(context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque }));
+					command.DrawRendererList(data.rendererList);
 
-				if (asset.Samples > 1 && camera.targetTexture == null)
-					command.SetInvertCulling(false);
+					if (data.asset.Samples > 1 && data.camera.targetTexture == null)
+						command.SetInvertCulling(false);
 
-				command.EndRenderPass();
+					command.EndRenderPass();
+				});
+
+				renderForward.Render(command);
 			}
 
 			if (!renderToBackbuffer)
 			{
+				var finalBlitSetup = AddRenderPass((camera, asset));
+				finalBlitSetup.SetRenderFunction(static (command, data) =>
+				{
+					if (data.camera.targetTexture == null)
+						command.EnableShaderKeyword("FLIP");
+
+					if (data.camera.cameraType == CameraType.SceneView)
+					{
+						switch (data.asset.Samples)
+						{
+							case 1:
+								command.EnableShaderKeyword("DEPTH");
+								break;
+							case 2:
+								command.EnableShaderKeyword("DEPTH_MSAA_2");
+								break;
+							case 4:
+								command.EnableShaderKeyword("DEPTH_MSAA_4");
+								break;
+							case 8:
+								command.EnableShaderKeyword("DEPTH_MSAA_8");
+								break;
+						}
+					}
+
+					command.SetGlobalVector("ViewSize", new(data.camera.pixelWidth, data.camera.pixelHeight));
+					command.SetWireframe(false);
+				});
+				finalBlitSetup.Render(command);
+
 				// Pass 2: Final blit/resolve if needed
-				var finalBlit = AddRenderPass(0, (command, data) => { });
+				var finalBlit = AddRenderPass((blitMaterial, camera, asset));
 				var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat));
 
 				// TODO: Remove
@@ -286,62 +325,56 @@ public class NewPipeline : RenderPipeline
 				if (camera.cameraType == CameraType.SceneView)
 					ReadTexture("CameraDepth", cameraDepth, command);
 
-				if (camera.targetTexture == null)
-					command.EnableShaderKeyword("FLIP");
-
-				if (camera.cameraType == CameraType.SceneView)
-				{
-					switch (asset.Samples)
-					{
-						case 1:
-							command.EnableShaderKeyword("DEPTH");
-							break;
-						case 2:
-							command.EnableShaderKeyword("DEPTH_MSAA_2");
-							break;
-						case 4:
-							command.EnableShaderKeyword("DEPTH_MSAA_4");
-							break;
-						case 8:
-							command.EnableShaderKeyword("DEPTH_MSAA_8");
-							break;
-					}
-				}
-
-				command.SetGlobalVector("ViewSize", new(camera.pixelWidth, camera.pixelHeight));
-				command.SetWireframe(false);
-
 				BeginRenderPass(new(camera.pixelWidth, camera.pixelHeight), depthIndex, 1, "Blit Pass");
-				command.DrawProcedural(Matrix4x4.identity, blitMaterial, 0, MeshTopology.Triangles, 3);
-				command.EndRenderPass();
 
-				if (camera.targetTexture == null)
-					command.DisableShaderKeyword("FLIP");
-
-				if (camera.cameraType == CameraType.SceneView)
+				finalBlit.SetRenderFunction(static (command, data) =>
 				{
-					switch (asset.Samples)
+					command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
+					command.EndRenderPass();
+
+					if (data.camera.targetTexture == null)
+						command.DisableShaderKeyword("FLIP");
+
+					if (data.camera.cameraType == CameraType.SceneView)
 					{
-						case 1:
-							command.DisableShaderKeyword("DEPTH");
-							break;
-						case 2:
-							command.DisableShaderKeyword("DEPTH_MSAA_2");
-							break;
-						case 4:
-							command.DisableShaderKeyword("DEPTH_MSAA_4");
-							break;
-						case 8:
-							command.DisableShaderKeyword("DEPTH_MSAA_8");
-							break;
+						switch (data.asset.Samples)
+						{
+							case 1:
+								command.DisableShaderKeyword("DEPTH");
+								break;
+							case 2:
+								command.DisableShaderKeyword("DEPTH_MSAA_2");
+								break;
+							case 4:
+								command.DisableShaderKeyword("DEPTH_MSAA_4");
+								break;
+							case 8:
+								command.DisableShaderKeyword("DEPTH_MSAA_8");
+								break;
+						}
 					}
-				}
+				});
+
+				finalBlit.Render(command);
 			}
 
 			// Pass 3, render gizmos wireframe (editor-only
 			{
-				var renderGizmos = AddRenderPass(0, (command, data) => { });
+				var renderGizmos = AddRenderPass(0);
 
+				// Editor-only, to make selection-wireframe render properly, we need to setup the same camera properties again but with a flipped matrix
+				var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
+				var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
+				var worldToView = Float4x4.WorldToLocal(0.0f, camera.transform.WorldRotation());
+				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, camera.nearClipPlane, camera.farClipPlane, 0, true);
+				var worldToClip = viewToClip.Mul(worldToView);
+
+				// For selection outline to work, we need to also set this builtin matrix
+				var worldToViewAbs = Float4x4.WorldToLocal(camera.transform.WorldPosition(), camera.transform.WorldRotation());
+				var worldToClipAbs = viewToClip.Mul(worldToViewAbs);
+
+				//renderGizmos.SetRenderFunction(static (command, data) =>
+				//{
 				if (Handles.ShouldRenderGizmos())
 				{
 					command.DrawRendererList(context.CreateGizmoRendererList(camera, GizmoSubset.PreImageEffects));
@@ -350,26 +383,19 @@ public class NewPipeline : RenderPipeline
 
 				command.DrawRendererList(context.CreateWireOverlayRendererList(camera));
 
-				// Editor-only, to make selection-wireframe render properly, we need to setup the same camera properties again but with a flipped matrix
-				var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
-				var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
-				var worldToView = Float4x4.WorldToLocal(0.0f, camera.transform.WorldRotation());
-				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, camera.nearClipPlane, camera.farClipPlane, 0, true);
-				var worldToClip = viewToClip.Mul(worldToView);
 				command.SetGlobalMatrix("WorldToClip", worldToClip);
-
-				// For selection outline to work, we need to also set this builtin matrix
-				var worldToViewAbs = Float4x4.WorldToLocal(camera.transform.WorldPosition(), camera.transform.WorldRotation());
-				var worldToClipAbs = viewToClip.Mul(worldToViewAbs);
 				command.SetGlobalMatrix("unity_MatrixVP", worldToClipAbs);
+				//});
 			}
 		}
 
 		// Final pass: Set matrices for UI rendering
-		var setUiMatrices = AddRenderPass(0, (command, data) => { });
-
+		var setUiMatrices = AddRenderPass(0);
+		//setUiMatrices.SetRenderFunction(static (command, data) =>
+		//{
 		var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
 		command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
+		//});
 
 		context.ExecuteCommandBuffer(command);
 

@@ -2,12 +2,13 @@ using System;
 using System.Collections.Generic;
 using UnityEngine.Rendering;
 
-public readonly struct RenderPass<T> : IRenderPass
+public struct RenderPass<T> : IRenderPass
 {
 	private readonly T data;
-	private readonly Action<CommandBuffer, T> render;
 	private readonly List<(TextureHandle, int)> inputs;
 	private readonly List<TextureHandle> outputs;
+
+	private Action<CommandBuffer, T> render;
 
 	public RenderPass(T data)
 	{
@@ -17,17 +18,27 @@ public readonly struct RenderPass<T> : IRenderPass
 		outputs = new();
 	}
 
-	public void ReadTexture(TextureHandle handle, int propertyId)
+	public readonly void ReadTexture(TextureHandle handle, int propertyId)
 	{
 		inputs.Add((handle, propertyId));
 	}
 
-	public void WriteTexture(TextureHandle handle)
+	public readonly void WriteTexture(TextureHandle handle)
 	{
 		outputs.Add(handle);
 	}
 
 	readonly void IRenderPass.Execute(CommandBuffer command)
+	{
+		render(command, data);
+	}
+
+	public void SetRenderFunction(Action<CommandBuffer, T> render)
+	{
+		this.render = render;
+	}
+
+	public void Render(CommandBuffer command)
 	{
 		render(command, data);
 	}
