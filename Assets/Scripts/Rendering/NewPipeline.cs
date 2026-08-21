@@ -191,7 +191,7 @@ public class NewPipeline : RenderPipeline
 				fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
-			var setViewData = AddRenderPass((camera, fogEnabled));
+			var setViewData = AddRenderPass((camera, fogEnabled, asset));
 			{
 				setViewData.SetRenderFunction(static (command, data) =>
 				{
@@ -210,6 +210,10 @@ public class NewPipeline : RenderPipeline
 					command.SetGlobalVector("FogColor", RenderSettings.fogColor.linear);
 					command.SetGlobalFloat("FogScale", data.fogEnabled ? 1 / (RenderSettings.fogEndDistance - RenderSettings.fogStartDistance) : 0);
 					command.SetGlobalFloat("FogOffset", data.fogEnabled ? RenderSettings.fogStartDistance / (RenderSettings.fogStartDistance - RenderSettings.fogEndDistance) : 0);
+
+					// This is basically only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
+					if (data.asset.Samples > 1 && data.camera.targetTexture == null)
+						command.SetInvertCulling(true);
 				});
 
 				setViewData.Render(command);
@@ -251,16 +255,12 @@ public class NewPipeline : RenderPipeline
 
 				renderForward.SetRenderFunction(static (command, data) =>
 				{
-					// This is basically only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
-					if (data.asset.Samples > 1 && data.camera.targetTexture == null)
-						command.SetInvertCulling(true);
-
 					command.DrawRendererList(data.rendererList);
+
+					command.EndRenderPass();
 
 					if (data.asset.Samples > 1 && data.camera.targetTexture == null)
 						command.SetInvertCulling(false);
-
-					command.EndRenderPass();
 				});
 
 				renderForward.Render(command);
@@ -303,7 +303,6 @@ public class NewPipeline : RenderPipeline
 				var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat));
 
 				// TODO: Remove
-				var attachmentCount = camera.cameraType == CameraType.SceneView ? 2 : 1;
 				var depthIndex = camera.cameraType == CameraType.SceneView ? 1 : -1;
 
 				OutputTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
@@ -326,7 +325,6 @@ public class NewPipeline : RenderPipeline
 					ReadTexture("CameraDepth", cameraDepth, command);
 
 				BeginRenderPass(new(camera.pixelWidth, camera.pixelHeight), depthIndex, 1, "Blit Pass");
-
 				finalBlit.SetRenderFunction(static (command, data) =>
 				{
 					command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
@@ -360,8 +358,6 @@ public class NewPipeline : RenderPipeline
 
 			// Pass 3, render gizmos wireframe (editor-only
 			{
-				var renderGizmos = AddRenderPass(0);
-
 				// Editor-only, to make selection-wireframe render properly, we need to setup the same camera properties again but with a flipped matrix
 				var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
 				var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -373,29 +369,34 @@ public class NewPipeline : RenderPipeline
 				var worldToViewAbs = Float4x4.WorldToLocal(camera.transform.WorldPosition(), camera.transform.WorldRotation());
 				var worldToClipAbs = viewToClip.Mul(worldToViewAbs);
 
-				//renderGizmos.SetRenderFunction(static (command, data) =>
-				//{
-				if (Handles.ShouldRenderGizmos())
+				var renderGizmos = AddRenderPass((camera, context, worldToClip, worldToClipAbs));
+				renderGizmos.SetRenderFunction(static (command, data) =>
 				{
-					command.DrawRendererList(context.CreateGizmoRendererList(camera, GizmoSubset.PreImageEffects));
-					command.DrawRendererList(context.CreateGizmoRendererList(camera, GizmoSubset.PostImageEffects));
-				}
+					command.SetGlobalMatrix("WorldToClip", data.worldToClip);
+					command.SetGlobalMatrix("unity_MatrixVP", data.worldToClipAbs);
 
-				command.DrawRendererList(context.CreateWireOverlayRendererList(camera));
+					if (Handles.ShouldRenderGizmos())
+					{
+						// Note that gizmos use their own matrix logic which we can't override
+						command.DrawRendererList(data.context.CreateGizmoRendererList(data.camera, GizmoSubset.PreImageEffects));
+						command.DrawRendererList(data.context.CreateGizmoRendererList(data.camera, GizmoSubset.PostImageEffects));
+					}
 
-				command.SetGlobalMatrix("WorldToClip", worldToClip);
-				command.SetGlobalMatrix("unity_MatrixVP", worldToClipAbs);
-				//});
+					// Note this uses whatever matrices are previously set, so we need to set the flipped version first
+					command.DrawRendererList(data.context.CreateWireOverlayRendererList(data.camera));
+				});
+				renderGizmos.Render(command);
 			}
 		}
 
 		// Final pass: Set matrices for UI rendering
 		var setUiMatrices = AddRenderPass(0);
-		//setUiMatrices.SetRenderFunction(static (command, data) =>
-		//{
-		var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
-		command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
-		//});
+		setUiMatrices.SetRenderFunction(static (command, data) =>
+		{
+			var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
+			command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
+		});
+		setUiMatrices.Render(command);
 
 		context.ExecuteCommandBuffer(command);
 
