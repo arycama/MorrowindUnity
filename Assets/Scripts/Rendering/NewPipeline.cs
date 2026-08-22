@@ -126,20 +126,6 @@ public class NewPipeline : RenderPipeline
 		}
 	}
 
-	private void BeginNativeRenderPass(Int2 size, int samples, string name)
-	{
-		subpasses.Add(new() { colorOutputs = new(colorOutputs.AsArray()) });
-		colorOutputs.Clear();
-
-		Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(name)];
-		_ = Encoding.UTF8.GetBytes(name, debugNameUtf8);
-
-		command.BeginRenderPass(size.x, size.y, samples, attachments.AsArray(), depthIndex, subpasses.AsArray(), debugNameUtf8);
-		subpasses.Clear();
-		attachments.Clear();
-		depthIndex = -1;
-	}
-
 	private RenderPass<T> AddRenderPass<T>(T data)
 	{
 		var renderPass = new RenderPass<T>(data);
@@ -160,11 +146,11 @@ public class NewPipeline : RenderPipeline
 		OutputTexture(handle, id);
 	}
 
-	private void ReadTexture(string propertyName, TextureHandle handle, CommandBuffer command)
+	private void ReadTexture(int propertyId, TextureHandle handle, CommandBuffer command)
 	{
 		var resourceIndex = resourceIndices[handle.index];
 		var resource = resources[resourceIndex];
-		command.SetGlobalTexture(propertyName, resource);
+		command.SetGlobalTexture(propertyId, resource);
 	}
 
 	protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
@@ -221,8 +207,6 @@ public class NewPipeline : RenderPipeline
 					if (data.asset.Samples > 1 && data.camera.targetTexture == null)
 						command.SetInvertCulling(true);
 				});
-
-				setViewData.Render(command);
 			}
 
 			var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
@@ -251,14 +235,10 @@ public class NewPipeline : RenderPipeline
 				else
 					OutputTexture(cameraTarget, BuiltinRenderTextureType.CameraTarget);
 
-				WriteTexture(cameraDepth, true);
-				WriteTexture(cameraTarget);
+				renderForward.WriteTexture(cameraDepth, true);
+				renderForward.WriteTexture(cameraTarget, false);
 
-				renderForward.WriteTexture(cameraDepth);
-				renderForward.WriteTexture(cameraTarget);
-
-				BeginNativeRenderPass(new(camera.pixelWidth, camera.pixelHeight), asset.Samples, "Base Pass");
-
+				renderForward.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples, "Base Pass");
 				renderForward.SetRenderFunction(static (command, data) =>
 				{
 					command.DrawRendererList(data.rendererList);
@@ -268,8 +248,6 @@ public class NewPipeline : RenderPipeline
 					if (data.asset.Samples > 1 && data.camera.targetTexture == null)
 						command.SetInvertCulling(false);
 				});
-
-				renderForward.Render(command);
 			}
 
 			if (!renderToBackbuffer)
@@ -302,31 +280,27 @@ public class NewPipeline : RenderPipeline
 					command.SetGlobalVector("ViewSize", new(data.camera.pixelWidth, data.camera.pixelHeight));
 					command.SetWireframe(false);
 				});
-				finalBlitSetup.Render(command);
 
 				// Pass 2: Final blit/resolve if needed
 				var finalBlit = AddRenderPass((blitMaterial, camera, asset, requiresSceneDepth));
 				{
 					var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat));
-
 					OutputTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
-					WriteTexture(backbufferColor);
-					finalBlit.WriteTexture(backbufferColor);
+					finalBlit.WriteTexture(backbufferColor, false);
 
 					// Can't really be a subpass since it requires resolving or flipping
-					ReadTexture("CameraTarget", cameraTarget, command);
+					finalBlit.ReadTexture(cameraTarget, Shader.PropertyToID("CameraTarget"));
 
 					// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 					if (requiresSceneDepth)
 					{
 						var sceneDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat));
 						OutputTexture(sceneDepth, camera.targetTexture);
-						WriteTexture(sceneDepth);
-						finalBlit.WriteTexture(sceneDepth);
-						ReadTexture("CameraDepth", cameraDepth, command);
+						finalBlit.WriteTexture(sceneDepth, false);
+						finalBlit.ReadTexture(cameraDepth, Shader.PropertyToID("CameraDepth"));
 					}
 
-					BeginNativeRenderPass(new(camera.pixelWidth, camera.pixelHeight), 1, "Blit Pass");
+					finalBlit.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), 1, "Blit Pass");
 					finalBlit.SetRenderFunction(static (command, data) =>
 					{
 						command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
@@ -354,8 +328,6 @@ public class NewPipeline : RenderPipeline
 							}
 						}
 					});
-
-					finalBlit.Render(command);
 				}
 			}
 
@@ -387,7 +359,6 @@ public class NewPipeline : RenderPipeline
 				// Note this uses whatever matrices are previously set, so we need to set the flipped version first
 				command.DrawRendererList(data.context.CreateWireOverlayRendererList(data.camera));
 			});
-			renderGizmos.Render(command);
 		}
 
 		// Final pass: Set matrices for UI rendering
@@ -397,11 +368,34 @@ public class NewPipeline : RenderPipeline
 			var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
 			command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
 		});
-		setUiMatrices.Render(command);
 
 		foreach(var renderPass in renderPasses)
 		{
-			//renderPass.Execute(command);
+			foreach(var output in renderPass.outputs)
+			{
+				WriteTexture(output.handle, output.dontResolve);
+			}
+
+			foreach(var input in renderPass.inputs)
+			{
+				ReadTexture(input.Item2, input.Item1, command);
+			}
+
+			if(renderPass.beginRenderPass)
+			{
+				subpasses.Add(new() { colorOutputs = new(colorOutputs.AsArray()) });
+				colorOutputs.Clear();
+
+				Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(renderPass.name)];
+				_ = Encoding.UTF8.GetBytes(renderPass.name, debugNameUtf8);
+
+				command.BeginRenderPass(renderPass.size.x, renderPass.size.y, renderPass.samples, attachments.AsArray(), depthIndex, subpasses.AsArray(), debugNameUtf8);
+				subpasses.Clear();
+				attachments.Clear();
+				depthIndex = -1;
+			}
+
+			renderPass.Execute(command);
 		}
 
 		context.ExecuteCommandBuffer(command);
