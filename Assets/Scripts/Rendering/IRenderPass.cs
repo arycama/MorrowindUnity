@@ -8,7 +8,7 @@ public interface IRenderPass
 	Int2 size { get; }
 	int samples { get; }
 	string name { get; }
-	List<(TextureHandle, int)> inputs { get; }
+	List<(TextureHandle handle, int propertyId)> inputs { get; }
 	List<(TextureHandle handle, bool dontResolve)> outputs { get; }
 
 	void Execute(CommandBuffer command);

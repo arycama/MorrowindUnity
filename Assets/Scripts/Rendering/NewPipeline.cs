@@ -16,12 +16,6 @@ public class NewPipeline : RenderPipeline
 	private readonly CommandBuffer command;
 	private readonly Material blitMaterial;
 
-	// Renderpass
-	private readonly NativeList<AttachmentDescriptor> attachments = new(8, Allocator.Persistent);
-	private readonly NativeList<SubPassDescriptor> subpasses = new(8, Allocator.Persistent);
-	private readonly NativeList<int> colorOutputs = new(8, Allocator.Persistent);
-	private int depthIndex = -1;
-
 	private readonly List<RenderTargetDescriptor> targetDescriptors = new();
 	private readonly List<int> resourceIndices = new();
 	private readonly List<RenderTargetIdentifier> resources = new();
@@ -33,11 +27,6 @@ public class NewPipeline : RenderPipeline
 		this.asset = asset;
 		command = new() { name = "Render Frame" };
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
-	}
-
-	protected override void Dispose(bool disposing)
-	{
-		attachments.Dispose();
 	}
 
 	public RenderTextureDescriptor GetRenderTextureDescriptor(RenderTargetDescriptor a, bool resolve)
@@ -90,42 +79,6 @@ public class NewPipeline : RenderPipeline
 		return new(targetDescriptors.Count - 1);
 	}
 
-	private void WriteTexture(TextureHandle handle, bool dontResolve = false)
-	{
-		var descriptor = targetDescriptors[handle.index];
-		var resourceIndex = resourceIndices[handle.index];
-		var hasTarget = resourceIndex != -1;
-		var requiresResolve = hasTarget && !dontResolve && descriptor.samples > 1;
-
-		attachments.Add(new AttachmentDescriptor
-		{
-			loadAction = descriptor.clear ? RenderBufferLoadAction.Clear : RenderBufferLoadAction.DontCare, // TODO: Support load, if contents have already been written to previously
-			storeAction = !hasTarget ? RenderBufferStoreAction.DontCare : (requiresResolve ? RenderBufferStoreAction.Resolve : RenderBufferStoreAction.Store), // TODO: Only store if result is read later
-			graphicsFormat = descriptor.format,
-			loadStoreTarget = !hasTarget || requiresResolve ? BuiltinRenderTextureType.None : resources[resourceIndex], // TODO: Only set if target is read later
-			resolveTarget = requiresResolve ? resources[resourceIndex] : BuiltinRenderTextureType.None,
-			clearColor = descriptor.clearColor,
-			clearDepth = descriptor.clearDepth,
-			clearStencil = descriptor.clearStencil
-		});
-
-		var index = attachments.Length - 1;
-		switch (descriptor.format)
-		{
-			case GraphicsFormat.D16_UNorm:
-			case GraphicsFormat.D24_UNorm:
-			case GraphicsFormat.D32_SFloat:
-			case GraphicsFormat.D16_UNorm_S8_UInt:
-			case GraphicsFormat.D24_UNorm_S8_UInt:
-			case GraphicsFormat.D32_SFloat_S8_UInt:
-				depthIndex = index;
-				break;
-			default:
-				colorOutputs.Add(index);
-				break;
-		}
-	}
-
 	private RenderPass<T> AddRenderPass<T>(T data)
 	{
 		var renderPass = new RenderPass<T>(data);
@@ -144,13 +97,6 @@ public class NewPipeline : RenderPipeline
 		var descriptor = targetDescriptors[handle.index];
 		command.GetTemporaryRT(id, GetRenderTextureDescriptor(descriptor, resolve));
 		OutputTexture(handle, id);
-	}
-
-	private void ReadTexture(int propertyId, TextureHandle handle, CommandBuffer command)
-	{
-		var resourceIndex = resourceIndices[handle.index];
-		var resource = resources[resourceIndex];
-		command.SetGlobalTexture(propertyId, resource);
 	}
 
 	protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
@@ -369,19 +315,57 @@ public class NewPipeline : RenderPipeline
 			command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
 		});
 
-		foreach(var renderPass in renderPasses)
+		var attachments = new NativeList<AttachmentDescriptor>(8, Allocator.Temp);
+		var subpasses = new NativeList<SubPassDescriptor>(8, Allocator.Temp);
+		var colorOutputs = new NativeList<int>(8, Allocator.Temp);
+		var depthIndex = -1;
+
+		foreach (var renderPass in renderPasses)
 		{
-			foreach(var output in renderPass.outputs)
+			foreach (var output in renderPass.outputs)
 			{
-				WriteTexture(output.handle, output.dontResolve);
+				var descriptor = targetDescriptors[output.handle.index];
+				var resourceIndex = resourceIndices[output.handle.index];
+				var hasTarget = resourceIndex != -1;
+				var requiresResolve = hasTarget && !output.dontResolve && descriptor.samples > 1;
+
+				attachments.Add(new AttachmentDescriptor
+				{
+					loadAction = descriptor.clear ? RenderBufferLoadAction.Clear : RenderBufferLoadAction.DontCare, // TODO: Support load, if contents have already been written to previously
+					storeAction = !hasTarget ? RenderBufferStoreAction.DontCare : (requiresResolve ? RenderBufferStoreAction.Resolve : RenderBufferStoreAction.Store), // TODO: Only store if result is read later
+					graphicsFormat = descriptor.format,
+					loadStoreTarget = !hasTarget || requiresResolve ? BuiltinRenderTextureType.None : resources[resourceIndex], // TODO: Only set if target is read later
+					resolveTarget = requiresResolve ? resources[resourceIndex] : BuiltinRenderTextureType.None,
+					clearColor = descriptor.clearColor,
+					clearDepth = descriptor.clearDepth,
+					clearStencil = descriptor.clearStencil
+				});
+
+				var index = attachments.Length - 1;
+				switch (descriptor.format)
+				{
+					case GraphicsFormat.D16_UNorm:
+					case GraphicsFormat.D24_UNorm:
+					case GraphicsFormat.D32_SFloat:
+					case GraphicsFormat.D16_UNorm_S8_UInt:
+					case GraphicsFormat.D24_UNorm_S8_UInt:
+					case GraphicsFormat.D32_SFloat_S8_UInt:
+						depthIndex = index;
+						break;
+					default:
+						colorOutputs.Add(index);
+						break;
+				}
 			}
 
-			foreach(var input in renderPass.inputs)
+			foreach (var input in renderPass.inputs)
 			{
-				ReadTexture(input.Item2, input.Item1, command);
+				var resourceIndex = resourceIndices[input.handle.index];
+				var resource = resources[resourceIndex];
+				command.SetGlobalTexture(input.propertyId, resource);
 			}
 
-			if(renderPass.beginRenderPass)
+			if (renderPass.beginRenderPass)
 			{
 				subpasses.Add(new() { colorOutputs = new(colorOutputs.AsArray()) });
 				colorOutputs.Clear();
