@@ -4,12 +4,13 @@ using Unmath;
 
 public interface IRenderPass
 {
-	bool beginRenderPass { get; }
-	Int2 size { get; }
-	int samples { get; }
-	string name { get; }
-	List<(TextureHandle handle, int propertyId)> inputs { get; }
-	List<(TextureHandle handle, bool dontResolve)> outputs { get; }
+	int Index { get; }
+	bool BeginRenderPass { get; }
+	Int2 Size { get; }
+	int Samples { get; }
+	string Name { get; }
+	List<(TextureHandle handle, int propertyId)> Inputs { get; }
+	List<(TextureHandle handle, bool dontResolve)> Outputs { get; }
 
 	void Execute(CommandBuffer command);
 }

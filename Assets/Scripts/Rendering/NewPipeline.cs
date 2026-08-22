@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using Unity.Collections;
 using UnityEditor;
@@ -16,10 +15,8 @@ public class NewPipeline : RenderPipeline
 	private readonly CommandBuffer command;
 	private readonly Material blitMaterial;
 
-	private readonly List<RenderTargetDescriptor> targetDescriptors = new();
-	private readonly List<int> resourceIndices = new();
+	private readonly List<(RenderTargetDescriptor descriptor, int resourceIndex, int firstWriteIndex, int lastReadIndex)> targets = new();
 	private readonly List<RenderTargetIdentifier> resources = new();
-
 	private readonly List<IRenderPass> renderPasses = new();
 
 	public NewPipeline(NewPipelineAsset asset)
@@ -29,10 +26,53 @@ public class NewPipeline : RenderPipeline
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
 	}
 
-	public RenderTextureDescriptor GetRenderTextureDescriptor(RenderTargetDescriptor a, bool resolve)
+	private TextureHandle GetTexture(RenderTargetDescriptor descriptor)
 	{
+		targets.Add((descriptor, -1, -1, -1));
+		return new(targets.Count - 1);
+	}
+
+	private RenderPass<T> AddRenderPass<T>(T data, string name)
+	{
+		var index = renderPasses.Count;
+		var renderPass = new RenderPass<T>(data, index, name);
+		renderPasses.Add(renderPass);
+		return renderPass;
+	}
+
+	public void ReadTexture(IRenderPass renderPass, TextureHandle handle, int propertyId)
+	{
+		var target = targets[handle.index];
+		target.lastReadIndex = target.lastReadIndex == -1 ? renderPass.Index : Max(target.lastReadIndex, renderPass.Index); // TODO: Is there any situation where we wouldn't just directly assign, since the render graph executes in order
+		targets[handle.index] = target;
+
+		renderPass.Inputs.Add((handle, propertyId));
+	}
+
+	public void WriteTexture(IRenderPass renderPass, TextureHandle handle, bool dontResolve)
+	{
+		var target = targets[handle.index];
+		target.firstWriteIndex = target.firstWriteIndex == -1 ? renderPass.Index : Min(target.firstWriteIndex, renderPass.Index); // TODO: Is there any situation where we wouldn't just directly assign, since the render graph executes in order
+		targets[handle.index] = target;
+
+		renderPass.Outputs.Add((handle, dontResolve));
+	}
+
+	private void OutputTexture(TextureHandle handle, RenderTargetIdentifier id)
+	{
+		resources.Add(id);
+
+		var target = targets[handle.index];
+		target.resourceIndex = resources.Count - 1;
+		targets[handle.index] = target;
+	}
+
+	private void AllocateTexture(int id, TextureHandle handle, bool resolve)
+	{
+		var target = targets[handle.index];
+
 		bool isColor = false, isDepth = false, isStencil = false;
-		switch (a.format)
+		switch (target.descriptor.format)
 		{
 			case GraphicsFormat.D16_UNorm:
 			case GraphicsFormat.D24_UNorm:
@@ -53,14 +93,14 @@ public class NewPipeline : RenderPipeline
 				break;
 		}
 
-		return new RenderTextureDescriptor
+		command.GetTemporaryRT(id, new RenderTextureDescriptor
 		{
-			width = a.size.x,
-			height = a.size.y,
+			width = target.descriptor.size.x,
+			height = target.descriptor.size.y,
 			volumeDepth = 1,
-			msaaSamples = resolve ? 1 : a.samples,
-			graphicsFormat = isColor ? a.format : GraphicsFormat.None,
-			depthStencilFormat = isDepth ? a.format : GraphicsFormat.None,
+			msaaSamples = resolve ? 1 : target.descriptor.samples,
+			graphicsFormat = isColor ? target.descriptor.format : GraphicsFormat.None,
+			depthStencilFormat = isDepth ? target.descriptor.format : GraphicsFormat.None,
 			mipCount = 1,
 			dimension = TextureDimension.Tex2D,
 			shadowSamplingMode = ShadowSamplingMode.None,
@@ -68,42 +108,14 @@ public class NewPipeline : RenderPipeline
 			enableRandomWrite = false,
 			stencilFormat = isStencil ? GraphicsFormat.R8_UInt : GraphicsFormat.None,
 			useMipMap = false,
-			bindMS = a.samples > 1 && !resolve,
-		};
-	}
-
-	private TextureHandle GetTexture(RenderTargetDescriptor descriptor)
-	{
-		targetDescriptors.Add(descriptor);
-		resourceIndices.Add(-1);
-		return new(targetDescriptors.Count - 1);
-	}
-
-	private RenderPass<T> AddRenderPass<T>(T data)
-	{
-		var renderPass = new RenderPass<T>(data);
-		renderPasses.Add(renderPass);
-		return renderPass;
-	}
-
-	private void OutputTexture(TextureHandle handle, RenderTargetIdentifier id)
-	{
-		resources.Add(id);
-		resourceIndices[handle.index] = resources.Count - 1;
-	}
-
-	private void OutputTexture(int id, TextureHandle handle, bool resolve)
-	{
-		var descriptor = targetDescriptors[handle.index];
-		command.GetTemporaryRT(id, GetRenderTextureDescriptor(descriptor, resolve));
-		OutputTexture(handle, id);
+			bindMS = target.descriptor.samples > 1 && !resolve,
+		});
 	}
 
 	protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
 	{
 		command.Clear();
-		targetDescriptors.Clear();
-		resourceIndices.Clear();
+		targets.Clear();
 		resources.Clear();
 		renderPasses.Clear();
 
@@ -129,7 +141,7 @@ public class NewPipeline : RenderPipeline
 				fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
-			var setViewData = AddRenderPass((camera, fogEnabled, asset));
+			var setViewData = AddRenderPass((camera, fogEnabled, asset), "Set View Data");
 			{
 				setViewData.SetRenderFunction(static (command, data) =>
 				{
@@ -170,21 +182,27 @@ public class NewPipeline : RenderPipeline
 
 			// Pass 1: Render forward
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque });
-			var renderForward = AddRenderPass((asset, camera, rendererList));
+			var renderForward = AddRenderPass((asset, camera, rendererList), "Render Forward");
 			{
 				// For scene view we need depth for wireframe (Note that msaa depth can not be resolved automatically so we need to store and manually resolve later)
 				if (requiresSceneDepth)
-					OutputTexture(Shader.PropertyToID("CameraDepth"), cameraDepth, false);
+				{
+					AllocateTexture(Shader.PropertyToID("CameraDepth"), cameraDepth, false);
+					OutputTexture(cameraDepth, Shader.PropertyToID("CameraDepth"));
+				}
 
 				if (!renderToBackbuffer)
-					OutputTexture(Shader.PropertyToID("CameraTarget"), cameraTarget, true);
+				{
+					AllocateTexture(Shader.PropertyToID("CameraTarget"), cameraTarget, true);
+					OutputTexture(cameraTarget, Shader.PropertyToID("CameraTarget"));
+				}
 				else
 					OutputTexture(cameraTarget, BuiltinRenderTextureType.CameraTarget);
 
-				renderForward.WriteTexture(cameraDepth, true);
-				renderForward.WriteTexture(cameraTarget, false);
+				WriteTexture(renderForward, cameraDepth, true);
+				WriteTexture(renderForward, cameraTarget, false);
 
-				renderForward.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples, "Base Pass");
+				renderForward.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
 				renderForward.SetRenderFunction(static (command, data) =>
 				{
 					command.DrawRendererList(data.rendererList);
@@ -198,7 +216,7 @@ public class NewPipeline : RenderPipeline
 
 			if (!renderToBackbuffer)
 			{
-				var finalBlitSetup = AddRenderPass((camera, asset, requiresSceneDepth));
+				var finalBlitSetup = AddRenderPass((camera, asset, requiresSceneDepth), "Final Blit Setup");
 				finalBlitSetup.SetRenderFunction(static (command, data) =>
 				{
 					if (data.camera.targetTexture == null)
@@ -228,25 +246,25 @@ public class NewPipeline : RenderPipeline
 				});
 
 				// Pass 2: Final blit/resolve if needed
-				var finalBlit = AddRenderPass((blitMaterial, camera, asset, requiresSceneDepth));
+				var finalBlit = AddRenderPass((blitMaterial, camera, asset, requiresSceneDepth), "Final Blit");
 				{
 					var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat));
 					OutputTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
-					finalBlit.WriteTexture(backbufferColor, false);
+					WriteTexture(finalBlit, backbufferColor, false);
 
 					// Can't really be a subpass since it requires resolving or flipping
-					finalBlit.ReadTexture(cameraTarget, Shader.PropertyToID("CameraTarget"));
+					ReadTexture(finalBlit, cameraTarget, Shader.PropertyToID("CameraTarget"));
 
 					// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 					if (requiresSceneDepth)
 					{
 						var sceneDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat));
 						OutputTexture(sceneDepth, camera.targetTexture);
-						finalBlit.WriteTexture(sceneDepth, false);
-						finalBlit.ReadTexture(cameraDepth, Shader.PropertyToID("CameraDepth"));
+						WriteTexture(finalBlit, sceneDepth, false);
+						ReadTexture(finalBlit, cameraDepth, Shader.PropertyToID("CameraDepth"));
 					}
 
-					finalBlit.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), 1, "Blit Pass");
+					finalBlit.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), 1);
 					finalBlit.SetRenderFunction(static (command, data) =>
 					{
 						command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
@@ -289,7 +307,7 @@ public class NewPipeline : RenderPipeline
 			var worldToViewAbs = Float4x4.WorldToLocal(camera.transform.WorldPosition(), camera.transform.WorldRotation());
 			var worldToClipAbs = viewToClip.Mul(worldToViewAbs);
 
-			var renderGizmos = AddRenderPass((camera, context, worldToClip, worldToClipAbs));
+			var renderGizmos = AddRenderPass((camera, context, worldToClip, worldToClipAbs), "Render Gizmos");
 			renderGizmos.SetRenderFunction(static (command, data) =>
 			{
 				command.SetGlobalMatrix("WorldToClip", data.worldToClip);
@@ -308,7 +326,7 @@ public class NewPipeline : RenderPipeline
 		}
 
 		// Final pass: Set matrices for UI rendering
-		var setUiMatrices = AddRenderPass(0);
+		var setUiMatrices = AddRenderPass(0, "Set UI Matrices");
 		setUiMatrices.SetRenderFunction(static (command, data) =>
 		{
 			var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
@@ -322,27 +340,26 @@ public class NewPipeline : RenderPipeline
 
 		foreach (var renderPass in renderPasses)
 		{
-			foreach (var output in renderPass.outputs)
+			foreach (var output in renderPass.Outputs)
 			{
-				var descriptor = targetDescriptors[output.handle.index];
-				var resourceIndex = resourceIndices[output.handle.index];
-				var hasTarget = resourceIndex != -1;
-				var requiresResolve = hasTarget && !output.dontResolve && descriptor.samples > 1;
+				var target = targets[output.handle.index];
+				var hasTarget = target.resourceIndex != -1;
+				var requiresResolve = hasTarget && !output.dontResolve && target.descriptor.samples > 1;
 
 				attachments.Add(new AttachmentDescriptor
 				{
-					loadAction = descriptor.clear ? RenderBufferLoadAction.Clear : RenderBufferLoadAction.DontCare, // TODO: Support load, if contents have already been written to previously
+					loadAction = target.descriptor.clear ? RenderBufferLoadAction.Clear : RenderBufferLoadAction.DontCare, // TODO: Support load, if contents have already been written to previously
 					storeAction = !hasTarget ? RenderBufferStoreAction.DontCare : (requiresResolve ? RenderBufferStoreAction.Resolve : RenderBufferStoreAction.Store), // TODO: Only store if result is read later
-					graphicsFormat = descriptor.format,
-					loadStoreTarget = !hasTarget || requiresResolve ? BuiltinRenderTextureType.None : resources[resourceIndex], // TODO: Only set if target is read later
-					resolveTarget = requiresResolve ? resources[resourceIndex] : BuiltinRenderTextureType.None,
-					clearColor = descriptor.clearColor,
-					clearDepth = descriptor.clearDepth,
-					clearStencil = descriptor.clearStencil
+					graphicsFormat = target.descriptor.format,
+					loadStoreTarget = !hasTarget || requiresResolve ? BuiltinRenderTextureType.None : resources[target.resourceIndex], // TODO: Only set if target is read later
+					resolveTarget = requiresResolve ? resources[target.resourceIndex] : BuiltinRenderTextureType.None,
+					clearColor = target.descriptor.clearColor,
+					clearDepth = target.descriptor.clearDepth,
+					clearStencil = target.descriptor.clearStencil
 				});
 
 				var index = attachments.Length - 1;
-				switch (descriptor.format)
+				switch (target.descriptor.format)
 				{
 					case GraphicsFormat.D16_UNorm:
 					case GraphicsFormat.D24_UNorm:
@@ -358,22 +375,22 @@ public class NewPipeline : RenderPipeline
 				}
 			}
 
-			foreach (var input in renderPass.inputs)
+			foreach (var input in renderPass.Inputs)
 			{
-				var resourceIndex = resourceIndices[input.handle.index];
-				var resource = resources[resourceIndex];
+				var target = targets[input.handle.index];
+				var resource = resources[target.resourceIndex];
 				command.SetGlobalTexture(input.propertyId, resource);
 			}
 
-			if (renderPass.beginRenderPass)
+			if (renderPass.BeginRenderPass)
 			{
 				subpasses.Add(new() { colorOutputs = new(colorOutputs.AsArray()) });
 				colorOutputs.Clear();
 
-				Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(renderPass.name)];
-				_ = Encoding.UTF8.GetBytes(renderPass.name, debugNameUtf8);
+				Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(renderPass.Name)];
+				_ = Encoding.UTF8.GetBytes(renderPass.Name, debugNameUtf8);
 
-				command.BeginRenderPass(renderPass.size.x, renderPass.size.y, renderPass.samples, attachments.AsArray(), depthIndex, subpasses.AsArray(), debugNameUtf8);
+				command.BeginRenderPass(renderPass.Size.x, renderPass.Size.y, renderPass.Samples, attachments.AsArray(), depthIndex, subpasses.AsArray(), debugNameUtf8);
 				subpasses.Clear();
 				attachments.Clear();
 				depthIndex = -1;

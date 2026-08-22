@@ -5,36 +5,29 @@ using Unmath;
 
 public class RenderPass<T> : IRenderPass
 {
-	private T data;
-	public List<(TextureHandle, int)> inputs { get; }
-	public List<(TextureHandle handle, bool dontResolve)> outputs { get; }
+	private readonly T data;
+	public int Index { get; }
+	public string Name { get; }
+
+	public List<(TextureHandle, int)> Inputs { get; }
+	public List<(TextureHandle handle, bool dontResolve)> Outputs { get; }
 
 	public Action<CommandBuffer, T> render;
-	public bool beginRenderPass { get; private set; }
-	public Int2 size { get; private set; }
-	public int samples { get; private set; }
-	public string name { get; private set; }
+	public bool BeginRenderPass { get; private set; }
+	public Int2 Size { get; private set; }
+	public int Samples { get; private set; }
 
-	public RenderPass(T data)
+	public RenderPass(T data, int index, string name)
 	{
 		this.data = data;
+		Index = index;
 		render = null;
-		inputs = new();
-		outputs = new();
-		beginRenderPass = false;
-		size = 1;
-		samples = 1;
-		name = null;
-	}
-
-	public void ReadTexture(TextureHandle handle, int propertyId)
-	{
-		inputs.Add((handle, propertyId));
-	}
-
-	public void WriteTexture(TextureHandle handle, bool dontResolve)
-	{
-		outputs.Add((handle, dontResolve));
+		Inputs = new();
+		Outputs = new();
+		BeginRenderPass = false;
+		Size = 1;
+		Samples = 1;
+		Name = name;
 	}
 
 	void IRenderPass.Execute(CommandBuffer command)
@@ -42,16 +35,17 @@ public class RenderPass<T> : IRenderPass
 		render(command, data);
 	}
 
-	public void SetRenderPassParams(Int2 size, int samples, string name)
+	public void SetRenderPassParams(Int2 size, int samples)
 	{
-		beginRenderPass = true;
-		this.size = size;
-		this.samples = samples;
-		this.name = name;
+		BeginRenderPass = true;
+		Size = size;
+		Samples = samples;
 	}
 
 	public void SetRenderFunction(Action<CommandBuffer, T> render)
 	{
 		this.render = render;
 	}
+
+	public override string ToString() => Name;
 }
