@@ -1,7 +1,9 @@
+using System.Diagnostics;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using Unmath;
 
+[DebuggerDisplay("{size} {samples}xAA {format}, clear: ({clear}, color: {clearColor}, depth: {clearDepth}, stencil {clearStencil})")]
 public struct RenderTargetDescriptor
 {
 	public Int2 size;

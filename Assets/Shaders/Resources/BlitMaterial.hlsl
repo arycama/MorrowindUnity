@@ -13,7 +13,7 @@ float4 Vertex(uint vertexId : SV_VertexID, out float2 uv : TEXCOORD) : SV_Positi
 	return position;
 }
 
-Texture2D<float4> CameraTarget;
+Texture2D<float4> CameraColor;
 SamplerState PointClampSampler;
 float2 ViewSize;
 
@@ -41,5 +41,5 @@ float4 Fragment(float4 position : SV_Position,
 		depth = CameraDepth.Load(coord, 0);
 	#endif
 
-	return CameraTarget.Sample(PointClampSampler, uv);
+	return CameraColor.Sample(PointClampSampler, uv);
 }

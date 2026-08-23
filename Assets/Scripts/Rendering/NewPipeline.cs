@@ -15,7 +15,7 @@ public class NewPipeline : RenderPipeline
 	private readonly CommandBuffer command;
 	private readonly Material blitMaterial;
 
-	private readonly List<(RenderTargetDescriptor descriptor, int resourceIndex, int firstWriteIndex, int lastReadIndex)> targets = new();
+	private readonly List<RenderTargetInfo> targets = new();
 	private readonly List<RenderTargetIdentifier> resources = new();
 	private readonly List<IRenderPass> renderPasses = new();
 
@@ -26,9 +26,9 @@ public class NewPipeline : RenderPipeline
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
 	}
 
-	private TextureHandle GetTexture(RenderTargetDescriptor descriptor)
+	private TextureHandle GetTexture(RenderTargetDescriptor descriptor, int id)
 	{
-		targets.Add((descriptor, -1, -1, -1));
+		targets.Add(new(descriptor, -1, -1, -1, id));
 		return new(targets.Count - 1);
 	}
 
@@ -40,25 +40,43 @@ public class NewPipeline : RenderPipeline
 		return renderPass;
 	}
 
-	public void ReadTexture(IRenderPass renderPass, TextureHandle handle, int propertyId)
+	public void ReadTexture(IRenderPass renderPass, TextureHandle handle)
 	{
+		// Update the last read index. Since rendergraph executes serially, this will always be the last-read pass
 		var target = targets[handle.index];
-		target.lastReadIndex = target.lastReadIndex == -1 ? renderPass.Index : Max(target.lastReadIndex, renderPass.Index); // TODO: Is there any situation where we wouldn't just directly assign, since the render graph executes in order
+		target.lastReadIndex = renderPass.Index;
 		targets[handle.index] = target;
 
-		renderPass.Inputs.Add((handle, propertyId));
+		renderPass.Inputs.Add((handle, target.id));
 	}
 
 	public void WriteTexture(IRenderPass renderPass, TextureHandle handle, bool dontResolve)
 	{
 		var target = targets[handle.index];
-		target.firstWriteIndex = target.firstWriteIndex == -1 ? renderPass.Index : Min(target.firstWriteIndex, renderPass.Index); // TODO: Is there any situation where we wouldn't just directly assign, since the render graph executes in order
-		targets[handle.index] = target;
+
+		// If this pass hasn't been written yet, mark this as the first pass. It's possible a target might be written in multiple passes so we want the first pass
+		// We also mark it as 'read' since it might be used as a a transient depth buffer for example, which would otherwise be culled if its read is -1, but instead we only
+		// cull if all pass inputs are never read
+		// TODO: We could just do this in the pass where the texture is created
+		if (target.firstWriteIndex == -1)
+		{
+			target.firstWriteIndex = renderPass.Index;
+			//target.lastReadIndex = renderPass.Index;
+			targets[handle.index] = target;
+		}
 
 		renderPass.Outputs.Add((handle, dontResolve));
 	}
 
-	private void OutputTexture(TextureHandle handle, RenderTargetIdentifier id)
+	private void StoreTexture(TextureHandle handle)
+	{
+		var target = targets[handle.index];
+		resources.Add(target.id);
+		target.resourceIndex = resources.Count - 1;
+		targets[handle.index] = target;
+	}
+
+	private void ExportTexture(TextureHandle handle, RenderTargetIdentifier id)
 	{
 		resources.Add(id);
 
@@ -67,7 +85,7 @@ public class NewPipeline : RenderPipeline
 		targets[handle.index] = target;
 	}
 
-	private void AllocateTexture(int id, TextureHandle handle, bool resolve)
+	private void AllocateTexture(TextureHandle handle, bool resolve)
 	{
 		var target = targets[handle.index];
 
@@ -93,7 +111,7 @@ public class NewPipeline : RenderPipeline
 				break;
 		}
 
-		command.GetTemporaryRT(id, new RenderTextureDescriptor
+		command.GetTemporaryRT(target.id, new RenderTextureDescriptor
 		{
 			width = target.descriptor.size.x,
 			height = target.descriptor.size.y,
@@ -169,12 +187,12 @@ public class NewPipeline : RenderPipeline
 
 			var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
 			var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
-			var cameraDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true));
+			var cameraDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true), Shader.PropertyToID("CameraDepth"));
 
 			// TODO: This should also account for HDR
 			var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 			var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
-			var cameraTarget = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear));
+			var cameraColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
 
 			// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 			// TODO: Check for hardware msaa backbuffer resolve support
@@ -187,20 +205,20 @@ public class NewPipeline : RenderPipeline
 				// For scene view we need depth for wireframe (Note that msaa depth can not be resolved automatically so we need to store and manually resolve later)
 				if (requiresSceneDepth)
 				{
-					AllocateTexture(Shader.PropertyToID("CameraDepth"), cameraDepth, false);
-					OutputTexture(cameraDepth, Shader.PropertyToID("CameraDepth"));
+					AllocateTexture(cameraDepth, false);
+					StoreTexture(cameraDepth);
 				}
 
 				if (!renderToBackbuffer)
 				{
-					AllocateTexture(Shader.PropertyToID("CameraTarget"), cameraTarget, true);
-					OutputTexture(cameraTarget, Shader.PropertyToID("CameraTarget"));
+					AllocateTexture(cameraColor, true);
+					StoreTexture(cameraColor);
 				}
 				else
-					OutputTexture(cameraTarget, BuiltinRenderTextureType.CameraTarget);
+					ExportTexture(cameraColor, BuiltinRenderTextureType.CameraTarget);
 
 				WriteTexture(renderForward, cameraDepth, true);
-				WriteTexture(renderForward, cameraTarget, false);
+				WriteTexture(renderForward, cameraColor, false);
 
 				renderForward.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
 				renderForward.SetRenderFunction(static (command, data) =>
@@ -248,22 +266,22 @@ public class NewPipeline : RenderPipeline
 				// Pass 2: Final blit/resolve if needed
 				var finalBlitPass = AddRenderPass((blitMaterial, camera, asset, requiresSceneDepth), "Final Blit");
 				{
-					var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat));
-					OutputTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
-					WriteTexture(finalBlitPass, backbufferColor, false);
-
-					// Can't really be a subpass since it requires resolving or flipping
-					ReadTexture(finalBlitPass, cameraTarget, Shader.PropertyToID("CameraTarget"));
-
 					// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 					if (requiresSceneDepth)
 					{
-						var sceneDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat));
-						OutputTexture(sceneDepth, camera.targetTexture);
+						ReadTexture(finalBlitPass, cameraDepth);
+
+						var sceneDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat), Shader.PropertyToID("BackbufferDepth"));
 						WriteTexture(finalBlitPass, sceneDepth, false);
-						ReadTexture(finalBlitPass, cameraDepth, Shader.PropertyToID("CameraDepth"));
+						ExportTexture(sceneDepth, camera.targetTexture);
 					}
 
+					ReadTexture(finalBlitPass, cameraColor);
+
+					var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat), Shader.PropertyToID("BackbufferColor"));
+					WriteTexture(finalBlitPass, backbufferColor, false);
+					ExportTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+				
 					finalBlitPass.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), 1);
 					finalBlitPass.SetRenderFunction(static (command, data) =>
 					{
@@ -323,6 +341,8 @@ public class NewPipeline : RenderPipeline
 				// Note this uses whatever matrices are previously set, so we need to set the flipped version first
 				command.DrawRendererList(data.context.CreateWireOverlayRendererList(data.camera));
 			});
+
+			// Export?
 		}
 
 		// Final pass: Set matrices for UI rendering
@@ -339,8 +359,9 @@ public class NewPipeline : RenderPipeline
 		var colorOutputs = new NativeList<int>(8, Allocator.Temp);
 		var depthIndex = -1;
 
-		foreach (var renderPass in renderPasses)
+		for (var i = 0; i < renderPasses.Count; i++)
 		{
+			var renderPass = renderPasses[i];
 			foreach (var output in renderPass.Outputs)
 			{
 				var target = targets[output.handle.index];
@@ -353,19 +374,26 @@ public class NewPipeline : RenderPipeline
 					graphicsFormat = target.descriptor.format // TODO: In what cases does this actually need to be assigned? I assume its not needed when a load/store is actually assigned.
 				};
 
-				// Load action and clear settings if needed
-				if (target.descriptor.clear)
+				// Clear the target on the first write if needed, or just leave contents uninitialized. If this is not the first write, then it will default to a load action.
+				if (i == target.firstWriteIndex)
 				{
-					attachmentDescriptor.loadAction = RenderBufferLoadAction.Clear;
-					attachmentDescriptor.clearColor = target.descriptor.clearColor;
-					attachmentDescriptor.clearDepth = target.descriptor.clearDepth;
-					attachmentDescriptor.clearStencil = target.descriptor.clearStencil;
+					if (target.descriptor.clear)
+					{
+						attachmentDescriptor.loadAction = RenderBufferLoadAction.Clear;
+						attachmentDescriptor.clearColor = target.descriptor.clearColor;
+						attachmentDescriptor.clearDepth = target.descriptor.clearDepth;
+						attachmentDescriptor.clearStencil = target.descriptor.clearStencil;
+					}
+					else
+						attachmentDescriptor.loadAction = RenderBufferLoadAction.DontCare;
+				}
+
+				// If this is the last time this target is read, it does not need to be stored. Otherwise it needs to be stored or resolved depending on sample count
+				if (i == target.lastReadIndex)
+				{
+					attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
 				}
 				else
-					attachmentDescriptor.loadAction = RenderBufferLoadAction.DontCare;
-
-				// Store or resolve actions
-				if (hasTarget)
 				{
 					if (requiresResolve)
 					{
@@ -377,8 +405,6 @@ public class NewPipeline : RenderPipeline
 						attachmentDescriptor.loadStoreTarget = resource;
 					}
 				}
-				else
-					attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
 
 				attachments.Add(attachmentDescriptor);
 
