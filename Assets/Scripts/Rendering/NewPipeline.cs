@@ -246,26 +246,26 @@ public class NewPipeline : RenderPipeline
 				});
 
 				// Pass 2: Final blit/resolve if needed
-				var finalBlit = AddRenderPass((blitMaterial, camera, asset, requiresSceneDepth), "Final Blit");
+				var finalBlitPass = AddRenderPass((blitMaterial, camera, asset, requiresSceneDepth), "Final Blit");
 				{
 					var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat));
 					OutputTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
-					WriteTexture(finalBlit, backbufferColor, false);
+					WriteTexture(finalBlitPass, backbufferColor, false);
 
 					// Can't really be a subpass since it requires resolving or flipping
-					ReadTexture(finalBlit, cameraTarget, Shader.PropertyToID("CameraTarget"));
+					ReadTexture(finalBlitPass, cameraTarget, Shader.PropertyToID("CameraTarget"));
 
 					// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 					if (requiresSceneDepth)
 					{
 						var sceneDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat));
 						OutputTexture(sceneDepth, camera.targetTexture);
-						WriteTexture(finalBlit, sceneDepth, false);
-						ReadTexture(finalBlit, cameraDepth, Shader.PropertyToID("CameraDepth"));
+						WriteTexture(finalBlitPass, sceneDepth, false);
+						ReadTexture(finalBlitPass, cameraDepth, Shader.PropertyToID("CameraDepth"));
 					}
 
-					finalBlit.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), 1);
-					finalBlit.SetRenderFunction(static (command, data) =>
+					finalBlitPass.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), 1);
+					finalBlitPass.SetRenderFunction(static (command, data) =>
 					{
 						command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
 						command.EndRenderPass();
@@ -333,6 +333,7 @@ public class NewPipeline : RenderPipeline
 			command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
 		});
 
+		// TODO: Can we use spans
 		var attachments = new NativeList<AttachmentDescriptor>(8, Allocator.Temp);
 		var subpasses = new NativeList<SubPassDescriptor>(8, Allocator.Temp);
 		var colorOutputs = new NativeList<int>(8, Allocator.Temp);
@@ -345,18 +346,41 @@ public class NewPipeline : RenderPipeline
 				var target = targets[output.handle.index];
 				var hasTarget = target.resourceIndex != -1;
 				var requiresResolve = hasTarget && !output.dontResolve && target.descriptor.samples > 1;
+				var resource = hasTarget ? resources[target.resourceIndex] : default;
 
-				attachments.Add(new AttachmentDescriptor
+				var attachmentDescriptor = new AttachmentDescriptor
 				{
-					loadAction = target.descriptor.clear ? RenderBufferLoadAction.Clear : RenderBufferLoadAction.DontCare, // TODO: Support load, if contents have already been written to previously
-					storeAction = !hasTarget ? RenderBufferStoreAction.DontCare : (requiresResolve ? RenderBufferStoreAction.Resolve : RenderBufferStoreAction.Store), // TODO: Only store if result is read later
-					graphicsFormat = target.descriptor.format,
-					loadStoreTarget = !hasTarget || requiresResolve ? BuiltinRenderTextureType.None : resources[target.resourceIndex], // TODO: Only set if target is read later
-					resolveTarget = requiresResolve ? resources[target.resourceIndex] : BuiltinRenderTextureType.None,
-					clearColor = target.descriptor.clearColor,
-					clearDepth = target.descriptor.clearDepth,
-					clearStencil = target.descriptor.clearStencil
-				});
+					graphicsFormat = target.descriptor.format // TODO: In what cases does this actually need to be assigned? I assume its not needed when a load/store is actually assigned.
+				};
+
+				// Load action and clear settings if needed
+				if (target.descriptor.clear)
+				{
+					attachmentDescriptor.loadAction = RenderBufferLoadAction.Clear;
+					attachmentDescriptor.clearColor = target.descriptor.clearColor;
+					attachmentDescriptor.clearDepth = target.descriptor.clearDepth;
+					attachmentDescriptor.clearStencil = target.descriptor.clearStencil;
+				}
+				else
+					attachmentDescriptor.loadAction = RenderBufferLoadAction.DontCare;
+
+				// Store or resolve actions
+				if (hasTarget)
+				{
+					if (requiresResolve)
+					{
+						attachmentDescriptor.resolveTarget = resource;
+						attachmentDescriptor.storeAction = RenderBufferStoreAction.Resolve;
+					}
+					else
+					{
+						attachmentDescriptor.loadStoreTarget = resource;
+					}
+				}
+				else
+					attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
+
+				attachments.Add(attachmentDescriptor);
 
 				var index = attachments.Length - 1;
 				switch (target.descriptor.format)
