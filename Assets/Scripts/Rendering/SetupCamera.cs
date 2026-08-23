@@ -17,7 +17,7 @@ public class SetupCamera : ViewRenderFeature
 	private readonly LightingSettings lighting;
 	private readonly MorrowindRenderPipelineAsset asset;
 
-	public SetupCamera(RenderGraph renderGraph, LightingSettings lighting, MorrowindRenderPipelineAsset asset) : base(renderGraph)
+	public SetupCamera(CustomRenderPipeline.RenderGraph renderGraph, LightingSettings lighting, MorrowindRenderPipelineAsset asset) : base(renderGraph)
 	{
 		this.lighting = lighting;
 		this.asset = asset;

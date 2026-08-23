@@ -26,7 +26,7 @@ public class SetupLighting : ViewRenderFeature
 	private readonly LightingSettings lighting;
 	private readonly LightCulling.Settings lightCulling;
 
-	public SetupLighting(RenderGraph renderGraph, LightingSettings lighting, LightCulling.Settings lightCulling) : base(renderGraph)
+	public SetupLighting(CustomRenderPipeline.RenderGraph renderGraph, LightingSettings lighting, LightCulling.Settings lightCulling) : base(renderGraph)
 	{
 		this.lighting = lighting;
 		this.lightCulling = lightCulling;
