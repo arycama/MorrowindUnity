@@ -26,9 +26,9 @@ public class NewPipeline : RenderPipeline
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
 	}
 
-	private TextureHandle GetTexture(RenderTargetDescriptor descriptor, int id)
+	private TextureHandle GetTexture(RenderTargetDescriptor descriptor, int id, bool dontResolve)
 	{
-		targets.Add(new(descriptor, -1, -1, -1, id));
+		targets.Add(new(descriptor, -1, -1, -1, id, dontResolve));
 		return new(targets.Count - 1);
 	}
 
@@ -61,73 +61,22 @@ public class NewPipeline : RenderPipeline
 		if (target.firstWriteIndex == -1)
 		{
 			target.firstWriteIndex = renderPass.Index;
-			//target.lastReadIndex = renderPass.Index;
+			target.lastReadIndex = renderPass.Index;
 			targets[handle.index] = target;
 		}
 
 		renderPass.Outputs.Add((handle, dontResolve));
 	}
 
-	private void StoreTexture(TextureHandle handle)
+	private void ExportTexture(IRenderPass renderPass, TextureHandle handle, RenderTargetIdentifier id, bool dontResolve)
 	{
-		var target = targets[handle.index];
-		resources.Add(target.id);
-		target.resourceIndex = resources.Count - 1;
-		targets[handle.index] = target;
-	}
+		WriteTexture(renderPass, handle, dontResolve);
 
-	private void ExportTexture(TextureHandle handle, RenderTargetIdentifier id)
-	{
 		resources.Add(id);
 
 		var target = targets[handle.index];
 		target.resourceIndex = resources.Count - 1;
 		targets[handle.index] = target;
-	}
-
-	private void AllocateTexture(TextureHandle handle, bool resolve)
-	{
-		var target = targets[handle.index];
-
-		bool isColor = false, isDepth = false, isStencil = false;
-		switch (target.descriptor.format)
-		{
-			case GraphicsFormat.D16_UNorm:
-			case GraphicsFormat.D24_UNorm:
-			case GraphicsFormat.D32_SFloat:
-				isDepth = true;
-				break;
-			case GraphicsFormat.D16_UNorm_S8_UInt:
-			case GraphicsFormat.D24_UNorm_S8_UInt:
-			case GraphicsFormat.D32_SFloat_S8_UInt:
-				isDepth = true;
-				isStencil = true;
-				break;
-			case GraphicsFormat.S8_UInt:
-				isStencil = true;
-				break;
-			default:
-				isColor = true;
-				break;
-		}
-
-		command.GetTemporaryRT(target.id, new RenderTextureDescriptor
-		{
-			width = target.descriptor.size.x,
-			height = target.descriptor.size.y,
-			volumeDepth = 1,
-			msaaSamples = resolve ? 1 : target.descriptor.samples,
-			graphicsFormat = isColor ? target.descriptor.format : GraphicsFormat.None,
-			depthStencilFormat = isDepth ? target.descriptor.format : GraphicsFormat.None,
-			mipCount = 1,
-			dimension = TextureDimension.Tex2D,
-			shadowSamplingMode = ShadowSamplingMode.None,
-			vrUsage = VRTextureUsage.None,
-			enableRandomWrite = false,
-			stencilFormat = isStencil ? GraphicsFormat.R8_UInt : GraphicsFormat.None,
-			useMipMap = false,
-			bindMS = target.descriptor.samples > 1 && !resolve,
-		});
 	}
 
 	protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
@@ -178,6 +127,7 @@ public class NewPipeline : RenderPipeline
 					command.SetGlobalVector("FogColor", RenderSettings.fogColor.linear);
 					command.SetGlobalFloat("FogScale", data.fogEnabled ? 1 / (RenderSettings.fogEndDistance - RenderSettings.fogStartDistance) : 0);
 					command.SetGlobalFloat("FogOffset", data.fogEnabled ? RenderSettings.fogStartDistance / (RenderSettings.fogStartDistance - RenderSettings.fogEndDistance) : 0);
+					command.SetGlobalVector("ViewSize", new(data.camera.pixelWidth, data.camera.pixelHeight));
 
 					// This is basically only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
 					if (data.asset.Samples > 1 && data.camera.targetTexture == null)
@@ -185,14 +135,13 @@ public class NewPipeline : RenderPipeline
 				});
 			}
 
-			var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
 			var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
-			var cameraDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true), Shader.PropertyToID("CameraDepth"));
+			var cameraDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true), Shader.PropertyToID("CameraDepth"), true);
 
 			// TODO: This should also account for HDR
 			var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 			var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
-			var cameraColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
+			var cameraColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"), false);
 
 			// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 			// TODO: Check for hardware msaa backbuffer resolve support
@@ -202,23 +151,12 @@ public class NewPipeline : RenderPipeline
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque });
 			var renderForward = AddRenderPass((asset, camera, rendererList), "Render Forward");
 			{
-				// For scene view we need depth for wireframe (Note that msaa depth can not be resolved automatically so we need to store and manually resolve later)
-				if (requiresSceneDepth)
-				{
-					AllocateTexture(cameraDepth, false);
-					StoreTexture(cameraDepth);
-				}
-
-				if (!renderToBackbuffer)
-				{
-					AllocateTexture(cameraColor, true);
-					StoreTexture(cameraColor);
-				}
-				else
-					ExportTexture(cameraColor, BuiltinRenderTextureType.CameraTarget);
-
 				WriteTexture(renderForward, cameraDepth, true);
-				WriteTexture(renderForward, cameraColor, false);
+
+				if (renderToBackbuffer)
+					ExportTexture(renderForward, cameraColor, BuiltinRenderTextureType.CameraTarget, false);
+				else
+					WriteTexture(renderForward, cameraColor, false);
 
 				renderForward.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
 				renderForward.SetRenderFunction(static (command, data) =>
@@ -234,6 +172,7 @@ public class NewPipeline : RenderPipeline
 
 			if (!renderToBackbuffer)
 			{
+				var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
 				var finalBlitSetup = AddRenderPass((camera, asset, requiresSceneDepth), "Final Blit Setup");
 				finalBlitSetup.SetRenderFunction(static (command, data) =>
 				{
@@ -259,7 +198,6 @@ public class NewPipeline : RenderPipeline
 						}
 					}
 
-					command.SetGlobalVector("ViewSize", new(data.camera.pixelWidth, data.camera.pixelHeight));
 					command.SetWireframe(false);
 				});
 
@@ -271,16 +209,14 @@ public class NewPipeline : RenderPipeline
 					{
 						ReadTexture(finalBlitPass, cameraDepth);
 
-						var sceneDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat), Shader.PropertyToID("BackbufferDepth"));
-						WriteTexture(finalBlitPass, sceneDepth, false);
-						ExportTexture(sceneDepth, camera.targetTexture);
+						var sceneDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat), Shader.PropertyToID("BackbufferDepth"), false);
+						ExportTexture(finalBlitPass, sceneDepth, camera.targetTexture, false);
 					}
 
 					ReadTexture(finalBlitPass, cameraColor);
 
-					var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat), Shader.PropertyToID("BackbufferColor"));
-					WriteTexture(finalBlitPass, backbufferColor, false);
-					ExportTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+					var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat), Shader.PropertyToID("BackbufferColor"), false);
+					ExportTexture(finalBlitPass, backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture, false);
 				
 					finalBlitPass.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), 1);
 					finalBlitPass.SetRenderFunction(static (command, data) =>
@@ -341,8 +277,6 @@ public class NewPipeline : RenderPipeline
 				// Note this uses whatever matrices are previously set, so we need to set the flipped version first
 				command.DrawRendererList(data.context.CreateWireOverlayRendererList(data.camera));
 			});
-
-			// Export?
 		}
 
 		// Final pass: Set matrices for UI rendering
@@ -365,13 +299,9 @@ public class NewPipeline : RenderPipeline
 			foreach (var output in renderPass.Outputs)
 			{
 				var target = targets[output.handle.index];
-				var hasTarget = target.resourceIndex != -1;
-				var requiresResolve = hasTarget && !output.dontResolve && target.descriptor.samples > 1;
-				var resource = hasTarget ? resources[target.resourceIndex] : default;
-
 				var attachmentDescriptor = new AttachmentDescriptor
 				{
-					graphicsFormat = target.descriptor.format // TODO: In what cases does this actually need to be assigned? I assume its not needed when a load/store is actually assigned.
+					graphicsFormat = target.descriptor.format
 				};
 
 				// Clear the target on the first write if needed, or just leave contents uninitialized. If this is not the first write, then it will default to a load action.
@@ -389,12 +319,75 @@ public class NewPipeline : RenderPipeline
 				}
 
 				// If this is the last time this target is read, it does not need to be stored. Otherwise it needs to be stored or resolved depending on sample count
-				if (i == target.lastReadIndex)
+				var hasTarget = target.resourceIndex != -1;
+				if (i == target.lastReadIndex && !hasTarget)
 				{
 					attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
 				}
 				else
 				{
+					RenderTargetIdentifier resource;
+					if (hasTarget)
+					{
+						resource = resources[target.resourceIndex];
+					}
+					else
+					{
+						var descriptor = new RenderTextureDescriptor
+						{
+							width = target.descriptor.size.x,
+							height = target.descriptor.size.y,
+							volumeDepth = 1,
+							msaaSamples = target.dontResolve ? target.descriptor.samples : 1,
+							mipCount = 1,
+							dimension = TextureDimension.Tex2D,
+							shadowSamplingMode = ShadowSamplingMode.None,
+						};
+
+						// This output gets read later so we need to allocate a texture for it
+						bool isColor = false, isDepth = false, isStencil = false;
+						switch (target.descriptor.format)
+						{
+							case GraphicsFormat.D16_UNorm:
+							case GraphicsFormat.D24_UNorm:
+							case GraphicsFormat.D32_SFloat:
+								isDepth = true;
+								break;
+							case GraphicsFormat.D16_UNorm_S8_UInt:
+							case GraphicsFormat.D24_UNorm_S8_UInt:
+							case GraphicsFormat.D32_SFloat_S8_UInt:
+								isDepth = true;
+								isStencil = true;
+								break;
+							case GraphicsFormat.S8_UInt:
+								isStencil = true;
+								break;
+							default:
+								isColor = true;
+								break;
+						}
+						
+						if (isColor)
+							descriptor.graphicsFormat = target.descriptor.format;
+
+						if (isDepth)
+							descriptor.depthStencilFormat = target.descriptor.format;
+
+						if (isStencil)
+							descriptor.stencilFormat = GraphicsFormat.R8_UInt;
+
+						if (target.dontResolve && target.descriptor.samples > 1)
+							descriptor.bindMS = true;
+
+						command.GetTemporaryRT(target.id, descriptor);
+
+						resource = target.id;
+						target.resourceIndex = resources.Count;
+						resources.Add(target.id);
+						targets[output.handle.index] = target;
+					}
+
+					var requiresResolve = !output.dontResolve && target.descriptor.samples > 1;
 					if (requiresResolve)
 					{
 						attachmentDescriptor.resolveTarget = resource;
@@ -406,9 +399,9 @@ public class NewPipeline : RenderPipeline
 					}
 				}
 
+				var index = attachments.Length;
 				attachments.Add(attachmentDescriptor);
 
-				var index = attachments.Length - 1;
 				switch (target.descriptor.format)
 				{
 					case GraphicsFormat.D16_UNorm:
