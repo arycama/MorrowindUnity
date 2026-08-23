@@ -7,16 +7,14 @@ public struct RenderTargetInfo
 	public int resourceIndex;
 	public int firstWriteIndex;
 	public int lastReadIndex;
-	public int id;
 	public bool dontResolve;
 
-	public RenderTargetInfo(RenderTargetDescriptor descriptor, int resourceIndex, int firstWriteIndex, int lastReadIndex, int id, bool dontResolve)
+	public RenderTargetInfo(RenderTargetDescriptor descriptor, int resourceIndex, int firstWriteIndex, int lastReadIndex, bool dontResolve)
 	{
 		this.descriptor = descriptor;
 		this.resourceIndex = resourceIndex;
 		this.firstWriteIndex = firstWriteIndex;
 		this.lastReadIndex = lastReadIndex;
-		this.id = id;
 		this.dontResolve = dontResolve;
 	}
 }

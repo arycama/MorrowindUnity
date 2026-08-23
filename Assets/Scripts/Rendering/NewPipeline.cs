@@ -26,9 +26,9 @@ public class NewPipeline : RenderPipeline
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
 	}
 
-	private TextureHandle GetTexture(RenderTargetDescriptor descriptor, int id, bool dontResolve)
+	private TextureHandle GetTexture(RenderTargetDescriptor descriptor, bool dontResolve)
 	{
-		targets.Add(new(descriptor, -1, -1, -1, id, dontResolve));
+		targets.Add(new(descriptor, -1, -1, -1, dontResolve));
 		return new(targets.Count - 1);
 	}
 
@@ -40,14 +40,14 @@ public class NewPipeline : RenderPipeline
 		return renderPass;
 	}
 
-	public void ReadTexture(IRenderPass renderPass, TextureHandle handle)
+	public void ReadTexture(IRenderPass renderPass, TextureHandle handle, int propertyId)
 	{
 		// Update the last read index. Since rendergraph executes serially, this will always be the last-read pass
 		var target = targets[handle.index];
 		target.lastReadIndex = renderPass.Index;
 		targets[handle.index] = target;
 
-		renderPass.Inputs.Add((handle, target.id));
+		renderPass.Inputs.Add((handle, propertyId));
 	}
 
 	public void WriteTexture(IRenderPass renderPass, TextureHandle handle, bool dontResolve)
@@ -68,12 +68,9 @@ public class NewPipeline : RenderPipeline
 		renderPass.Outputs.Add((handle, dontResolve));
 	}
 
-	private void ExportTexture(IRenderPass renderPass, TextureHandle handle, RenderTargetIdentifier id, bool dontResolve)
+	private void ExportTexture(TextureHandle handle, RenderTargetIdentifier id)
 	{
-		WriteTexture(renderPass, handle, dontResolve);
-
 		resources.Add(id);
-
 		var target = targets[handle.index];
 		target.resourceIndex = resources.Count - 1;
 		targets[handle.index] = target;
@@ -136,27 +133,22 @@ public class NewPipeline : RenderPipeline
 			}
 
 			var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
-			var cameraDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true), Shader.PropertyToID("CameraDepth"), true);
+			var cameraDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true), true);
 
 			// TODO: This should also account for HDR
 			var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 			var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
-			var cameraColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"), false);
+			var cameraColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear), false);
 
 			// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 			// TODO: Check for hardware msaa backbuffer resolve support
 			var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
 
-			// Pass 1: Render forward
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque });
 			var renderForward = AddRenderPass((asset, camera, rendererList), "Render Forward");
 			{
 				WriteTexture(renderForward, cameraDepth, true);
-
-				if (renderToBackbuffer)
-					ExportTexture(renderForward, cameraColor, BuiltinRenderTextureType.CameraTarget, false);
-				else
-					WriteTexture(renderForward, cameraColor, false);
+				WriteTexture(renderForward, cameraColor, false);
 
 				renderForward.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
 				renderForward.SetRenderFunction(static (command, data) =>
@@ -170,7 +162,11 @@ public class NewPipeline : RenderPipeline
 				});
 			}
 
-			if (!renderToBackbuffer)
+			if (renderToBackbuffer)
+			{
+				ExportTexture(cameraColor, BuiltinRenderTextureType.CameraTarget);
+			}
+			else
 			{
 				var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
 				var finalBlitSetup = AddRenderPass((camera, asset, requiresSceneDepth), "Final Blit Setup");
@@ -204,19 +200,20 @@ public class NewPipeline : RenderPipeline
 				// Pass 2: Final blit/resolve if needed
 				var finalBlitPass = AddRenderPass((blitMaterial, camera, asset, requiresSceneDepth), "Final Blit");
 				{
+					ReadTexture(finalBlitPass, cameraColor, Shader.PropertyToID("CameraColor"));
+					var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat), false);
+					WriteTexture(finalBlitPass, backbufferColor, false);
+					ExportTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+
 					// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 					if (requiresSceneDepth)
 					{
-						ReadTexture(finalBlitPass, cameraDepth);
+						ReadTexture(finalBlitPass, cameraDepth, Shader.PropertyToID("CameraDepth"));
 
-						var sceneDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat), Shader.PropertyToID("BackbufferDepth"), false);
-						ExportTexture(finalBlitPass, sceneDepth, camera.targetTexture, false);
+						var sceneDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat), false);
+						WriteTexture(finalBlitPass, sceneDepth, false);
+						ExportTexture(sceneDepth, camera.targetTexture);
 					}
-
-					ReadTexture(finalBlitPass, cameraColor);
-
-					var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat), Shader.PropertyToID("BackbufferColor"), false);
-					ExportTexture(finalBlitPass, backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture, false);
 				
 					finalBlitPass.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), 1);
 					finalBlitPass.SetRenderFunction(static (command, data) =>
@@ -249,44 +246,54 @@ public class NewPipeline : RenderPipeline
 				}
 			}
 
-			// Pass 3, render gizmos wireframe (editor-only
-			// Editor-only, to make selection-wireframe render properly, we need to setup the same camera properties again but with a flipped matrix
-			var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
-			var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
-			var worldToView = Float4x4.WorldToLocal(0.0f, camera.transform.WorldRotation());
-			var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, camera.nearClipPlane, camera.farClipPlane, 0, true);
-			var worldToClip = viewToClip.Mul(worldToView);
-
-			// For selection outline to work, we need to also set this builtin matrix
-			var worldToViewAbs = Float4x4.WorldToLocal(camera.transform.WorldPosition(), camera.transform.WorldRotation());
-			var worldToClipAbs = viewToClip.Mul(worldToViewAbs);
-
-			var renderGizmos = AddRenderPass((camera, context, worldToClip, worldToClipAbs), "Render Gizmos");
-			renderGizmos.SetRenderFunction(static (command, data) =>
+			// Render UI. For now this is done automatically so it only sets matrices for UI rendering
+			var setUiMatrices = AddRenderPass(0, "Set UI Matrices");
+			setUiMatrices.SetRenderFunction(static (command, data) =>
 			{
-				command.SetGlobalMatrix("WorldToClip", data.worldToClip);
-				command.SetGlobalMatrix("unity_MatrixVP", data.worldToClipAbs);
+				var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
+				command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
+			});
 
-				if (Handles.ShouldRenderGizmos())
+			// Render gizmos
+			if (Handles.ShouldRenderGizmos())
+			{
+				var preImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PreImageEffects);
+				var postImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PostImageEffects);
+
+				var renderGizmos = AddRenderPass((preImageEffectsRenderList, postImageEffectsRenderList), "Render Gizmos");
+				renderGizmos.SetRenderFunction(static (command, data) =>
 				{
 					// Note that gizmos use their own matrix logic which we can't override
-					command.DrawRendererList(data.context.CreateGizmoRendererList(data.camera, GizmoSubset.PreImageEffects));
-					command.DrawRendererList(data.context.CreateGizmoRendererList(data.camera, GizmoSubset.PostImageEffects));
-				}
+					command.DrawRendererList(data.preImageEffectsRenderList);
+					command.DrawRendererList(data.postImageEffectsRenderList);
+				});
+			}
 
-				// Note this uses whatever matrices are previously set, so we need to set the flipped version first
-				command.DrawRendererList(data.context.CreateWireOverlayRendererList(data.camera));
+			// Render wireframe
+			var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
+			var renderWireframe = AddRenderPass((camera, wireframeRendererList), "Render Gizmos");
+			renderWireframe.SetRenderFunction(static (command, data) =>
+			{
+				// Editor-only, to make selection-wireframe render properly, we need to setup the same camera properties again but with a flipped matrix
+				var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
+				var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
+				var worldToView = Float4x4.WorldToLocal(0.0f, data.camera.transform.WorldRotation());
+				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, data.camera.nearClipPlane, data.camera.farClipPlane, 0, true);
+				var worldToClip = viewToClip.Mul(worldToView);
+
+				// For selection outline to work, we need to also set this builtin matrix
+				var worldToViewAbs = Float4x4.WorldToLocal(data.camera.transform.WorldPosition(), data.camera.transform.WorldRotation());
+				var worldToClipAbs = viewToClip.Mul(worldToViewAbs);
+
+				command.SetGlobalMatrix("WorldToClip", worldToClip);
+				command.SetGlobalMatrix("unity_MatrixVP", worldToClipAbs);
+
+				// Note this uses whatever matrices are previously set, so we need to set the flipped version first. It also needs to be rendered before gizmos as they may override matrices
+				command.DrawRendererList(data.wireframeRendererList);
 			});
 		}
 
-		// Final pass: Set matrices for UI rendering
-		var setUiMatrices = AddRenderPass(0, "Set UI Matrices");
-		setUiMatrices.SetRenderFunction(static (command, data) =>
-		{
-			var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
-			command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
-		});
-
+		// Process the rendergraph
 		// TODO: Can we use spans
 		var attachments = new NativeList<AttachmentDescriptor>(8, Allocator.Temp);
 		var subpasses = new NativeList<SubPassDescriptor>(8, Allocator.Temp);
@@ -379,11 +386,11 @@ public class NewPipeline : RenderPipeline
 						if (target.dontResolve && target.descriptor.samples > 1)
 							descriptor.bindMS = true;
 
-						command.GetTemporaryRT(target.id, descriptor);
-
-						resource = target.id;
 						target.resourceIndex = resources.Count;
-						resources.Add(target.id);
+						command.GetTemporaryRT(target.resourceIndex, descriptor);
+
+						resource = target.resourceIndex;
+						resources.Add(resource);
 						targets[output.handle.index] = target;
 					}
 
