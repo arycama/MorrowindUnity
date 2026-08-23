@@ -15,7 +15,7 @@ public class RenderPass<T> : IRenderPass
 	private readonly RenderGraph renderGraph;
 
 	public List<(TextureHandle, int)> Inputs { get; }
-	public List<(TextureHandle handle, bool dontResolve)> Outputs { get; }
+	public List<TextureHandle> Outputs { get; }
 	public bool IsNativeRenderPass { get; private set; }
 	public Int2 Size { get; private set; }
 	public int Samples { get; private set; }
@@ -41,9 +41,9 @@ public class RenderPass<T> : IRenderPass
 		render(command, data);
 	}
 
-	public void WriteTexture(TextureHandle handle, bool dontResolve)
+	public void WriteTexture(TextureHandle handle)
 	{
-		Outputs.Add((handle, dontResolve));
+		Outputs.Add(handle);
 		renderGraph.SetTargetWriteIndex(handle, Index);
 	}
 

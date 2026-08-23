@@ -7,16 +7,14 @@ public struct RenderTargetInfo
 	public int resourceIndex;
 	public int firstWriteIndex;
 	public int lastReadIndex;
-	public bool dontResolve;
 	public bool isImported;
 
-	public RenderTargetInfo(RenderTargetDescriptor descriptor, int resourceIndex, int firstWriteIndex, int lastReadIndex, bool dontResolve, bool isImported)
+	public RenderTargetInfo(RenderTargetDescriptor descriptor, int resourceIndex, int firstWriteIndex, int lastReadIndex, bool isImported)
 	{
 		this.descriptor = descriptor;
 		this.resourceIndex = resourceIndex;
 		this.firstWriteIndex = firstWriteIndex;
 		this.lastReadIndex = lastReadIndex;
-		this.dontResolve = dontResolve;
 		this.isImported = isImported;
 	}
 }

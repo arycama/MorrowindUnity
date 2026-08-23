@@ -5,15 +5,15 @@ using UnityEngine.Rendering;
 using Unmath;
 
 [DebuggerDisplay("{size} {samples}xAA {format}, clear: ({clear}, color: {clearColor}, depth: {clearDepth}, stencil {clearStencil})")]
-public struct RenderTargetDescriptor
+public readonly struct RenderTargetDescriptor
 {
-	public Int2 size;
-	public GraphicsFormat format;
-	public bool clear;
-	public Color clearColor;
-	public float clearDepth;
-	public uint clearStencil;
-	public int samples;
+	public readonly Int2 size;
+	public readonly GraphicsFormat format;
+	public readonly bool clear;
+	public readonly Color clearColor;
+	public readonly float clearDepth;
+	public readonly uint clearStencil;
+	public readonly int samples;
 
 	public RenderTargetDescriptor(Int2 size, GraphicsFormat format, int samples = 1, bool clear = false, Color clearColor = default, float clearDepth = 1f, uint clearStencil = default)
 	{
@@ -26,22 +26,21 @@ public struct RenderTargetDescriptor
 		this.samples = samples;
 	}
 
-	public RenderTextureDescriptor GetDescriptor(bool dontResolve)
+	public static implicit operator RenderTextureDescriptor(RenderTargetDescriptor desc)
 	{
 		// Otherwise we need to create a new resource
 		var descriptor = new RenderTextureDescriptor
 		{
-			width = size.x,
-			height = size.y,
+			width = desc.size.x,
+			height = desc.size.y,
 			volumeDepth = 1,
-			msaaSamples = dontResolve ? samples : 1,
 			mipCount = 1,
 			dimension = TextureDimension.Tex2D,
 			shadowSamplingMode = ShadowSamplingMode.None,
 		};
 
 		bool isDepth = false, isStencil = false;
-		switch (format)
+		switch (desc.format)
 		{
 			case GraphicsFormat.D16_UNorm:
 			case GraphicsFormat.D24_UNorm:
@@ -58,18 +57,26 @@ public struct RenderTargetDescriptor
 				isStencil = true;
 				break;
 			default:
-				descriptor.graphicsFormat = format;
+				descriptor.graphicsFormat = desc.format;
 				break;
 		}
 
 		if (isDepth)
-			descriptor.depthStencilFormat = format;
+			descriptor.depthStencilFormat = desc.format;
 
 		if (isStencil)
 			descriptor.stencilFormat = GraphicsFormat.R8_UInt;
 
-		if (dontResolve && samples > 1)
+		if (desc.samples > 1 && (isDepth || isStencil))
+		{
+			// Resolve not supported 
+			descriptor.msaaSamples = desc.samples;
 			descriptor.bindMS = true;
+		}
+		else
+		{
+			descriptor.msaaSamples = 1;
+		}
 
 		return descriptor;
 	}

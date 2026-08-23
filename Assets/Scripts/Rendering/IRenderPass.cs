@@ -11,7 +11,7 @@ public interface IRenderPass
 	Int2 Size { get; }
 	int Samples { get; }
 	List<(TextureHandle handle, int propertyId)> Inputs { get; }
-	List<(TextureHandle handle, bool dontResolve)> Outputs { get; }
+	List<TextureHandle> Outputs { get; }
 
 	void Execute(CommandBuffer command);
 }

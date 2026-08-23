@@ -12,9 +12,9 @@ public class RenderGraph
 	private readonly List<RenderTargetIdentifier> importedResources = new();
 	private readonly List<IRenderPass> renderPasses = new();
 
-	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, bool dontResolve)
+	public TextureHandle GetTexture(RenderTargetDescriptor descriptor)
 	{
-		targets.Add(new(descriptor, -1, -1, -1, dontResolve, false));
+		targets.Add(new(descriptor, -1, -1, -1, false));
 		return new(targets.Count - 1);
 	}
 
@@ -70,7 +70,7 @@ public class RenderGraph
 			var renderPass = renderPasses[i];
 			foreach (var output in renderPass.Outputs)
 			{
-				var target = targets[output.handle.index];
+				var target = targets[output.index];
 				var attachmentDescriptor = new AttachmentDescriptor
 				{
 					graphicsFormat = target.descriptor.format
@@ -90,8 +90,24 @@ public class RenderGraph
 						attachmentDescriptor.loadAction = RenderBufferLoadAction.DontCare;
 				}
 
+				bool isColor;
+				switch (target.descriptor.format)
+				{
+					case GraphicsFormat.D16_UNorm:
+					case GraphicsFormat.D24_UNorm:
+					case GraphicsFormat.D32_SFloat:
+					case GraphicsFormat.D16_UNorm_S8_UInt:
+					case GraphicsFormat.D24_UNorm_S8_UInt:
+					case GraphicsFormat.D32_SFloat_S8_UInt:
+						isColor = false;
+						break;
+					default:
+						isColor = true;
+						break;
+				}
+
 				// If this is the last time this target is read, it does not need to be stored. Otherwise it needs to be stored or resolved depending on sample count
-				var requiresResolve = !output.dontResolve && target.descriptor.samples > 1;
+				var requiresResolve = target.descriptor.samples > 1 && isColor;
 
 				// TODO: Can this be combined with the 2nd branch at all
 				if (target.isImported)
@@ -141,10 +157,10 @@ public class RenderGraph
 					{
 						// Dynamic targets only need to be stored if they are read in a later renderpass
 						target.resourceIndex = resources.Count;
-						command.GetTemporaryRT(target.resourceIndex, target.descriptor.GetDescriptor(target.dontResolve));
+						command.GetTemporaryRT(target.resourceIndex, target.descriptor);
 						resource = target.resourceIndex;
 						resources.Add(resource);
-						targets[output.handle.index] = target;
+						targets[output.index] = target;
 
 						if (requiresResolve)
 						{
@@ -165,20 +181,10 @@ public class RenderGraph
 				var index = attachments.Length;
 				attachments.Add(attachmentDescriptor);
 
-				switch (target.descriptor.format)
-				{
-					case GraphicsFormat.D16_UNorm:
-					case GraphicsFormat.D24_UNorm:
-					case GraphicsFormat.D32_SFloat:
-					case GraphicsFormat.D16_UNorm_S8_UInt:
-					case GraphicsFormat.D24_UNorm_S8_UInt:
-					case GraphicsFormat.D32_SFloat_S8_UInt:
-						depthIndex = index;
-						break;
-					default:
-						colorOutputs.Add(index);
-						break;
-				}
+				if(isColor)
+					colorOutputs.Add(index);
+				else
+					depthIndex = index;
 			}
 
 			foreach (var input in renderPass.Inputs)

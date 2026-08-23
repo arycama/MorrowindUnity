@@ -47,13 +47,14 @@ public class NewPipeline : RenderPipelineBase
 			command.SetGlobalVector("ViewSize", new(data.camera.pixelWidth, data.camera.pixelHeight));
 		});
 
+		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
-		var cameraDepth = renderGraph.GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true), true);
+		var cameraDepth = renderGraph.GetTexture(new(viewSize, depthFormat, asset.Samples, true));
 
 		// TODO: This should also account for HDR
 		var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 		var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
-		var cameraColor = renderGraph.GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear), false);
+		var cameraColor = renderGraph.GetTexture(new(viewSize, targetFormat, asset.Samples, true, RenderSettings.fogColor.linear));
 
 		// This is only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
 		var invertCulling = asset.Samples > 1 && camera.targetTexture == null;
@@ -64,9 +65,9 @@ public class NewPipeline : RenderPipelineBase
 			command.DrawRendererList(opaqueRendererList);
 		});
 		{
-			renderForwardOpaque.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
-			renderForwardOpaque.WriteTexture(cameraDepth, true);
-			renderForwardOpaque.WriteTexture(cameraColor, false);
+			renderForwardOpaque.SetRenderPassParams(viewSize, asset.Samples);
+			renderForwardOpaque.WriteTexture(cameraDepth);
+			renderForwardOpaque.WriteTexture(cameraColor);
 		}
 
 		var transparentRendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.transparent, sortingCriteria = SortingCriteria.CommonTransparent });
@@ -75,9 +76,9 @@ public class NewPipeline : RenderPipelineBase
 			command.DrawRendererList(data.transparentRendererList);
 		});
 		{
-			renderForwardTransparent.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
-			renderForwardTransparent.WriteTexture(cameraDepth, true);
-			renderForwardTransparent.WriteTexture(cameraColor, false);
+			renderForwardTransparent.SetRenderPassParams(viewSize, asset.Samples);
+			renderForwardTransparent.WriteTexture(cameraDepth);
+			renderForwardTransparent.WriteTexture(cameraColor);
 		}
 
 		// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
@@ -146,8 +147,8 @@ public class NewPipeline : RenderPipelineBase
 			});
 			{
 				finalBlitPass.ReadTexture(cameraColor, Shader.PropertyToID("CameraColor"));
-				var backbufferColor = renderGraph.GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat), false);
-				finalBlitPass.WriteTexture(backbufferColor, false);
+				var backbufferColor = renderGraph.GetTexture(new(viewSize, targetFormat));
+				finalBlitPass.WriteTexture(backbufferColor);
 				renderGraph.ExportTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
 
 				// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
@@ -155,12 +156,12 @@ public class NewPipeline : RenderPipelineBase
 				{
 					finalBlitPass.ReadTexture(cameraDepth, Shader.PropertyToID("CameraDepth"));
 
-					var sceneDepth = renderGraph.GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat), false);
-					finalBlitPass.WriteTexture(sceneDepth, false);
+					var sceneDepth = renderGraph.GetTexture(new(viewSize, depthFormat));
+					finalBlitPass.WriteTexture(sceneDepth);
 					renderGraph.ExportTexture(sceneDepth, camera.targetTexture);
 				}
 
-				finalBlitPass.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), 1);
+				finalBlitPass.SetRenderPassParams(viewSize, 1);
 			}
 		}
 
