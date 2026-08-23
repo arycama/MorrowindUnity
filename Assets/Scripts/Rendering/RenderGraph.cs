@@ -5,6 +5,7 @@ using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using Unmath;
 
 public class RenderGraph
 {
@@ -19,10 +20,10 @@ public class RenderGraph
 		return new(targets.Count - 1);
 	}
 
-	public RenderPass<T> AddRenderPass<T>(string name, T data, Action<CommandBuffer, T> render)
+	public RenderPass<T> AddRenderPass<T>(string name, bool isNativeRenderPass, Int2 size, int samples, T data, Span<TextureHandle> outputs, Action<CommandBuffer, T> render)
 	{
 		var index = renderPasses.Count;
-		var renderPass = new RenderPass<T>(name, index, this, data, render);
+		var renderPass = new RenderPass<T>(name, index, isNativeRenderPass, size, samples, this, data, outputs, render);
 		renderPasses.Add(renderPass);
 		return renderPass;
 	}
@@ -80,12 +81,6 @@ public class RenderGraph
 					graphicsFormat = target.descriptor.format
 				};
 
-				var isColor = target.descriptor.format switch
-				{
-					GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
-					_ => true,
-				};
-
 				// Clear the target on the first write if needed, or just leave contents uninitialized. If this is not the first write, then it will default to a load action.
 				var isFirstWrite = i == target.firstWriteIndex;
 				if (isFirstWrite)
@@ -106,6 +101,12 @@ public class RenderGraph
 					attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
 					attachmentDescriptor.loadAction = RenderBufferLoadAction.Load;
 				}
+
+				var isColor = target.descriptor.format switch
+				{
+					GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
+					_ => true,
+				};
 
 				// If this is the last pass, it needs to be resolved
 				var requiresResolve = renderPass.Samples > 1 && i == target.lastWriteIndex && isColor;

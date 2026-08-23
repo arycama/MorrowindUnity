@@ -1,3 +1,6 @@
+using System;
+using System.Runtime.InteropServices;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -43,13 +46,27 @@ public class NewPipeline : RenderPipelineBase
 			sunColor = visibleLight.finalColor.Float3();
 		}
 
-		var setViewData = renderGraph.AddRenderPass("Set View Data", (camera, fogEnabled, sunDirection, sunColor), static (command, data) =>
+		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
+		renderGraph.AddRenderPass("Set View Data", false, viewSize, asset.Samples, (camera, fogEnabled, sunDirection, sunColor), default, static (command, data) =>
 		{
 			var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
 			var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
 			var worldToView = Float4x4.WorldToLocal(0.0f, data.camera.transform.WorldRotation());
 			var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, data.camera.nearClipPlane, data.camera.farClipPlane);
 			var worldToClip = viewToClip.Mul(worldToView);
+
+			//ReadOnlySpan<byte> cbuffer = MemoryMarshal.AsBytes(stackalloc[] {
+			//(
+			//	worldToView,
+			//	viewToClip,
+			//	worldToClip,
+			//	data.camera.transform.position,
+			//	(Float4)tanHalfFov,
+			//	data.sunDirection,
+			//	data.sunColor,
+			//	RenderSettings.ambientLight.linear,
+			//	RenderSettings.fogColor.linear
+			//)});
 
 			command.SetGlobalMatrix("WorldToView", worldToView);
 			command.SetGlobalMatrix("ViewToClip", viewToClip);
@@ -67,9 +84,11 @@ public class NewPipeline : RenderPipelineBase
 
 			command.SetGlobalFloat("LinearDepthScale", (data.camera.farClipPlane - data.camera.nearClipPlane) * Rcp(data.camera.nearClipPlane * data.camera.farClipPlane));
 			command.SetGlobalFloat("LinearDepthOffset", Rcp(data.camera.farClipPlane));
+
+			var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
+			command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
 		});
 
-		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
 		var cameraDepth = renderGraph.GetTexture(new(viewSize, depthFormat, true));
 
@@ -82,19 +101,10 @@ public class NewPipeline : RenderPipelineBase
 
 		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.CommonOpaque }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
-		var renderForwardOpaque = renderGraph.AddRenderPass("Gbuffer", opaqueRendererList, static (command, opaqueRendererList) =>
-		{
-			command.DrawRendererList(opaqueRendererList);
-		});
-		{
-			renderForwardOpaque.SetRenderPassParams(viewSize, asset.Samples);
-			renderForwardOpaque.WriteTexture(cameraDepth);
-			renderForwardOpaque.WriteTexture(albedoMetallic);
-			renderForwardOpaque.WriteTexture(normalOcclusionRoughness);
-			renderForwardOpaque.WriteTexture(cameraColor);
-		}
+		renderGraph.AddRenderPass("Gbuffer", true, viewSize, asset.Samples, opaqueRendererList, stackalloc[] { cameraDepth, albedoMetallic, normalOcclusionRoughness, cameraColor },
+		static (command, opaqueRendererList) => { command.DrawRendererList(opaqueRendererList); });
 
-		var deferredLighting = renderGraph.AddRenderPass("Deferred Lighting", (deferredMaterial, asset), static (command, data) =>
+		var deferredLighting = renderGraph.AddRenderPass("Deferred Lighting", true, viewSize, asset.Samples, (deferredMaterial, asset), stackalloc[] { cameraDepth, cameraColor }, static (command, data) =>
 		{
 			if (data.asset.Samples > 1)
 				command.EnableShaderKeyword("MSAA_ON");
@@ -105,25 +115,14 @@ public class NewPipeline : RenderPipelineBase
 				command.DisableShaderKeyword("MSAA_ON");
 		});
 		{
-			deferredLighting.SetRenderPassParams(viewSize, asset.Samples);
 			deferredLighting.ReadTexture(cameraDepth, Shader.PropertyToID("CameraDepth"));
 			deferredLighting.ReadTexture(albedoMetallic, Shader.PropertyToID("GBufferAlbedoMetallic"));
 			deferredLighting.ReadTexture(normalOcclusionRoughness, Shader.PropertyToID("GBufferNormalOcclusionRoughness"));
-			deferredLighting.WriteTexture(cameraDepth);
-			deferredLighting.WriteTexture(cameraColor);
 		}
 
 		var transparentRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.CommonTransparent }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 		var transparentRendererList = context.CreateRendererList(ref transparentRendererParams);
-		var renderForwardTransparent = renderGraph.AddRenderPass("Render Forward Transparent", transparentRendererList, static (command, transparentRendererList) =>
-		{
-			command.DrawRendererList(transparentRendererList);
-		});
-		{
-			renderForwardTransparent.SetRenderPassParams(viewSize, asset.Samples);
-			renderForwardTransparent.WriteTexture(cameraDepth);
-			renderForwardTransparent.WriteTexture(cameraColor);
-		}
+		renderGraph.AddRenderPass("Render Forward Transparent", true, viewSize, asset.Samples, transparentRendererList, stackalloc[] { cameraDepth, cameraColor }, static (command, transparentRendererList) => { command.DrawRendererList(transparentRendererList); });
 
 		// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 		// TODO: Check for hardware msaa backbuffer resolve support
@@ -135,7 +134,7 @@ public class NewPipeline : RenderPipelineBase
 		else
 		{
 			var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
-			var finalBlitSetup = renderGraph.AddRenderPass("Final Blit Setup", (camera, asset, requiresSceneDepth), static (command, data) =>
+			renderGraph.AddRenderPass("Final Blit Setup", false, viewSize, 1, (camera, asset, requiresSceneDepth), default, static (command, data) =>
 			{
 				if (data.camera.targetTexture == null)
 					command.EnableShaderKeyword("FLIP");
@@ -163,7 +162,18 @@ public class NewPipeline : RenderPipelineBase
 			});
 
 			// Final blit/resolve if needed
-			var finalBlitPass = renderGraph.AddRenderPass("Final Blit", (blitMaterial, camera, asset, requiresSceneDepth), static (command, data) =>
+			var backbufferColor = renderGraph.GetTexture(new(viewSize, targetFormat));
+
+			// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
+			TextureHandle sceneDepth = default;
+			if (requiresSceneDepth)
+			{
+				sceneDepth = renderGraph.GetTexture(new(viewSize, depthFormat));
+				renderGraph.ExportTexture(sceneDepth, camera.targetTexture);
+			}
+
+			var outputs = requiresSceneDepth ? stackalloc[] { sceneDepth, backbufferColor } : stackalloc[] { backbufferColor };
+			var finalBlitPass = renderGraph.AddRenderPass("Final Blit", true, viewSize, 1, (blitMaterial, camera, asset, requiresSceneDepth), outputs, static (command, data) =>
 			{
 				command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
 
@@ -191,29 +201,12 @@ public class NewPipeline : RenderPipelineBase
 			});
 			{
 				finalBlitPass.ReadTexture(cameraColor, Shader.PropertyToID("CameraColor"));
-				var backbufferColor = renderGraph.GetTexture(new(viewSize, targetFormat));
-				finalBlitPass.WriteTexture(backbufferColor);
-				renderGraph.ExportTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
 
-				// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 				if (requiresSceneDepth)
-				{
 					finalBlitPass.ReadTexture(cameraDepth, Shader.PropertyToID("CameraDepth"));
-
-					var sceneDepth = renderGraph.GetTexture(new(viewSize, depthFormat));
-					finalBlitPass.WriteTexture(sceneDepth);
-					renderGraph.ExportTexture(sceneDepth, camera.targetTexture);
-				}
-
-				finalBlitPass.SetRenderPassParams(viewSize, 1);
 			}
-		}
 
-		// Render UI. For now this is done automatically so it only sets matrices for UI rendering
-		renderGraph.AddRenderPass("Set UI Matrices", 0, static (command, data) =>
-		{
-			var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
-			command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
-		});
+			renderGraph.ExportTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+		}
 	}
 }

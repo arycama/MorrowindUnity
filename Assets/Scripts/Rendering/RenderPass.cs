@@ -20,19 +20,24 @@ public class RenderPass<T> : IRenderPass
 	public Int2 Size { get; private set; }
 	public int Samples { get; private set; }
 
-	public RenderPass(string name, int index, RenderGraph renderGraph, T data, Action<CommandBuffer, T> render)
+	public RenderPass(string name, int index, bool isNativeRenderPass, Int2 size, int samples, RenderGraph renderGraph, T data, ReadOnlySpan<TextureHandle> outputs, Action<CommandBuffer, T> render)
 	{
 		Name = name;
+		Index = index;
+		IsNativeRenderPass = isNativeRenderPass;
+		Size = size;
+		Samples = samples;
 		this.renderGraph = renderGraph;
 		this.data = data;
 		this.render = render;
-
-		Index = index;
 		Inputs = new();
 		Outputs = new();
-		IsNativeRenderPass = false;
-		Size = 1;
-		Samples = 1;
+
+		foreach(var output in outputs)
+		{
+			Outputs.Add(output);
+			renderGraph.SetTargetWriteIndex(output, Index);
+		}
 	}
 
 	void IRenderPass.Execute(CommandBuffer command)
@@ -40,23 +45,10 @@ public class RenderPass<T> : IRenderPass
 		render(command, data);
 	}
 
-	public void WriteTexture(TextureHandle handle)
-	{
-		Outputs.Add(handle);
-		renderGraph.SetTargetWriteIndex(handle, Index);
-	}
-
 	public void ReadTexture(TextureHandle handle, int propertyId)
 	{
 		// Update the last read index. Since rendergraph executes serially, this will always be the last-read pass
 		Inputs.Add((handle, propertyId));
 		renderGraph.SetTargetReadIndex(handle, Index);
-	}
-
-	public void SetRenderPassParams(Int2 size, int samples)
-	{
-		IsNativeRenderPass = true;
-		Size = size;
-		Samples = samples;
 	}
 }
