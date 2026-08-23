@@ -17,6 +17,7 @@ public class NewPipeline : RenderPipeline
 
 	private readonly List<RenderTargetInfo> targets = new();
 	private readonly List<RenderTargetIdentifier> resources = new();
+	private readonly List<RenderTargetIdentifier> importedResources = new();
 	private readonly List<IRenderPass> renderPasses = new();
 
 	public NewPipeline(NewPipelineAsset asset)
@@ -28,7 +29,7 @@ public class NewPipeline : RenderPipeline
 
 	private TextureHandle GetTexture(RenderTargetDescriptor descriptor, bool dontResolve)
 	{
-		targets.Add(new(descriptor, -1, -1, -1, dontResolve));
+		targets.Add(new(descriptor, -1, -1, -1, dontResolve, false));
 		return new(targets.Count - 1);
 	}
 
@@ -54,25 +55,25 @@ public class NewPipeline : RenderPipeline
 	{
 		var target = targets[handle.index];
 
-		// If this pass hasn't been written yet, mark this as the first pass. It's possible a target might be written in multiple passes so we want the first pass
-		// We also mark it as 'read' since it might be used as a a transient depth buffer for example, which would otherwise be culled if its read is -1, but instead we only
-		// cull if all pass inputs are never read
-		// TODO: We could just do this in the pass where the texture is created
+		// Track the first pass this target is written to so we know when to clear. This also allows allocation to be skipped for textures that are never written to
 		if (target.firstWriteIndex == -1)
-		{
 			target.firstWriteIndex = renderPass.Index;
-			target.lastReadIndex = renderPass.Index;
-			targets[handle.index] = target;
-		}
+
+		// Writes are also treataed as reads for the purposes of resource tracking, this stops a texture from being discarded as a future write (Eg a 2nd pass to the same RT) would not be treated as a read otherwise, and would cause the texture to be discarded after the first pass
+		target.lastReadIndex = renderPass.Index;
+		targets[handle.index] = target;
 
 		renderPass.Outputs.Add((handle, dontResolve));
 	}
 
 	private void ExportTexture(TextureHandle handle, RenderTargetIdentifier id)
 	{
-		resources.Add(id);
+		var resourceIndex = importedResources.Count;
+		importedResources.Add(id);
+
 		var target = targets[handle.index];
-		target.resourceIndex = resources.Count - 1;
+		target.resourceIndex = resourceIndex;
+		target.isImported = true;
 		targets[handle.index] = target;
 	}
 
@@ -81,6 +82,7 @@ public class NewPipeline : RenderPipeline
 		command.Clear();
 		targets.Clear();
 		resources.Clear();
+		importedResources.Clear();
 		renderPasses.Clear();
 
 		foreach (var camera in cameras)
@@ -104,7 +106,7 @@ public class NewPipeline : RenderPipeline
 				fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
-			
+
 			var setViewData = AddRenderPass("Set View Data", false, (camera, fogEnabled), static (command, data) =>
 			{
 				var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
@@ -136,7 +138,7 @@ public class NewPipeline : RenderPipeline
 			// This is only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
 			var invertCulling = asset.Samples > 1 && camera.targetTexture == null;
 
-			var opaqueRendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque });
+			var opaqueRendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque, sortingCriteria = SortingCriteria.CommonOpaque });
 			var renderForwardOpaque = AddRenderPass("Render Forward Opaque", invertCulling, opaqueRendererList, static (command, opaqueRendererList) =>
 			{
 				command.DrawRendererList(opaqueRendererList);
@@ -147,7 +149,7 @@ public class NewPipeline : RenderPipeline
 				WriteTexture(renderForwardOpaque, cameraColor, false);
 			}
 
-			var transparentRendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.transparent });
+			var transparentRendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.transparent, sortingCriteria = SortingCriteria.CommonTransparent });
 			var renderForwardTransparent = AddRenderPass("Render Forward Transparent", invertCulling, (transparentRendererList, invertCulling), static (command, data) =>
 			{
 				command.DrawRendererList(data.transparentRendererList);
@@ -237,7 +239,7 @@ public class NewPipeline : RenderPipeline
 						WriteTexture(finalBlitPass, sceneDepth, false);
 						ExportTexture(sceneDepth, camera.targetTexture);
 					}
-				
+
 					finalBlitPass.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), 1);
 				}
 			}
@@ -319,75 +321,13 @@ public class NewPipeline : RenderPipeline
 				}
 
 				// If this is the last time this target is read, it does not need to be stored. Otherwise it needs to be stored or resolved depending on sample count
-				var hasTarget = target.resourceIndex != -1;
-				if (i == target.lastReadIndex && !hasTarget)
+				var requiresResolve = !output.dontResolve && target.descriptor.samples > 1;
+
+				// TODO: Can this be combined with the 2nd branch at all
+				if (target.isImported)
 				{
-					attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
-				}
-				else
-				{
-					RenderTargetIdentifier resource;
-					if (hasTarget)
-					{
-						resource = resources[target.resourceIndex];
-					}
-					else
-					{
-						var descriptor = new RenderTextureDescriptor
-						{
-							width = target.descriptor.size.x,
-							height = target.descriptor.size.y,
-							volumeDepth = 1,
-							msaaSamples = target.dontResolve ? target.descriptor.samples : 1,
-							mipCount = 1,
-							dimension = TextureDimension.Tex2D,
-							shadowSamplingMode = ShadowSamplingMode.None,
-						};
-
-						// This output gets read later so we need to allocate a texture for it
-						bool isColor = false, isDepth = false, isStencil = false;
-						switch (target.descriptor.format)
-						{
-							case GraphicsFormat.D16_UNorm:
-							case GraphicsFormat.D24_UNorm:
-							case GraphicsFormat.D32_SFloat:
-								isDepth = true;
-								break;
-							case GraphicsFormat.D16_UNorm_S8_UInt:
-							case GraphicsFormat.D24_UNorm_S8_UInt:
-							case GraphicsFormat.D32_SFloat_S8_UInt:
-								isDepth = true;
-								isStencil = true;
-								break;
-							case GraphicsFormat.S8_UInt:
-								isStencil = true;
-								break;
-							default:
-								isColor = true;
-								break;
-						}
-						
-						if (isColor)
-							descriptor.graphicsFormat = target.descriptor.format;
-
-						if (isDepth)
-							descriptor.depthStencilFormat = target.descriptor.format;
-
-						if (isStencil)
-							descriptor.stencilFormat = GraphicsFormat.R8_UInt;
-
-						if (target.dontResolve && target.descriptor.samples > 1)
-							descriptor.bindMS = true;
-
-						target.resourceIndex = resources.Count;
-						command.GetTemporaryRT(target.resourceIndex, descriptor);
-
-						resource = target.resourceIndex;
-						resources.Add(resource);
-						targets[output.handle.index] = target;
-					}
-
-					var requiresResolve = !output.dontResolve && target.descriptor.samples > 1;
+					// Imported targets are always resolved or stored
+					var resource = importedResources[target.resourceIndex];
 					if (requiresResolve)
 					{
 						attachmentDescriptor.resolveTarget = resource;
@@ -396,6 +336,59 @@ public class NewPipeline : RenderPipeline
 					else
 					{
 						attachmentDescriptor.loadStoreTarget = resource;
+					}
+				}
+				else
+				{
+					RenderTargetIdentifier resource;
+					var requiresLoad = i > target.firstWriteIndex;
+					var requiresStore = i < target.lastReadIndex;
+
+					if (requiresLoad)
+					{
+						// If this target has already been written to, use it's current resource
+						resource = resources[target.resourceIndex];
+
+						if(requiresStore)
+						{
+							if (requiresResolve)
+							{
+								attachmentDescriptor.resolveTarget = resource;
+								attachmentDescriptor.storeAction = RenderBufferStoreAction.Resolve;
+							}
+							else
+							{
+								attachmentDescriptor.loadStoreTarget = resource;
+							}
+						}
+						else
+						{
+							attachmentDescriptor.loadStoreTarget = resource;
+							attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
+						}
+					}
+					else if (requiresStore)
+					{
+						// Dynamic targets only need to be stored if they are read in a later renderpass
+						target.resourceIndex = resources.Count;
+						command.GetTemporaryRT(target.resourceIndex, target.descriptor.GetDescriptor(target.dontResolve));
+						resource = target.resourceIndex;
+						resources.Add(resource);
+						targets[output.handle.index] = target;
+
+						if (requiresResolve)
+						{
+							attachmentDescriptor.resolveTarget = resource;
+							attachmentDescriptor.storeAction = RenderBufferStoreAction.Resolve;
+						}
+						else
+						{
+							attachmentDescriptor.loadStoreTarget = resource;
+						}
+					}
+					else
+					{
+						attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
 					}
 				}
 
@@ -444,7 +437,7 @@ public class NewPipeline : RenderPipeline
 
 			renderPass.Execute(command);
 
-			if(renderPass.IsNativeRenderPass)
+			if (renderPass.IsNativeRenderPass)
 			{
 				command.EndRenderPass();
 				if (renderPass.InvertCulling)
