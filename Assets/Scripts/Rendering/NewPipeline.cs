@@ -32,10 +32,10 @@ public class NewPipeline : RenderPipeline
 		return new(targets.Count - 1);
 	}
 
-	private RenderPass<T> AddRenderPass<T>(T data, string name)
+	private RenderPass<T> AddRenderPass<T>(string name, bool invertCulling, T data, Action<CommandBuffer, T> render)
 	{
 		var index = renderPasses.Count;
-		var renderPass = new RenderPass<T>(data, index, name);
+		var renderPass = new RenderPass<T>(name, index, invertCulling, data, render);
 		renderPasses.Add(renderPass);
 		return renderPass;
 	}
@@ -98,40 +98,32 @@ public class NewPipeline : RenderPipeline
 			cullingParameters.cullingOptions = CullingOptions.DisablePerObjectCulling;
 			var cullingResults = context.Cull(ref cullingParameters);
 
-			// Pass 0: Setup view data
 			var fogEnabled = RenderSettings.fog;
 #if UNITY_EDITOR
 			if (SceneView.currentDrawingSceneView != null)
 				fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
-			// This is basically only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
-			var invertCulling = asset.Samples > 1 && camera.targetTexture == null;
-			var setViewData = AddRenderPass((camera, fogEnabled, invertCulling), "Set View Data");
+			
+			var setViewData = AddRenderPass("Set View Data", false, (camera, fogEnabled), static (command, data) =>
 			{
-				setViewData.SetRenderFunction(static (command, data) =>
-				{
-					var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
-					var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
-					var worldToView = Float4x4.WorldToLocal(0.0f, data.camera.transform.WorldRotation());
-					var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, data.camera.nearClipPlane, data.camera.farClipPlane);
-					var worldToClip = viewToClip.Mul(worldToView);
+				var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
+				var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
+				var worldToView = Float4x4.WorldToLocal(0.0f, data.camera.transform.WorldRotation());
+				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, data.camera.nearClipPlane, data.camera.farClipPlane);
+				var worldToClip = viewToClip.Mul(worldToView);
 
-					command.SetGlobalMatrix("WorldToView", worldToView);
-					command.SetGlobalMatrix("WorldToClip", worldToClip);
-					command.SetGlobalVector("ViewPosition", data.camera.transform.position);
-					command.SetGlobalVector("SunDirection", data.camera.transform.WorldRotation().InverseRotate(-RenderSettings.sun.transform.forward));
-					command.SetGlobalVector("SunColor", RenderSettings.sun.color.linear);
-					command.SetGlobalVector("AmbientLight", RenderSettings.ambientLight.linear);
-					command.SetGlobalVector("FogColor", RenderSettings.fogColor.linear);
-					command.SetGlobalFloat("FogScale", data.fogEnabled ? 1 / (RenderSettings.fogEndDistance - RenderSettings.fogStartDistance) : 0);
-					command.SetGlobalFloat("FogOffset", data.fogEnabled ? RenderSettings.fogStartDistance / (RenderSettings.fogStartDistance - RenderSettings.fogEndDistance) : 0);
-					command.SetGlobalVector("ViewSize", new(data.camera.pixelWidth, data.camera.pixelHeight));
-
-					if (data.invertCulling)
-						command.SetInvertCulling(true);
-				});
-			}
+				command.SetGlobalMatrix("WorldToView", worldToView);
+				command.SetGlobalMatrix("WorldToClip", worldToClip);
+				command.SetGlobalVector("ViewPosition", data.camera.transform.position);
+				command.SetGlobalVector("SunDirection", data.camera.transform.WorldRotation().InverseRotate(-RenderSettings.sun.transform.forward));
+				command.SetGlobalVector("SunColor", RenderSettings.sun.color.linear);
+				command.SetGlobalVector("AmbientLight", RenderSettings.ambientLight.linear);
+				command.SetGlobalVector("FogColor", RenderSettings.fogColor.linear);
+				command.SetGlobalFloat("FogScale", data.fogEnabled ? 1 / (RenderSettings.fogEndDistance - RenderSettings.fogStartDistance) : 0);
+				command.SetGlobalFloat("FogOffset", data.fogEnabled ? RenderSettings.fogStartDistance / (RenderSettings.fogStartDistance - RenderSettings.fogEndDistance) : 0);
+				command.SetGlobalVector("ViewSize", new(data.camera.pixelWidth, data.camera.pixelHeight));
+			});
 
 			var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
 			var cameraDepth = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), depthFormat, asset.Samples, true), true);
@@ -141,41 +133,34 @@ public class NewPipeline : RenderPipeline
 			var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
 			var cameraColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat, asset.Samples, true, RenderSettings.fogColor.linear), false);
 
-			// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
-			// TODO: Check for hardware msaa backbuffer resolve support
-			var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
+			// This is only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
+			var invertCulling = asset.Samples > 1 && camera.targetTexture == null;
 
 			var opaqueRendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque });
-			var renderForwardOpaque = AddRenderPass(opaqueRendererList, "Render Forward Opaque");
+			var renderForwardOpaque = AddRenderPass("Render Forward Opaque", invertCulling, opaqueRendererList, static (command, opaqueRendererList) =>
 			{
+				command.DrawRendererList(opaqueRendererList);
+			});
+			{
+				renderForwardOpaque.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
 				WriteTexture(renderForwardOpaque, cameraDepth, true);
 				WriteTexture(renderForwardOpaque, cameraColor, false);
-
-				renderForwardOpaque.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
-				renderForwardOpaque.SetRenderFunction(static (command, opaqueRendererList) =>
-				{
-					command.DrawRendererList(opaqueRendererList);
-					command.EndRenderPass();
-				});
 			}
 
 			var transparentRendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.transparent });
-			var renderForwardTransparent = AddRenderPass((transparentRendererList, invertCulling), "Render Forward Transparent");
+			var renderForwardTransparent = AddRenderPass("Render Forward Transparent", invertCulling, (transparentRendererList, invertCulling), static (command, data) =>
 			{
+				command.DrawRendererList(data.transparentRendererList);
+			});
+			{
+				renderForwardTransparent.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
 				WriteTexture(renderForwardTransparent, cameraDepth, true);
 				WriteTexture(renderForwardTransparent, cameraColor, false);
-
-				renderForwardTransparent.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
-				renderForwardTransparent.SetRenderFunction(static (command, data) =>
-				{
-					command.DrawRendererList(data.transparentRendererList);
-					command.EndRenderPass();
-
-					if (data.invertCulling)
-						command.SetInvertCulling(false);
-				});
 			}
 
+			// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
+			// TODO: Check for hardware msaa backbuffer resolve support
+			var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
 			if (renderToBackbuffer)
 			{
 				ExportTexture(cameraColor, BuiltinRenderTextureType.CameraTarget);
@@ -183,8 +168,7 @@ public class NewPipeline : RenderPipeline
 			else
 			{
 				var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
-				var finalBlitSetup = AddRenderPass((camera, asset, requiresSceneDepth), "Final Blit Setup");
-				finalBlitSetup.SetRenderFunction(static (command, data) =>
+				var finalBlitSetup = AddRenderPass("Final Blit Setup", false, (camera, asset, requiresSceneDepth), static (command, data) =>
 				{
 					if (data.camera.targetTexture == null)
 						command.EnableShaderKeyword("FLIP");
@@ -212,7 +196,32 @@ public class NewPipeline : RenderPipeline
 				});
 
 				// Pass 2: Final blit/resolve if needed
-				var finalBlitPass = AddRenderPass((blitMaterial, camera, asset, requiresSceneDepth), "Final Blit");
+				var finalBlitPass = AddRenderPass("Final Blit", false, (blitMaterial, camera, asset, requiresSceneDepth), static (command, data) =>
+				{
+					command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
+
+					if (data.camera.targetTexture == null)
+						command.DisableShaderKeyword("FLIP");
+
+					if (data.requiresSceneDepth)
+					{
+						switch (data.asset.Samples)
+						{
+							case 1:
+								command.DisableShaderKeyword("DEPTH");
+								break;
+							case 2:
+								command.DisableShaderKeyword("DEPTH_MSAA_2");
+								break;
+							case 4:
+								command.DisableShaderKeyword("DEPTH_MSAA_4");
+								break;
+							case 8:
+								command.DisableShaderKeyword("DEPTH_MSAA_8");
+								break;
+						}
+					}
+				});
 				{
 					ReadTexture(finalBlitPass, cameraColor, Shader.PropertyToID("CameraColor"));
 					var backbufferColor = GetTexture(new(new(camera.pixelWidth, camera.pixelHeight), targetFormat), false);
@@ -230,39 +239,11 @@ public class NewPipeline : RenderPipeline
 					}
 				
 					finalBlitPass.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), 1);
-					finalBlitPass.SetRenderFunction(static (command, data) =>
-					{
-						command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
-						command.EndRenderPass();
-
-						if (data.camera.targetTexture == null)
-							command.DisableShaderKeyword("FLIP");
-
-						if (data.requiresSceneDepth)
-						{
-							switch (data.asset.Samples)
-							{
-								case 1:
-									command.DisableShaderKeyword("DEPTH");
-									break;
-								case 2:
-									command.DisableShaderKeyword("DEPTH_MSAA_2");
-									break;
-								case 4:
-									command.DisableShaderKeyword("DEPTH_MSAA_4");
-									break;
-								case 8:
-									command.DisableShaderKeyword("DEPTH_MSAA_8");
-									break;
-							}
-						}
-					});
 				}
 			}
 
 			// Render UI. For now this is done automatically so it only sets matrices for UI rendering
-			var setUiMatrices = AddRenderPass(0, "Set UI Matrices");
-			setUiMatrices.SetRenderFunction(static (command, data) =>
+			var setUiMatrices = AddRenderPass("Set UI Matrices", false, 0, static (command, data) =>
 			{
 				var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
 				command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
@@ -274,8 +255,7 @@ public class NewPipeline : RenderPipeline
 				var preImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PreImageEffects);
 				var postImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PostImageEffects);
 
-				var renderGizmos = AddRenderPass((preImageEffectsRenderList, postImageEffectsRenderList), "Render Gizmos");
-				renderGizmos.SetRenderFunction(static (command, data) =>
+				var renderGizmos = AddRenderPass("Render Gizmos", false, (preImageEffectsRenderList, postImageEffectsRenderList), static (command, data) =>
 				{
 					// Note that gizmos use their own matrix logic which we can't override
 					command.DrawRendererList(data.preImageEffectsRenderList);
@@ -285,8 +265,7 @@ public class NewPipeline : RenderPipeline
 
 			// Render wireframe
 			var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
-			var renderWireframe = AddRenderPass((camera, wireframeRendererList), "Render Gizmos");
-			renderWireframe.SetRenderFunction(static (command, data) =>
+			var renderWireframe = AddRenderPass("Render Gizmos", false, (camera, wireframeRendererList), static (command, data) =>
 			{
 				// Editor-only, to make selection-wireframe render properly, we need to setup the same camera properties again but with a flipped matrix
 				var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
@@ -446,8 +425,11 @@ public class NewPipeline : RenderPipeline
 				command.SetGlobalTexture(input.propertyId, resource);
 			}
 
-			if (renderPass.BeginRenderPass)
+			if (renderPass.IsNativeRenderPass)
 			{
+				if (renderPass.InvertCulling)
+					command.SetInvertCulling(true);
+
 				subpasses.Add(new() { colorOutputs = new(colorOutputs.AsArray()) });
 				colorOutputs.Clear();
 
@@ -461,6 +443,13 @@ public class NewPipeline : RenderPipeline
 			}
 
 			renderPass.Execute(command);
+
+			if(renderPass.IsNativeRenderPass)
+			{
+				command.EndRenderPass();
+				if (renderPass.InvertCulling)
+					command.SetInvertCulling(false);
+			}
 		}
 
 		context.ExecuteCommandBuffer(command);

@@ -4,11 +4,12 @@ using Unmath;
 
 public interface IRenderPass
 {
+	string Name { get; }
 	int Index { get; }
-	bool BeginRenderPass { get; }
+	bool InvertCulling { get; }
+	bool IsNativeRenderPass { get; }
 	Int2 Size { get; }
 	int Samples { get; }
-	string Name { get; }
 	List<(TextureHandle handle, int propertyId)> Inputs { get; }
 	List<(TextureHandle handle, bool dontResolve)> Outputs { get; }
 

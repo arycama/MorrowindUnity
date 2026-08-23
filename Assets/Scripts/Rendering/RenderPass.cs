@@ -1,33 +1,38 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine.Rendering;
 using Unmath;
 
+[DebuggerDisplay("{Name}")]
 public class RenderPass<T> : IRenderPass
 {
-	private readonly T data;
-	public int Index { get; }
 	public string Name { get; }
+	public int Index { get; }
+	public bool InvertCulling { get; }
+	private readonly T data;
 
 	public List<(TextureHandle, int)> Inputs { get; }
 	public List<(TextureHandle handle, bool dontResolve)> Outputs { get; }
 
 	public Action<CommandBuffer, T> render;
-	public bool BeginRenderPass { get; private set; }
+	public bool IsNativeRenderPass { get; private set; }
 	public Int2 Size { get; private set; }
 	public int Samples { get; private set; }
 
-	public RenderPass(T data, int index, string name)
+	public RenderPass(string name, int index, bool invertCulling, T data, Action<CommandBuffer, T> render)
 	{
+		Name = name;
+		InvertCulling = invertCulling;
 		this.data = data;
+		this.render = render;
+
 		Index = index;
-		render = null;
 		Inputs = new();
 		Outputs = new();
-		BeginRenderPass = false;
+		IsNativeRenderPass = false;
 		Size = 1;
 		Samples = 1;
-		Name = name;
 	}
 
 	void IRenderPass.Execute(CommandBuffer command)
@@ -37,15 +42,8 @@ public class RenderPass<T> : IRenderPass
 
 	public void SetRenderPassParams(Int2 size, int samples)
 	{
-		BeginRenderPass = true;
+		IsNativeRenderPass = true;
 		Size = size;
 		Samples = samples;
 	}
-
-	public void SetRenderFunction(Action<CommandBuffer, T> render)
-	{
-		this.render = render;
-	}
-
-	public override string ToString() => Name;
 }
