@@ -8,12 +8,13 @@ using static Unmath.Math;
 public class NewPipeline : RenderPipelineBase
 {
 	private readonly NewPipelineAsset asset;
-	private readonly Material blitMaterial;
+	private readonly Material blitMaterial, deferredMaterial;
 
 	public NewPipeline(NewPipelineAsset asset)
 	{
 		this.asset = asset;
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
+		deferredMaterial = new Material(Shader.Find("Hidden/Morrowind Deferred")) { hideFlags = HideFlags.HideAndDontSave };
 	}
 
 	protected override void RenderCamera(Camera camera, ScriptableCullingParameters cullingParameters, ScriptableRenderContext context)
@@ -27,7 +28,22 @@ public class NewPipeline : RenderPipelineBase
 			fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
-		var setViewData = renderGraph.AddRenderPass("Set View Data", false, (camera, fogEnabled), static (command, data) =>
+		var sunDirection = camera.transform.WorldRotation().InverseRotate(Float3.Up);
+		var sunColor = Float3.One;
+		for (var i = 0; i < cullingResults.visibleLights.Length; i++)
+		{
+			var visibleLight = cullingResults.visibleLights[i];
+			if (visibleLight.lightType != LightType.Directional)
+				continue;
+
+			var lightToWorld = (Float4x4)visibleLight.localToWorldMatrix;
+			var lightRotation = lightToWorld.Rotation;
+			var viewSpaceLightRotation = camera.transform.WorldRotation().InverseRotate(lightRotation);
+			sunDirection = -viewSpaceLightRotation.Forward;
+			sunColor = visibleLight.finalColor.Float3();
+		}
+
+		var setViewData = renderGraph.AddRenderPass("Set View Data", (camera, fogEnabled, sunDirection, sunColor), static (command, data) =>
 		{
 			var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
 			var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
@@ -36,15 +52,21 @@ public class NewPipeline : RenderPipelineBase
 			var worldToClip = viewToClip.Mul(worldToView);
 
 			command.SetGlobalMatrix("WorldToView", worldToView);
+			command.SetGlobalMatrix("ViewToClip", viewToClip);
 			command.SetGlobalMatrix("WorldToClip", worldToClip);
 			command.SetGlobalVector("ViewPosition", data.camera.transform.position);
-			command.SetGlobalVector("SunDirection", data.camera.transform.WorldRotation().InverseRotate(-RenderSettings.sun.transform.forward));
-			command.SetGlobalVector("SunColor", RenderSettings.sun.color.linear);
+			command.SetGlobalVector("TanHalfFov", (Float4)tanHalfFov);
+
+			command.SetGlobalVector("SunDirection", data.sunDirection);
+			command.SetGlobalVector("SunColor", data.sunColor);
 			command.SetGlobalVector("AmbientLight", RenderSettings.ambientLight.linear);
 			command.SetGlobalVector("FogColor", RenderSettings.fogColor.linear);
 			command.SetGlobalFloat("FogScale", data.fogEnabled ? 1 / (RenderSettings.fogEndDistance - RenderSettings.fogStartDistance) : 0);
 			command.SetGlobalFloat("FogOffset", data.fogEnabled ? RenderSettings.fogStartDistance / (RenderSettings.fogStartDistance - RenderSettings.fogEndDistance) : 0);
 			command.SetGlobalVector("ViewSize", new(data.camera.pixelWidth, data.camera.pixelHeight));
+
+			command.SetGlobalFloat("LinearDepthScale", (data.camera.farClipPlane - data.camera.nearClipPlane) * Rcp(data.camera.nearClipPlane * data.camera.farClipPlane));
+			command.SetGlobalFloat("LinearDepthOffset", Rcp(data.camera.farClipPlane));
 		});
 
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
@@ -55,27 +77,47 @@ public class NewPipeline : RenderPipelineBase
 		var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 		var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
 		var cameraColor = renderGraph.GetTexture(new(viewSize, targetFormat, true, RenderSettings.fogColor.linear));
+		var albedoMetallic = renderGraph.GetTexture(new(viewSize, GraphicsFormat.R8G8B8A8_UNorm));
+		var normalOcclusionRoughness = renderGraph.GetTexture(new(viewSize, GraphicsFormat.R8G8B8A8_UNorm));
 
-		// This is only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
-		var invertCulling = false;// asset.Samples > 1 && camera.targetTexture == null;
-
-		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.CommonOpaque }) { enableInstancing = true }, new(RenderQueueRange.opaque));
+		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.CommonOpaque }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
-		var renderForwardOpaque = renderGraph.AddRenderPass("Render Forward Opaque", invertCulling, opaqueRendererList, static (command, opaqueRendererList) =>
+		var renderForwardOpaque = renderGraph.AddRenderPass("Gbuffer", opaqueRendererList, static (command, opaqueRendererList) =>
 		{
 			command.DrawRendererList(opaqueRendererList);
 		});
 		{
 			renderForwardOpaque.SetRenderPassParams(viewSize, asset.Samples);
 			renderForwardOpaque.WriteTexture(cameraDepth);
+			renderForwardOpaque.WriteTexture(albedoMetallic);
+			renderForwardOpaque.WriteTexture(normalOcclusionRoughness);
 			renderForwardOpaque.WriteTexture(cameraColor);
+		}
+
+		var deferredLighting = renderGraph.AddRenderPass("Deferred Lighting", (deferredMaterial, asset), static (command, data) =>
+		{
+			if (data.asset.Samples > 1)
+				command.EnableShaderKeyword("MSAA_ON");
+
+			command.DrawProcedural(default, data.deferredMaterial, 0, MeshTopology.Triangles, 3);
+
+			if (data.asset.Samples > 1)
+				command.DisableShaderKeyword("MSAA_ON");
+		});
+		{
+			deferredLighting.SetRenderPassParams(viewSize, asset.Samples);
+			deferredLighting.ReadTexture(cameraDepth, Shader.PropertyToID("CameraDepth"));
+			deferredLighting.ReadTexture(albedoMetallic, Shader.PropertyToID("GBufferAlbedoMetallic"));
+			deferredLighting.ReadTexture(normalOcclusionRoughness, Shader.PropertyToID("GBufferNormalOcclusionRoughness"));
+			deferredLighting.WriteTexture(cameraDepth);
+			deferredLighting.WriteTexture(cameraColor);
 		}
 
 		var transparentRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.CommonTransparent }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 		var transparentRendererList = context.CreateRendererList(ref transparentRendererParams);
-		var renderForwardTransparent = renderGraph.AddRenderPass("Render Forward Transparent", invertCulling, (transparentRendererList, invertCulling), static (command, data) =>
+		var renderForwardTransparent = renderGraph.AddRenderPass("Render Forward Transparent", transparentRendererList, static (command, transparentRendererList) =>
 		{
-			command.DrawRendererList(data.transparentRendererList);
+			command.DrawRendererList(transparentRendererList);
 		});
 		{
 			renderForwardTransparent.SetRenderPassParams(viewSize, asset.Samples);
@@ -93,7 +135,7 @@ public class NewPipeline : RenderPipelineBase
 		else
 		{
 			var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
-			var finalBlitSetup = renderGraph.AddRenderPass("Final Blit Setup", false, (camera, asset, requiresSceneDepth), static (command, data) =>
+			var finalBlitSetup = renderGraph.AddRenderPass("Final Blit Setup", (camera, asset, requiresSceneDepth), static (command, data) =>
 			{
 				if (data.camera.targetTexture == null)
 					command.EnableShaderKeyword("FLIP");
@@ -121,7 +163,7 @@ public class NewPipeline : RenderPipelineBase
 			});
 
 			// Final blit/resolve if needed
-			var finalBlitPass = renderGraph.AddRenderPass("Final Blit", false, (blitMaterial, camera, asset, requiresSceneDepth), static (command, data) =>
+			var finalBlitPass = renderGraph.AddRenderPass("Final Blit", (blitMaterial, camera, asset, requiresSceneDepth), static (command, data) =>
 			{
 				command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
 
@@ -168,7 +210,7 @@ public class NewPipeline : RenderPipelineBase
 		}
 
 		// Render UI. For now this is done automatically so it only sets matrices for UI rendering
-		renderGraph.AddRenderPass("Set UI Matrices", false, 0, static (command, data) =>
+		renderGraph.AddRenderPass("Set UI Matrices", 0, static (command, data) =>
 		{
 			var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
 			command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);

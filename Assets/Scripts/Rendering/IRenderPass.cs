@@ -6,7 +6,6 @@ public interface IRenderPass
 {
 	string Name { get; }
 	int Index { get; }
-	bool InvertCulling { get; }
 	bool IsNativeRenderPass { get; }
 	Int2 Size { get; }
 	int Samples { get; }

@@ -20,10 +20,9 @@ public class RenderPass<T> : IRenderPass
 	public Int2 Size { get; private set; }
 	public int Samples { get; private set; }
 
-	public RenderPass(string name, int index, bool invertCulling, RenderGraph renderGraph, T data, Action<CommandBuffer, T> render)
+	public RenderPass(string name, int index, RenderGraph renderGraph, T data, Action<CommandBuffer, T> render)
 	{
 		Name = name;
-		InvertCulling = invertCulling;
 		this.renderGraph = renderGraph;
 		this.data = data;
 		this.render = render;

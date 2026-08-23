@@ -19,6 +19,7 @@ public abstract class RenderPipelineBase : RenderPipeline
 
 	protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
 	{
+		//BeginContextRendering(context, cameras);
 		foreach (var camera in cameras)
 		{
 			if (!camera.TryGetCullingParameters(out var cullingParameters))
@@ -31,7 +32,9 @@ public abstract class RenderPipelineBase : RenderPipeline
 #endif
 				ScriptableRenderContext.EmitGeometryForCamera(camera);
 
+			BeginCameraRendering(context, camera);
 			RenderCamera(camera, cullingParameters, context);
+			//EndCameraRendering(context, camera);
 
 			// Render gizmos
 			if (Handles.ShouldRenderGizmos())
@@ -39,7 +42,7 @@ public abstract class RenderPipelineBase : RenderPipeline
 				var preImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PreImageEffects);
 				var postImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PostImageEffects);
 
-				var renderGizmos = renderGraph.AddRenderPass("Render Gizmos", false, (preImageEffectsRenderList, postImageEffectsRenderList), static (command, data) =>
+				var renderGizmos = renderGraph.AddRenderPass("Render Gizmos", (preImageEffectsRenderList, postImageEffectsRenderList), static (command, data) =>
 				{
 					// Note that gizmos use their own matrix logic which we can't override
 					command.DrawRendererList(data.preImageEffectsRenderList);
@@ -51,7 +54,7 @@ public abstract class RenderPipelineBase : RenderPipeline
 			if (camera.cameraType == CameraType.SceneView)
 			{
 				var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
-				var renderWireframe = renderGraph.AddRenderPass("Render Gizmos", false, (camera, wireframeRendererList, context), static (command, data) =>
+				var renderWireframe = renderGraph.AddRenderPass("Render Gizmos", (camera, wireframeRendererList, context), static (command, data) =>
 				{
 					//data.context.SetupCameraProperties(data.camera);
 
@@ -73,6 +76,7 @@ public abstract class RenderPipelineBase : RenderPipeline
 				});
 			}
 		}
+		//EndContextRendering(context, cameras);
 
 		renderGraph.Execute(command);
 		context.ExecuteCommandBuffer(command);

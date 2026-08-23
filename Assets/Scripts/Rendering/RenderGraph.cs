@@ -19,10 +19,10 @@ public class RenderGraph
 		return new(targets.Count - 1);
 	}
 
-	public RenderPass<T> AddRenderPass<T>(string name, bool invertCulling, T data, Action<CommandBuffer, T> render)
+	public RenderPass<T> AddRenderPass<T>(string name, T data, Action<CommandBuffer, T> render)
 	{
 		var index = renderPasses.Count;
-		var renderPass = new RenderPass<T>(name, index, invertCulling, this, data, render);
+		var renderPass = new RenderPass<T>(name, index, this, data, render);
 		renderPasses.Add(renderPass);
 		return renderPass;
 	}
@@ -187,9 +187,6 @@ public class RenderGraph
 
 			if (renderPass.IsNativeRenderPass)
 			{
-				if (renderPass.InvertCulling)
-					command.SetInvertCulling(true);
-
 				subpasses.Add(new() { colorOutputs = new(colorOutputs.AsArray()) });
 				colorOutputs.Clear();
 
@@ -205,11 +202,7 @@ public class RenderGraph
 			renderPass.Execute(command);
 
 			if (renderPass.IsNativeRenderPass)
-			{
 				command.EndRenderPass();
-				if (renderPass.InvertCulling)
-					command.SetInvertCulling(false);
-			}
 		}
 
 		targets.Clear();

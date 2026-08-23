@@ -83,9 +83,11 @@ cbuffer ViewData
 	float2 RcpViewSize;
 	
 	float3 ViewPosition;
-	float ViewDataPadding;
+	float ViewDataPadding0;
 	
 	float4 FrustumCorners[3];
+	float2 TanHalfFov;
+	float2 ViewDataPadding1;
 };
 
 cbuffer CascadeData
@@ -132,9 +134,15 @@ Texture2D<float> SunShadow;
 Texture2DArray<uint> VisibleLightBits;
 Texture2DArray<float> PointShadows;
 Texture3D<float4> VolumetricLighting;
-Texture2D<float> CameraDepth;
 Texture2D<float> ScreenShadows;
-Texture2D<float4> GBufferAlbedoMetallic, GBufferNormalOcclusionRoughness;
+
+#ifdef MSAA_ON
+	Texture2DMS<float, 2> CameraDepth;
+	Texture2DMS<float4, 2> GBufferAlbedoMetallic, GBufferNormalOcclusionRoughness;
+#else
+	Texture2D<float> CameraDepth;
+	Texture2D<float4> GBufferAlbedoMetallic, GBufferNormalOcclusionRoughness;
+#endif
 
 float3 UnderwaterColor;
 float UnderwaterColorWeight;

@@ -16,7 +16,7 @@ struct FragmentInput
 	float3 normal : NORMAL;
 };
 
-Texture2D<float3> _MainTex, CameraColor, FadeTexture;
+Texture2D<float3> _MainTex, FadeTexture;
 SamplerState sampler_MainTex;
 
 cbuffer UnityPerMaterial

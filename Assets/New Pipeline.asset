@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c73c316ca4131a946968d619942dca11, type: 3}
   m_Name: New Pipeline
   m_EditorClassIdentifier: Rendering::NewPipelineAsset
-  <Samples>k__BackingField: 1
+  <Samples>k__BackingField: 8
   defaultMaterials:
     <DefaultMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,
       type: 2}
