@@ -9,7 +9,6 @@ public class RenderPass<T> : IRenderPass
 {
 	public string Name { get; }
 	public int Index { get; }
-	public bool InvertCulling { get; }
 	private readonly T data;
 	private readonly Action<CommandBuffer, T> render;
 	private readonly RenderGraph renderGraph;

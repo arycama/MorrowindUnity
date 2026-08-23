@@ -1,6 +1,3 @@
-using System;
-using System.Runtime.InteropServices;
-using Unity.Collections.LowLevel.Unsafe;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -129,7 +126,7 @@ public class NewPipeline : RenderPipelineBase
 		var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
 		if (renderToBackbuffer)
 		{
-			renderGraph.ExportTexture(cameraColor, BuiltinRenderTextureType.CameraTarget);
+			renderGraph.ExportResource(cameraColor, BuiltinRenderTextureType.CameraTarget);
 		}
 		else
 		{
@@ -169,7 +166,7 @@ public class NewPipeline : RenderPipelineBase
 			if (requiresSceneDepth)
 			{
 				sceneDepth = renderGraph.GetTexture(new(viewSize, depthFormat));
-				renderGraph.ExportTexture(sceneDepth, camera.targetTexture);
+				renderGraph.ExportResource(sceneDepth, camera.targetTexture);
 			}
 
 			var outputs = requiresSceneDepth ? stackalloc[] { sceneDepth, backbufferColor } : stackalloc[] { backbufferColor };
@@ -206,7 +203,7 @@ public class NewPipeline : RenderPipelineBase
 					finalBlitPass.ReadTexture(cameraDepth, Shader.PropertyToID("CameraDepth"));
 			}
 
-			renderGraph.ExportTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+			renderGraph.ExportResource(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
 		}
 	}
 }

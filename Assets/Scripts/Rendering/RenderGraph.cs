@@ -9,8 +9,7 @@ using Unmath;
 public class RenderGraph
 {
 	private readonly List<RenderTargetInfo> targets = new();
-	private readonly List<RenderTargetIdentifier> resources = new();
-	private readonly List<RenderTargetIdentifier> importedResources = new();
+	private readonly List<RenderTargetIdentifier> exportedResources = new();
 	private readonly List<IRenderPass> renderPasses = new();
 
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor)
@@ -50,10 +49,10 @@ public class RenderGraph
 		targets[handle.index] = target;
 	}
 
-	public void ExportTexture(TextureHandle handle, RenderTargetIdentifier id)
+	public void ExportResource(TextureHandle handle, RenderTargetIdentifier id)
 	{
-		var resourceIndex = importedResources.Count;
-		importedResources.Add(id);
+		var resourceIndex = exportedResources.Count;
+		exportedResources.Add(id);
 
 		var target = targets[handle.index];
 		target.resourceIndex = resourceIndex;
@@ -63,8 +62,7 @@ public class RenderGraph
 
 	public void Execute(CommandBuffer command)
 	{
-		// TODO: Can we use spans
-		//Span<AttachmentDescriptor> attachments = stackalloc AttachmentDescriptor[8];
+		List<RenderTargetIdentifier> resources = new();
 
 		var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
 		var subpasses = new FixedBuffer<SubPassDescriptor>(stackalloc SubPassDescriptor[8]);
@@ -146,7 +144,7 @@ public class RenderGraph
 						{
 							if (target.isExported)
 							{
-								attachmentDescriptor.loadStoreTarget = importedResources[target.resourceIndex];
+								attachmentDescriptor.loadStoreTarget = exportedResources[target.resourceIndex];
 							}
 							else
 							{
@@ -208,8 +206,7 @@ public class RenderGraph
 		}
 
 		targets.Clear();
-		resources.Clear();
-		importedResources.Clear();
+		exportedResources.Clear();
 		renderPasses.Clear();
 	}
 }

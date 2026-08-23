@@ -1,9 +1,12 @@
 using System.Collections.Generic;
-using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Unmath;
 using static Unmath.Math;
+
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 public abstract class RenderPipelineBase : RenderPipeline
 {
@@ -36,6 +39,7 @@ public abstract class RenderPipelineBase : RenderPipeline
 			RenderCamera(camera, cullingParameters, context);
 			//EndCameraRendering(context, camera);
 
+#if UNITY_EDITOR
 			// Render gizmos
 			var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 			if (Handles.ShouldRenderGizmos())
@@ -57,7 +61,7 @@ public abstract class RenderPipelineBase : RenderPipeline
 				var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
 				renderGraph.AddRenderPass("Render Wireframe", false, viewSize, 1, (camera, wireframeRendererList, context), default, static (command, data) =>
 				{
-					//data.context.SetupCameraProperties(data.camera);
+					data.context.SetupCameraProperties(data.camera);
 
 					// Editor-only, to make selection-wireframe render properly, we need to setup the same camera properties again but with a flipped matrix
 					var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
@@ -72,10 +76,10 @@ public abstract class RenderPipelineBase : RenderPipeline
 
 					command.SetGlobalMatrix("WorldToClip", worldToClip);
 					command.SetGlobalMatrix("unity_MatrixVP", worldToClipAbs);
-					data.context.SetupCameraProperties(data.camera);
 					command.DrawRendererList(data.wireframeRendererList);
 				});
 			}
+#endif
 		}
 		//EndContextRendering(context, cameras);
 
