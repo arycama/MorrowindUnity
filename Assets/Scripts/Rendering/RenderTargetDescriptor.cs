@@ -13,9 +13,8 @@ public readonly struct RenderTargetDescriptor
 	public readonly Color clearColor;
 	public readonly float clearDepth;
 	public readonly uint clearStencil;
-	public readonly int samples;
 
-	public RenderTargetDescriptor(Int2 size, GraphicsFormat format, int samples = 1, bool clear = false, Color clearColor = default, float clearDepth = 1f, uint clearStencil = default)
+	public RenderTargetDescriptor(Int2 size, GraphicsFormat format, bool clear = false, Color clearColor = default, float clearDepth = 1f, uint clearStencil = default)
 	{
 		this.size = size;
 		this.format = format;
@@ -23,16 +22,15 @@ public readonly struct RenderTargetDescriptor
 		this.clearColor = clearColor;
 		this.clearDepth = clearDepth;
 		this.clearStencil = clearStencil;
-		this.samples = samples;
 	}
 
-	public static implicit operator RenderTextureDescriptor(RenderTargetDescriptor desc)
+	public RenderTextureDescriptor GetRenderTextureDescriptor(int samples)
 	{
 		// Otherwise we need to create a new resource
 		var descriptor = new RenderTextureDescriptor
 		{
-			width = desc.size.x,
-			height = desc.size.y,
+			width = size.x,
+			height = size.y,
 			volumeDepth = 1,
 			mipCount = 1,
 			dimension = TextureDimension.Tex2D,
@@ -40,7 +38,7 @@ public readonly struct RenderTargetDescriptor
 		};
 
 		bool isDepth = false, isStencil = false;
-		switch (desc.format)
+		switch (format)
 		{
 			case GraphicsFormat.D16_UNorm:
 			case GraphicsFormat.D24_UNorm:
@@ -57,26 +55,18 @@ public readonly struct RenderTargetDescriptor
 				isStencil = true;
 				break;
 			default:
-				descriptor.graphicsFormat = desc.format;
+				descriptor.graphicsFormat = format;
 				break;
 		}
 
 		if (isDepth)
-			descriptor.depthStencilFormat = desc.format;
+			descriptor.depthStencilFormat = format;
 
 		if (isStencil)
 			descriptor.stencilFormat = GraphicsFormat.R8_UInt;
 
-		if (desc.samples > 1 && (isDepth || isStencil))
-		{
-			// Resolve not supported 
-			descriptor.msaaSamples = desc.samples;
-			descriptor.bindMS = true;
-		}
-		else
-		{
-			descriptor.msaaSamples = 1;
-		}
+		descriptor.msaaSamples = samples;
+		descriptor.bindMS = samples > 1;
 
 		return descriptor;
 	}

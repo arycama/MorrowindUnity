@@ -10,7 +10,7 @@ public class NewPipeline : RenderPipelineBase
 	private readonly NewPipelineAsset asset;
 	private readonly Material blitMaterial;
 
-	public NewPipeline(NewPipelineAsset asset) 
+	public NewPipeline(NewPipelineAsset asset)
 	{
 		this.asset = asset;
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
@@ -49,17 +49,18 @@ public class NewPipeline : RenderPipelineBase
 
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
-		var cameraDepth = renderGraph.GetTexture(new(viewSize, depthFormat, asset.Samples, true));
+		var cameraDepth = renderGraph.GetTexture(new(viewSize, depthFormat, true));
 
 		// TODO: This should also account for HDR
 		var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 		var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
-		var cameraColor = renderGraph.GetTexture(new(viewSize, targetFormat, asset.Samples, true, RenderSettings.fogColor.linear));
+		var cameraColor = renderGraph.GetTexture(new(viewSize, targetFormat, true, RenderSettings.fogColor.linear));
 
 		// This is only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
-		var invertCulling = asset.Samples > 1 && camera.targetTexture == null;
+		var invertCulling = false;// asset.Samples > 1 && camera.targetTexture == null;
 
-		var opaqueRendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque, sortingCriteria = SortingCriteria.CommonOpaque });
+		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.CommonOpaque }) { enableInstancing = true }, new(RenderQueueRange.opaque));
+		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
 		var renderForwardOpaque = renderGraph.AddRenderPass("Render Forward Opaque", invertCulling, opaqueRendererList, static (command, opaqueRendererList) =>
 		{
 			command.DrawRendererList(opaqueRendererList);
@@ -70,7 +71,8 @@ public class NewPipeline : RenderPipelineBase
 			renderForwardOpaque.WriteTexture(cameraColor);
 		}
 
-		var transparentRendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.transparent, sortingCriteria = SortingCriteria.CommonTransparent });
+		var transparentRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.CommonTransparent }) { enableInstancing = true }, new(RenderQueueRange.transparent));
+		var transparentRendererList = context.CreateRendererList(ref transparentRendererParams);
 		var renderForwardTransparent = renderGraph.AddRenderPass("Render Forward Transparent", invertCulling, (transparentRendererList, invertCulling), static (command, data) =>
 		{
 			command.DrawRendererList(data.transparentRendererList);

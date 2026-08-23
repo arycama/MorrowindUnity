@@ -4,17 +4,19 @@ using System.Diagnostics;
 public struct RenderTargetInfo
 {
 	public RenderTargetDescriptor descriptor;
+	public bool isExported;
 	public int resourceIndex;
 	public int firstWriteIndex;
+	public int lastWriteIndex;
 	public int lastReadIndex;
-	public bool isImported;
 
-	public RenderTargetInfo(RenderTargetDescriptor descriptor, int resourceIndex, int firstWriteIndex, int lastReadIndex, bool isImported)
+	public RenderTargetInfo(RenderTargetDescriptor descriptor)
 	{
 		this.descriptor = descriptor;
-		this.resourceIndex = resourceIndex;
-		this.firstWriteIndex = firstWriteIndex;
-		this.lastReadIndex = lastReadIndex;
-		this.isImported = isImported;
+		isExported = false;
+		resourceIndex = -1;
+		firstWriteIndex = -1;
+		lastWriteIndex = -1;
+		lastReadIndex = -1;
 	}
 }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Unity.Collections;
+using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 
@@ -14,7 +15,7 @@ public class RenderGraph
 
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor)
 	{
-		targets.Add(new(descriptor, -1, -1, -1, false));
+		targets.Add(new(descriptor));
 		return new(targets.Count - 1);
 	}
 
@@ -41,6 +42,9 @@ public class RenderGraph
 		if (target.firstWriteIndex == -1)
 			target.firstWriteIndex = index;
 
+		// We also track the last write index so that we know when to resolve if msaa is enabled
+		target.lastWriteIndex = index;
+
 		// Writes are also treataed as reads for the purposes of resource tracking, this stops a texture from being discarded as a future write (Eg a 2nd pass to the same RT) would not be treated as a read otherwise, and would cause the texture to be discarded after the first pass
 		target.lastReadIndex = index;
 		targets[handle.index] = target;
@@ -53,7 +57,7 @@ public class RenderGraph
 
 		var target = targets[handle.index];
 		target.resourceIndex = resourceIndex;
-		target.isImported = true;
+		target.isExported = true;
 		targets[handle.index] = target;
 	}
 
@@ -76,8 +80,15 @@ public class RenderGraph
 					graphicsFormat = target.descriptor.format
 				};
 
+				var isColor = target.descriptor.format switch
+				{
+					GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
+					_ => true,
+				};
+
 				// Clear the target on the first write if needed, or just leave contents uninitialized. If this is not the first write, then it will default to a load action.
-				if (i == target.firstWriteIndex)
+				var isFirstWrite = i == target.firstWriteIndex;
+				if (isFirstWrite)
 				{
 					if (target.descriptor.clear)
 					{
@@ -89,99 +100,75 @@ public class RenderGraph
 					else
 						attachmentDescriptor.loadAction = RenderBufferLoadAction.DontCare;
 				}
-
-				bool isColor;
-				switch (target.descriptor.format)
+				else
 				{
-					case GraphicsFormat.D16_UNorm:
-					case GraphicsFormat.D24_UNorm:
-					case GraphicsFormat.D32_SFloat:
-					case GraphicsFormat.D16_UNorm_S8_UInt:
-					case GraphicsFormat.D24_UNorm_S8_UInt:
-					case GraphicsFormat.D32_SFloat_S8_UInt:
-						isColor = false;
-						break;
-					default:
-						isColor = true;
-						break;
+					// If this target has been written previously, it must be loaded
+					attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
+					attachmentDescriptor.loadAction = RenderBufferLoadAction.Load;
 				}
 
-				// If this is the last time this target is read, it does not need to be stored. Otherwise it needs to be stored or resolved depending on sample count
-				var requiresResolve = target.descriptor.samples > 1 && isColor;
-
-				// TODO: Can this be combined with the 2nd branch at all
-				if (target.isImported)
+				// If this is the last pass, it needs to be resolved
+				var requiresResolve = renderPass.Samples > 1 && i == target.lastWriteIndex && isColor;
+				if (requiresResolve)
 				{
-					// Imported targets are always resolved or stored
-					var resource = importedResources[target.resourceIndex];
-					if (requiresResolve)
-					{
-						attachmentDescriptor.resolveTarget = resource;
-						attachmentDescriptor.storeAction = RenderBufferStoreAction.Resolve;
-					}
-					else
-					{
-						attachmentDescriptor.loadStoreTarget = resource;
-					}
+					target.resourceIndex = resources.Count;
+					var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
+					command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1));
+					resources.Add(resourceId);
+					targets[output.index] = target;
+					attachmentDescriptor.resolveTarget = resources[target.resourceIndex];
+					attachmentDescriptor.storeAction = RenderBufferStoreAction.Resolve;
 				}
 				else
 				{
-					RenderTargetIdentifier resource;
-					var requiresLoad = i > target.firstWriteIndex;
-					var requiresStore = i < target.lastReadIndex;
-
-					if (requiresLoad)
+					// Depth targets can't be msaa resolved so we need to store the msaa version.
+					var requiresMsaaStore = renderPass.Samples > 1 && (i < target.lastWriteIndex || (i == target.lastWriteIndex && !isColor));
+					if (requiresMsaaStore)
 					{
-						// If this target has already been written to, use it's current resource
-						resource = resources[target.resourceIndex];
+						if (isFirstWrite)
+						{
+							target.resourceIndex = resources.Count;
+							var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
+							command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(renderPass.Samples));
+							resources.Add(resourceId);
+							targets[output.index] = target;
+						}
 
-						if (requiresStore)
-						{
-							if (requiresResolve)
-							{
-								attachmentDescriptor.resolveTarget = resource;
-								attachmentDescriptor.storeAction = RenderBufferStoreAction.Resolve;
-							}
-							else
-							{
-								attachmentDescriptor.loadStoreTarget = resource;
-							}
-						}
-						else
-						{
-							attachmentDescriptor.loadStoreTarget = resource;
-							attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
-						}
-					}
-					else if (requiresStore)
-					{
-						// Dynamic targets only need to be stored if they are read in a later renderpass
-						target.resourceIndex = resources.Count;
-						command.GetTemporaryRT(target.resourceIndex, target.descriptor);
-						resource = target.resourceIndex;
-						resources.Add(resource);
-						targets[output.index] = target;
-
-						if (requiresResolve)
-						{
-							attachmentDescriptor.resolveTarget = resource;
-							attachmentDescriptor.storeAction = RenderBufferStoreAction.Resolve;
-						}
-						else
-						{
-							attachmentDescriptor.loadStoreTarget = resource;
-						}
+						attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
+						attachmentDescriptor.storeAction = RenderBufferStoreAction.Store;
 					}
 					else
 					{
-						attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
+						var requiresStore = i < target.lastReadIndex || target.isExported;
+						if (requiresStore)
+						{
+							if (target.isExported)
+							{
+								attachmentDescriptor.loadStoreTarget = importedResources[target.resourceIndex];
+							}
+							else
+							{
+								target.resourceIndex = resources.Count;
+								var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
+								command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1));
+								resources.Add(resourceId);
+								targets[output.index] = target;
+								attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
+							}
+
+							attachmentDescriptor.storeAction = RenderBufferStoreAction.Store;
+						}
+						else
+						{
+							attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
+						}
 					}
 				}
 
 				var index = attachments.Length;
 				attachments.Add(attachmentDescriptor);
 
-				if(isColor)
+				if (isColor)
 					colorOutputs.Add(index);
 				else
 					depthIndex = index;
