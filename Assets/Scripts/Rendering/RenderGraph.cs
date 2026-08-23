@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -65,9 +64,11 @@ public class RenderGraph
 	public void Execute(CommandBuffer command)
 	{
 		// TODO: Can we use spans
-		var attachments = new NativeList<AttachmentDescriptor>(8, Allocator.Temp);
-		var subpasses = new NativeList<SubPassDescriptor>(8, Allocator.Temp);
-		var colorOutputs = new NativeList<int>(8, Allocator.Temp);
+		//Span<AttachmentDescriptor> attachments = stackalloc AttachmentDescriptor[8];
+
+		var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
+		var subpasses = new FixedBuffer<SubPassDescriptor>(stackalloc SubPassDescriptor[8]);
+		var colorOutputs = new FixedBuffer<int>(stackalloc int[8]);
 		var depthIndex = -1;
 
 		for (var i = 0; i < renderPasses.Count; i++)
@@ -170,7 +171,7 @@ public class RenderGraph
 					}
 				}
 
-				var index = attachments.Length;
+				var index = attachments.Count;
 				attachments.Add(attachmentDescriptor);
 
 				if (isColor)
@@ -188,13 +189,13 @@ public class RenderGraph
 
 			if (renderPass.IsNativeRenderPass)
 			{
-				subpasses.Add(new() { colorOutputs = new(colorOutputs.AsArray()) });
+				subpasses.Add(new() { colorOutputs = new(colorOutputs.Span.AsArray()) });
 				colorOutputs.Clear();
 
 				Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(renderPass.Name)];
 				_ = Encoding.UTF8.GetBytes(renderPass.Name, debugNameUtf8);
 
-				command.BeginRenderPass(renderPass.Size.x, renderPass.Size.y, renderPass.Samples, attachments.AsArray(), depthIndex, subpasses.AsArray(), debugNameUtf8);
+				command.BeginRenderPass(renderPass.Size.x, renderPass.Size.y, renderPass.Samples, attachments.Span.AsArray(), depthIndex, subpasses.Span.AsArray(), debugNameUtf8);
 				subpasses.Clear();
 				attachments.Clear();
 				depthIndex = -1;
