@@ -148,11 +148,15 @@ public class RenderGraph
 							}
 							else
 							{
-								target.resourceIndex = resources.Count;
-								var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
-								command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1));
-								resources.Add(resourceId);
-								targets[output.index] = target;
+								if (isFirstWrite)
+								{
+									target.resourceIndex = resources.Count;
+									var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
+									command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1));
+									resources.Add(resourceId);
+									targets[output.index] = target;
+								}
+
 								attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
 							}
 
