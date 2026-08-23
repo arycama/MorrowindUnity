@@ -105,7 +105,9 @@ public class NewPipeline : RenderPipeline
 				fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
-			var setViewData = AddRenderPass((camera, fogEnabled, asset), "Set View Data");
+			// This is basically only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
+			var invertCulling = asset.Samples > 1 && camera.targetTexture == null;
+			var setViewData = AddRenderPass((camera, fogEnabled, invertCulling), "Set View Data");
 			{
 				setViewData.SetRenderFunction(static (command, data) =>
 				{
@@ -126,8 +128,7 @@ public class NewPipeline : RenderPipeline
 					command.SetGlobalFloat("FogOffset", data.fogEnabled ? RenderSettings.fogStartDistance / (RenderSettings.fogStartDistance - RenderSettings.fogEndDistance) : 0);
 					command.SetGlobalVector("ViewSize", new(data.camera.pixelWidth, data.camera.pixelHeight));
 
-					// This is basically only required if the camera is rendering to a no-resolved MSAA texture, which is the case for depth in the scene view..
-					if (data.asset.Samples > 1 && data.camera.targetTexture == null)
+					if (data.invertCulling)
 						command.SetInvertCulling(true);
 				});
 			}
@@ -144,20 +145,33 @@ public class NewPipeline : RenderPipeline
 			// TODO: Check for hardware msaa backbuffer resolve support
 			var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
 
-			var rendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque });
-			var renderForward = AddRenderPass((asset, camera, rendererList), "Render Forward");
+			var opaqueRendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.opaque });
+			var renderForwardOpaque = AddRenderPass(opaqueRendererList, "Render Forward Opaque");
 			{
-				WriteTexture(renderForward, cameraDepth, true);
-				WriteTexture(renderForward, cameraColor, false);
+				WriteTexture(renderForwardOpaque, cameraDepth, true);
+				WriteTexture(renderForwardOpaque, cameraColor, false);
 
-				renderForward.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
-				renderForward.SetRenderFunction(static (command, data) =>
+				renderForwardOpaque.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
+				renderForwardOpaque.SetRenderFunction(static (command, opaqueRendererList) =>
 				{
-					command.DrawRendererList(data.rendererList);
+					command.DrawRendererList(opaqueRendererList);
+					command.EndRenderPass();
+				});
+			}
 
+			var transparentRendererList = context.CreateRendererList(new(new ShaderTagId("Forward"), cullingResults, camera) { renderQueueRange = RenderQueueRange.transparent });
+			var renderForwardTransparent = AddRenderPass((transparentRendererList, invertCulling), "Render Forward Transparent");
+			{
+				WriteTexture(renderForwardTransparent, cameraDepth, true);
+				WriteTexture(renderForwardTransparent, cameraColor, false);
+
+				renderForwardTransparent.SetRenderPassParams(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
+				renderForwardTransparent.SetRenderFunction(static (command, data) =>
+				{
+					command.DrawRendererList(data.transparentRendererList);
 					command.EndRenderPass();
 
-					if (data.asset.Samples > 1 && data.camera.targetTexture == null)
+					if (data.invertCulling)
 						command.SetInvertCulling(false);
 				});
 			}
