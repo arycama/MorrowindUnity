@@ -4,7 +4,7 @@ Shader "Hidden/Morrowind Deferred"
     {
         Pass
         {
-            Blend One One
+            Blend One OneMinusSrcAlpha
             Cull Off
             ZWrite Off
             ZTest Greater

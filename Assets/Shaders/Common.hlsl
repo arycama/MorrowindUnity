@@ -13,6 +13,7 @@
 	const static bool IsShadowPass = false;
 #endif
 
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Color.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Geometry.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/MatrixUtils.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Packing.hlsl"
@@ -20,9 +21,8 @@
 
 struct GbufferOutput
 {
-	float4 albedoMetallic : SV_Target0;
-	float4 normalOcclusionRoughness : SV_Target1;
-	float4 emission : SV_Target2;
+	float4 albedoNormal : SV_Target0;
+	float3 emissive : SV_Target1;
 };
 
 struct Light
@@ -133,14 +133,14 @@ Texture2DArray<uint> VisibleLightBits;
 Texture2DArray<float> PointShadows;
 Texture3D<float4> VolumetricLighting;
 Texture2D<float> ScreenShadows;
-
-Texture2D<float4> GBufferAlbedoMetallic, GBufferNormalOcclusionRoughness;
-Texture2D<float4> CameraColor;
+Texture2D<float3> CameraColor;
 
 #ifdef MSAA
 	Texture2DMS<float, 8> CameraDepth;
+	Texture2DMS<float4, 8> AlbedoNormal;
 #else
 	Texture2D<float> CameraDepth;
+	Texture2D<float4> AlbedoNormal;
 #endif
 
 float3 UnderwaterColor;
@@ -232,13 +232,6 @@ float3 ObjectToViewNormal(float3 normal, uint instanceId)
 	return WorldToViewNormal(worldNormal);
 }
 
-float4 BilinearWeights(float2 uv, float2 textureSize)
-{
-	float2 localUv = frac(uv * textureSize - 0.5 + rcp(512.0));
-	float4 weights = localUv.xxyy * float4(-1, 1, 1, -1) + float4(1, 0, 0, 1);
-	return weights.zzww * weights.xyyx;
-}
-
 float LinearEyeDepth(float depth)
 {
 	return rcp(LinearDepthScale * depth + LinearDepthOffset);
@@ -249,14 +242,14 @@ float LinearToDeviceDepth(float eyeDepth)
 	return rcp(eyeDepth) * ViewToClip._m23 + ViewToClip._m22;
 }
 
-GbufferOutput OutputGbuffer(float3 albedo, float3 normal, float3 emission, float3 V)
+GbufferOutput OutputGbuffer(float3 albedo, float3 normal, float3 emissive, float3 V, float2 screenPosition)
 {
-	normal = FromToRotationZInverse(-V, -normal, false);
-
+	half3 yCoCg = RgbToYCbCr(albedo);
+	
 	GbufferOutput gbuffer;
-	gbuffer.albedoMetallic = float4(albedo, 0.0);
-	gbuffer.normalOcclusionRoughness = float4(NormalToPyramidUv(normal), 1.0, 1.0);
-	gbuffer.emission = float4(emission, 0.0);
+	gbuffer.albedoNormal.xy = Checker(screenPosition) ? yCoCg.xy : yCoCg.xz;
+	gbuffer.albedoNormal.zw = NormalToPyramidUv(FromToRotationZInverse(-V, -normal, false));
+	gbuffer.emissive = emissive;
 	return gbuffer;
 }
 
@@ -380,11 +373,6 @@ float4 GetLuminanceAndFog(float4 color, float3 ambient, float3 normal, float2 sc
 	color.rgb = color.rgb * fogTransmittance + fogLuminance;
 	
 	return color;
-}
-
-float3 GammaToLinear(float3 color)
-{
-	return select(color <= 0.04045, color * rcp(12.92), pow((color + 0.055) * rcp(1.055), 2.4));
 }
 
 float4 GammaToLinear(float4 color)

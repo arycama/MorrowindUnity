@@ -24,11 +24,11 @@ float4 Fragment(float4 position : SV_Position,
 		#ifdef MSAA
 			float2 coord = position.xy;
 			coord.y = ViewSize.y - coord.y;
-			depth = CameraDepth.Load(coord, 0);		
+			depth = CameraDepth.Load(coord, 0);
 		#else
 			depth = CameraDepth.Sample(PointClampSampler, uv);
 		#endif
 	#endif
 
-	return CameraColor.Sample(PointClampSampler, uv);
+	return float4(CameraColor.Sample(PointClampSampler, uv), 1.0);
 }

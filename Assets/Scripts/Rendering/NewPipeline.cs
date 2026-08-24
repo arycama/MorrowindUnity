@@ -57,7 +57,7 @@ public class NewPipeline : RenderPipelineBase
 		{
 			var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
 			var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
-			var worldToView = Float4x4.WorldToLocal(0.0f, camera.transform.WorldRotation());
+			var worldToView = Float4x4.Rotate(camera.transform.WorldRotation().Inverse);
 			var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, camera.nearClipPlane, camera.farClipPlane, 0, isFlipped);
 			var worldToClip = viewToClip.Mul(worldToView);
 			var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
@@ -66,7 +66,8 @@ public class NewPipeline : RenderPipelineBase
 			var near = camera.nearClipPlane;
 			var far = camera.farClipPlane;
 
-			command.SetBufferData(viewDataBuffer, stackalloc[] { new ViewDataStruct(
+			command.SetBufferData(viewDataBuffer, stackalloc[]
+			{(
 				worldToClip,
 				viewToClip,
 				worldToView,
@@ -75,7 +76,7 @@ public class NewPipeline : RenderPipelineBase
 				(Float2)viewSize, 1.0f / (Float2)viewSize,
 				camera.transform.WorldPosition(), 0f,
 				tanHalfFov, 0, 0
-			)});
+			)}.AsArray());
 		}
 
 		var viewInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
@@ -86,7 +87,7 @@ public class NewPipeline : RenderPipelineBase
 			var fogScale = data.fogEnabled ? 1 / (fogEnd - fogStart) : 0;
 			var fogOffset = data.fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
 
-			command.SetBufferData(data.environmentDataBuffer, stackalloc[] 
+			command.SetBufferData(data.environmentDataBuffer, stackalloc[]
 			{(
 				RenderSettings.ambientLight.LinearFloat3(), fogScale,
 				RenderSettings.fogColor.LinearFloat3(), fogOffset,
@@ -100,25 +101,19 @@ public class NewPipeline : RenderPipelineBase
 
 		var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
 		var cameraDepth = renderGraph.GetTexture(new(viewInfo, depthFormat, true), Shader.PropertyToID("CameraDepth"));
-
-		// TODO: This should also account for HDR
-		var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
-		var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
-
-		var cameraColor = renderGraph.GetTexture(new(viewInfo, targetFormat, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
-		var albedoMetallic = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_SRGB), Shader.PropertyToID("GBufferAlbedoMetallic"));
-		var normalOcclusionRoughness = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("GBufferNormalOcclusionRoughness"));
+		var cameraColor = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.B10G11R11_UFloatPack32, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
+		var albedoNormal = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"));
 
 		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.CommonOpaque }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
-		renderGraph.AddRenderPass("Gbuffer", viewInfo, (opaqueRendererList, viewDataBuffer, environmentDataBuffer), stackalloc[] { cameraDepth, albedoMetallic, normalOcclusionRoughness, cameraColor }, render: static (command, data) =>
+		renderGraph.AddRenderPass("Gbuffer", viewInfo, (opaqueRendererList, viewDataBuffer, environmentDataBuffer), stackalloc[] { cameraDepth, albedoNormal, cameraColor }, render: static (command, data) =>
 		{
 			command.SetGlobalConstantBuffer(data.environmentDataBuffer, Shader.PropertyToID("EnvironmentData"), 0, data.environmentDataBuffer.stride);
 			command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
 			command.DrawRendererList(data.opaqueRendererList);
 		});
 
-		renderGraph.AddRenderPass("Deferred Lighting", viewInfo, (deferredMaterial, asset, viewDataBuffer, environmentDataBuffer, propertyBlock), stackalloc[] { cameraDepth, cameraColor }, default, stackalloc[] { cameraDepth, albedoMetallic, normalOcclusionRoughness }, static (command, data) =>
+		renderGraph.AddRenderPass("Deferred Lighting", viewInfo, (deferredMaterial, asset, viewDataBuffer, environmentDataBuffer, propertyBlock), stackalloc[] { cameraDepth, cameraColor }, default, stackalloc[] { cameraDepth, albedoNormal }, static (command, data) =>
 		{
 			data.propertyBlock.Clear();
 			data.propertyBlock.SetConstantBuffer(Shader.PropertyToID("EnvironmentData"), data.environmentDataBuffer, 0, data.environmentDataBuffer.stride);
@@ -144,85 +139,80 @@ public class NewPipeline : RenderPipelineBase
 
 		// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 		// TODO: Check for hardware msaa backbuffer resolve support
-		var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
-		if (renderToBackbuffer)
+		var backbufferInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight));
+		var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
+
+		// Final blit/resolve if needed
+		// TODO: This should also account for HDR
+		var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
+		var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
+		var backbufferColor = renderGraph.GetTexture(new(viewInfo, targetFormat), Shader.PropertyToID("SceneColor"));
+
+		// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
+		TextureHandle sceneDepth = default;
+		if (requiresSceneDepth)
 		{
-			renderGraph.ExportResource(cameraColor, BuiltinRenderTextureType.CameraTarget);
+			sceneDepth = renderGraph.GetTexture(new(viewInfo, depthFormat), Shader.PropertyToID("SceneDepth"));
+			renderGraph.ExportResource(sceneDepth, camera.targetTexture);
 		}
-		else
+
+		var outputs = requiresSceneDepth ? stackalloc[] { sceneDepth, backbufferColor } : stackalloc[] { backbufferColor };
+		var inputs = requiresSceneDepth ? stackalloc[] { cameraColor, cameraDepth } : stackalloc[] { cameraColor };
+		renderGraph.AddRenderPass("Final Blit", backbufferInfo, (blitMaterial, camera, asset, requiresSceneDepth, viewDataBuffer), outputs, inputs, render: static (command, data) =>
 		{
-			var backbufferInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight));
-			var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
+			if (data.camera.targetTexture == null)
+				command.EnableShaderKeyword("FLIP");
 
-			// Final blit/resolve if needed
-			var backbufferColor = renderGraph.GetTexture(new(viewInfo, targetFormat), Shader.PropertyToID("SceneColor"));
+			if (data.requiresSceneDepth)
+				command.EnableShaderKeyword("DEPTH");
 
-			// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
-			TextureHandle sceneDepth = default;
-			if (requiresSceneDepth)
-			{
-				sceneDepth = renderGraph.GetTexture(new(viewInfo, depthFormat), Shader.PropertyToID("SceneDepth"));
-				renderGraph.ExportResource(sceneDepth, camera.targetTexture);
-			}
+			if (data.asset.Samples > 1)
+				command.EnableShaderKeyword("MSAA");
 
-			var outputs = requiresSceneDepth ? stackalloc[] { sceneDepth, backbufferColor } : stackalloc[] { backbufferColor };
-			var inputs = requiresSceneDepth ? stackalloc[] { cameraColor, cameraDepth } : stackalloc[] { cameraColor };
-			renderGraph.AddRenderPass("Final Blit", backbufferInfo, (blitMaterial, camera, asset, requiresSceneDepth, viewDataBuffer), outputs, inputs, render: static (command, data) =>
-			{
-				if (data.camera.targetTexture == null)
-					command.EnableShaderKeyword("FLIP");
+			command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
+			command.SetWireframe(false);
+			command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
 
-				if (data.requiresSceneDepth)
-					command.EnableShaderKeyword("DEPTH");
+			if (data.camera.targetTexture == null)
+				command.DisableShaderKeyword("FLIP");
 
-				if (data.asset.Samples > 1)
-					command.EnableShaderKeyword("MSAA");
+			if (data.requiresSceneDepth)
+				command.DisableShaderKeyword("DEPTH");
 
-				command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
-				command.SetWireframe(false);
-				command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
+			if (data.asset.Samples > 1)
+				command.DisableShaderKeyword("MSAA");
+		});
 
-				if (data.camera.targetTexture == null)
-					command.DisableShaderKeyword("FLIP");
-
-				if (data.requiresSceneDepth)
-					command.DisableShaderKeyword("DEPTH");
-
-				if (data.asset.Samples > 1)
-					command.DisableShaderKeyword("MSAA");
-			});
-
-			renderGraph.ExportResource(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+		renderGraph.ExportResource(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
 
 #if UNITY_EDITOR
-			// Render gizmos
-			var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
-			if (Handles.ShouldRenderGizmos())
-			{
-				var preImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PreImageEffects);
-				var postImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PostImageEffects);
+		// Render gizmos
+		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
+		if (Handles.ShouldRenderGizmos())
+		{
+			var preImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PreImageEffects);
+			var postImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PostImageEffects);
 
-				renderGraph.AddRenderPass("Render Gizmos", viewInfo, (preImageEffectsRenderList, postImageEffectsRenderList), render: static (command, data) =>
-				{
-					// Note that gizmos use their own matrix logic which we can't override
-					command.DrawRendererList(data.preImageEffectsRenderList);
-					command.DrawRendererList(data.postImageEffectsRenderList);
-				});
-			}
-
-			// Render wireframe
-			if (camera.cameraType == CameraType.SceneView)
+			renderGraph.AddRenderPass("Render Gizmos", viewInfo, (preImageEffectsRenderList, postImageEffectsRenderList), render: static (command, data) =>
 			{
-				var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
-				renderGraph.AddRenderPass("Render Wireframe", viewInfo, (camera, wireframeRendererList, context, viewDataBuffer), render: static (command, data) =>
-				{
-					SetViewDataStruct(data.camera, command, data.viewDataBuffer, true);
-					data.context.SetupCameraProperties(data.camera);
-					command.DrawRendererList(data.wireframeRendererList);
-				});
-			}
-#endif
+				// Note that gizmos use their own matrix logic which we can't override
+				command.DrawRendererList(data.preImageEffectsRenderList);
+				command.DrawRendererList(data.postImageEffectsRenderList);
+			});
 		}
+
+		// Render wireframe
+		if (camera.cameraType == CameraType.SceneView)
+		{
+			var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
+			renderGraph.AddRenderPass("Render Wireframe", viewInfo, (camera, wireframeRendererList, context, viewDataBuffer), render: static (command, data) =>
+			{
+				SetViewDataStruct(data.camera, command, data.viewDataBuffer, true);
+				data.context.SetupCameraProperties(data.camera);
+				command.DrawRendererList(data.wireframeRendererList);
+			});
+		}
+#endif
 	}
 }
 

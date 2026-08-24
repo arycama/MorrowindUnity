@@ -19,10 +19,10 @@ void RayGeneration()
 	if (depth == 0.0)
 		return;
 		
-	float4 normalOcclusionRoughness = GBufferNormalOcclusionRoughness[position];
+	float4 albedoNormal = AlbedoNormal[position];
 	float2 noise2D = Noise2D(position);
 	
-	float3 N = PyramidUvToNormal(normalOcclusionRoughness.xy);
+	float3 N = PyramidUvToNormal(albedoNormal.zw);
 	
 	float3 worldPosition = MultiplyPointProj(PixelToWorld, float3(position + 0.5, depth)).xyz;
 	float3 V = MultiplyPoint3x4(WorldToView, normalize(-worldPosition));

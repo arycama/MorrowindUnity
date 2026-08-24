@@ -59,6 +59,13 @@ FragmentInput Vertex(VertexInput input)
 	return output;
 }
 
+float4 BilinearWeights(float2 uv, float2 textureSize)
+{
+	float2 localUv = frac(uv * textureSize - 0.5 + rcp(512.0));
+	float4 weights = localUv.xxyy * float4(-1, 1, 1, -1) + float4(1, 0, 0, 1);
+	return weights.zzww * weights.xyyx;
+}
+
 FragmentOutput Fragment(FragmentInput input)
 {
 	FragmentOutput output;
@@ -77,7 +84,7 @@ FragmentOutput Fragment(FragmentInput input)
 		if (ViewPosition.y < WaterHeight)
 			emissive = lerp(emissive, emissive * UnderwaterColor, UnderwaterColorWeight);
 		
-		output.gbuffer = OutputGbuffer(color, input.normal, emissive, normalize(-input.viewPosition));
+		output.gbuffer = OutputGbuffer(color, input.normal, emissive, normalize(-input.viewPosition), input.position.xy);
 	#endif
 	
 	return output;

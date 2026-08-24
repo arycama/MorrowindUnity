@@ -1,7 +1,4 @@
-#ifdef __INTELLISENSE__
-	#define MSAA_ON
-#endif
-
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/GBuffer.hlsl"
 #include "Assets/Shaders/Common.hlsl"
 
 Texture2D<float> ScreenSpaceOcclusion;
@@ -10,11 +7,9 @@ Texture2D<float3> ScreenSpaceDiffuse;
 #ifdef MSAA_ON
 	Texture2DMS<float4, 8> _UnityFBInput0;
 	Texture2DMS<float4, 8> _UnityFBInput1;
-	Texture2DMS<float4, 8> _UnityFBInput2;
 #else
 	Texture2D<float4> _UnityFBInput0;
 	Texture2D<float4> _UnityFBInput1;
-	Texture2D<float4> _UnityFBInput2;
 #endif
 
 struct FragmentInput
@@ -44,27 +39,26 @@ float3 Fragment(FragmentInput input) : SV_Target
 {
 	#ifdef MSAA_ON
 		float depth = _UnityFBInput0.Load(input.position.xy, input.sampleIndex).r;
-		float4 albedoMetallic = _UnityFBInput1.Load(input.position.xy, input.sampleIndex);
-		float4 normalOcclusionRoughness = _UnityFBInput2.Load(input.position.xy, input.sampleIndex);
+		float4 albedoNormal = _UnityFBInput1.Load(input.position.xy, input.sampleIndex);
 	#else
 		float depth = _UnityFBInput0[input.position.xy].r;
-		float4 albedoMetallic = _UnityFBInput1[input.position.xy];
-		float4 normalOcclusionRoughness = _UnityFBInput2[input.position.xy];
+		float4 albedoNormal = _UnityFBInput1[input.position.xy];
 	#endif
-	
+
 	float eyeDepth = LinearEyeDepth(depth);
 	float3 viewPosition = eyeDepth * input.worldDirection;
 	float3 V = normalize(-viewPosition);
 	
-	float3 N = PyramidUvToNormal(normalOcclusionRoughness.xy);
+	float3 albedo = UnpackAlbedo(albedoNormal.rg, input.position.xy);
+	float3 N = PyramidUvToNormal(albedoNormal.ba);
 	N = -FromToRotationZ(-V, N, false);
 	
-	float3 result = GetLuminanceAndFog(float4(albedoMetallic.rgb, 1.0), 0.0, N, input.position.xy, viewPosition).rgb;
+	float3 result = GetLuminanceAndFog(float4(albedo, 1.0), 0.0, N, input.position.xy, viewPosition).rgb;
 	
-#ifdef RAYTRACING_ON
+	#ifdef RAYTRACING_ON
 		//float occlusion = ScreenSpaceOcclusion[input.position.xy];
 		//result += ScreenSpaceDiffuse[input.position.xy] * albedoMetallic.rgb;
 	#endif
 	
-	return result;
+	return float4(result, FogFactor(viewPosition));
 }
