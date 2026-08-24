@@ -47,7 +47,7 @@ public abstract class RenderPipelineBase : RenderPipeline
 				var preImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PreImageEffects);
 				var postImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PostImageEffects);
 
-				renderGraph.AddRenderPass("Render Gizmos", false, viewSize, 1, (preImageEffectsRenderList, postImageEffectsRenderList), default, static (command, data) =>
+				renderGraph.AddRenderPass("Render Gizmos", false, viewSize, 1, (preImageEffectsRenderList, postImageEffectsRenderList), default, default, static (command, data) =>
 				{
 					// Note that gizmos use their own matrix logic which we can't override
 					command.DrawRendererList(data.preImageEffectsRenderList);
@@ -59,7 +59,7 @@ public abstract class RenderPipelineBase : RenderPipeline
 			if (camera.cameraType == CameraType.SceneView)
 			{
 				var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
-				renderGraph.AddRenderPass("Render Wireframe", false, viewSize, 1, (camera, wireframeRendererList, context), default, static (command, data) =>
+				renderGraph.AddRenderPass("Render Wireframe", false, viewSize, 1, (camera, wireframeRendererList, context), default, default, static (command, data) =>
 				{
 					data.context.SetupCameraProperties(data.camera);
 

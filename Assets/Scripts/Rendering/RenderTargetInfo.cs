@@ -9,10 +9,12 @@ public struct RenderTargetInfo
 	public int firstWriteIndex;
 	public int lastWriteIndex;
 	public int lastReadIndex;
+	public int propertyId;
 
-	public RenderTargetInfo(RenderTargetDescriptor descriptor)
+	public RenderTargetInfo(RenderTargetDescriptor descriptor, int propertyId)
 	{
 		this.descriptor = descriptor;
+		this.propertyId = propertyId;
 		isExported = false;
 		resourceIndex = -1;
 		firstWriteIndex = -1;

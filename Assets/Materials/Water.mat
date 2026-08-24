@@ -66,7 +66,7 @@ Material:
     m_Ints: []
     m_Floats:
     - Alpha: 0.75
-    - Fade: 1.2755127
+    - Fade: 0.93501663
     - Scale: 0.21052632
     - _Alpha: 0.75
     - _BumpScale: 1
@@ -77,6 +77,7 @@ Material:
     - _GlossMapScale: 1
     - _Glossiness: 0.5
     - _GlossyReflections: 1
+    - _InvFade: 1
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
@@ -86,10 +87,12 @@ Material:
     - _SrcBlend: 1
     - _Tiling: 0.003937008
     - _UVSec: 0
+    - _ZTest: 4
     - _ZWrite: 1
     m_Colors:
     - Albedo: {r: 0.047058824, g: 0.11764706, b: 0.14509805, a: 1}
     - Extinction: {r: 0.055999048, g: 0.025423568, b: 0.038891695, a: 1}
+    - _AmbientColor: {r: 1, g: 1, b: 1, a: 1}
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
   m_BuildTextureStacks: []

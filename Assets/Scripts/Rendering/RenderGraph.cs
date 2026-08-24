@@ -11,29 +11,31 @@ public class RenderGraph
 	private readonly List<RenderTargetInfo> targets = new();
 	private readonly List<RenderTargetIdentifier> exportedResources = new();
 	private readonly List<IRenderPass> renderPasses = new();
+	private readonly List<TextureHandle> passInputs = new();
+	private readonly List<TextureHandle> passOutputs = new();
 
-	public TextureHandle GetTexture(RenderTargetDescriptor descriptor)
+	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, int propertyId)
 	{
-		targets.Add(new(descriptor));
+		targets.Add(new(descriptor, propertyId));
 		return new(targets.Count - 1);
 	}
 
-	public RenderPass<T> AddRenderPass<T>(string name, bool isNativeRenderPass, Int2 size, int samples, T data, Span<TextureHandle> outputs, Action<CommandBuffer, T> render)
+	public RenderPass<T> AddRenderPass<T>(string name, bool isNativeRenderPass, Int2 size, int samples, T data, ReadOnlySpan<TextureHandle> outputs, ReadOnlySpan<TextureHandle> inputs, Action<CommandBuffer, T> render)
 	{
 		var index = renderPasses.Count;
-		var renderPass = new RenderPass<T>(name, index, isNativeRenderPass, size, samples, this, data, outputs, render);
+		var renderPass = new RenderPass<T>(name, index, isNativeRenderPass, size, samples, this, data, outputs, inputs, render);
 		renderPasses.Add(renderPass);
 		return renderPass;
 	}
 
-	public void SetTargetReadIndex(TextureHandle handle, int index)
+	public void SetResourceReadIndex(TextureHandle handle, int index)
 	{
 		var target = targets[handle.index];
 		target.lastReadIndex = index;
 		targets[handle.index] = target;
 	}
 
-	public void SetTargetWriteIndex(TextureHandle handle, int index)
+	public void SetResourceWriteIndex(TextureHandle handle, int index)
 	{
 		var target = targets[handle.index];
 
@@ -180,9 +182,9 @@ public class RenderGraph
 
 			foreach (var input in renderPass.Inputs)
 			{
-				var target = targets[input.handle.index];
+				var target = targets[input.index];
 				var resource = resources[target.resourceIndex];
-				command.SetGlobalTexture(input.propertyId, resource);
+				command.SetGlobalTexture(target.propertyId, resource);
 			}
 
 			if (renderPass.IsNativeRenderPass)
@@ -208,5 +210,7 @@ public class RenderGraph
 		targets.Clear();
 		exportedResources.Clear();
 		renderPasses.Clear();
+		passInputs.Clear();
+		passOutputs.Clear();
 	}
 }

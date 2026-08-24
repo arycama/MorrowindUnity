@@ -9,7 +9,7 @@ public interface IRenderPass
 	bool IsNativeRenderPass { get; }
 	Int2 Size { get; }
 	int Samples { get; }
-	List<(TextureHandle handle, int propertyId)> Inputs { get; }
+	List<TextureHandle> Inputs { get; }
 	List<TextureHandle> Outputs { get; }
 
 	void Execute(CommandBuffer command);
