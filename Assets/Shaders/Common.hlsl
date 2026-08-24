@@ -75,6 +75,7 @@ cbuffer ViewData
 	matrix WorldToClip;
 	matrix ViewToClip;
 	matrix WorldToView;
+	matrix ViewToWorld;
 	matrix UiOverlayMatrix;
 	float LinearDepthScale, LinearDepthOffset, Near, Far;
 	float2 ViewSize;
@@ -85,7 +86,6 @@ cbuffer ViewData
 	float2 ViewDataPadding1;
 };
 
-matrix ViewToWorld;
 matrix ScreenToWorld;
 matrix WorldToPreviousScreen;
 matrix PixelToWorld;

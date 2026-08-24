@@ -58,6 +58,7 @@ public class NewPipeline : RenderPipelineBase
 		{
 			var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
 			var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
+			var viewToWorld = Float4x4.Rotate(camera.transform.WorldRotation());
 			var worldToView = Float4x4.Rotate(camera.transform.WorldRotation().Inverse);
 			var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, camera.nearClipPlane, camera.farClipPlane, 0, isFlipped);
 			var worldToClip = viewToClip.Mul(worldToView);
@@ -72,6 +73,7 @@ public class NewPipeline : RenderPipelineBase
 				worldToClip,
 				viewToClip,
 				worldToView,
+				viewToWorld,
 				overlayMatrix,
 				(far - near) * Rcp(near * far), Rcp(far), near, far,
 				(Float2)viewSize, 1.0f / (Float2)viewSize,
@@ -254,6 +256,7 @@ internal struct ViewDataStruct
 	public Float4x4 worldToClip;
 	public Float4x4 viewToClip;
 	public Float4x4 worldToView;
+	public Float4x4 viewToWorld;
 	public Float4x4 overlayMatrix;
 	public float Item5;
 	public float Item6;
@@ -267,11 +270,12 @@ internal struct ViewDataStruct
 	public int Item14;
 	public int Item15;
 
-	public ViewDataStruct(Float4x4 worldToClip, Float4x4 viewToClip, Float4x4 worldToView, Float4x4 overlayMatrix, float item5, float item6, float near, float far, Float2 item9, Float2 item10, Float3 item11, float item12, Float2 tanHalfFov, int item14, int item15)
+	public ViewDataStruct(Float4x4 worldToClip, Float4x4 viewToClip, Float4x4 worldToView, Float4x4 viewToWorld, Float4x4 overlayMatrix, float item5, float item6, float near, float far, Float2 item9, Float2 item10, Float3 item11, float item12, Float2 tanHalfFov, int item14, int item15)
 	{
 		this.worldToClip = worldToClip;
 		this.viewToClip = viewToClip;
 		this.worldToView = worldToView;
+		this.viewToWorld = viewToWorld;
 		this.overlayMatrix = overlayMatrix;
 		Item5 = item5;
 		Item6 = item6;
