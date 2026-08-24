@@ -13,6 +13,10 @@ public class RenderGraph
 	private readonly List<RenderTargetIdentifier> exportedResources = new();
 	private readonly List<IRenderPass> renderPasses = new();
 	private readonly List<RenderTargetIdentifier> resources = new();
+	private readonly List<string> passNames = new();
+	private readonly List<Range> inputRanges = new();
+	private readonly List<Range> outputRanges = new();
+
 	private TextureHandle[] passInputs = new TextureHandle[8], passOutputs = new TextureHandle[8];
 	private int inputCount, outputCount;
 
@@ -25,7 +29,13 @@ public class RenderGraph
 	public RenderPass<T> AddRenderPass<T>(string name, bool isNativeRenderPass, Int2 size, int samples, T data, ReadOnlySpan<TextureHandle> outputs, ReadOnlySpan<TextureHandle> inputs, Action<CommandBuffer, T> render)
 	{
 		var index = renderPasses.Count;
-		var renderPass = new RenderPass<T>(name, index, isNativeRenderPass, size, samples, this, data, outputs, inputs, render);
+
+		passNames.Add(name);
+
+		inputRanges.Add(SetInputs(inputs, index));
+		outputRanges.Add(SetOutputs(outputs, index));
+
+		var renderPass = new RenderPass<T>(isNativeRenderPass, size, samples, data, render);
 		renderPasses.Add(renderPass);
 		return renderPass;
 	}
@@ -104,6 +114,7 @@ public class RenderGraph
 		exportedResources.Clear();
 		renderPasses.Clear();
 		resources.Clear();
+		passNames.Clear();
 		inputCount = 0;
 		outputCount = 0;
 	}
@@ -119,7 +130,7 @@ public class RenderGraph
 		{
 			var renderPass = renderPasses[i];
 			
-			foreach(var output in passOutputs[renderPass.Outputs])
+			foreach(var output in passOutputs[outputRanges[i]])
 			{
 				var target = targets[output.index];
 				var attachmentDescriptor = new AttachmentDescriptor
@@ -225,7 +236,7 @@ public class RenderGraph
 					depthIndex = index;
 			}
 
-			foreach (var input in passInputs[renderPass.Inputs])
+			foreach (var input in passInputs[inputRanges[i]])
 			{
 				var target = targets[input.index];
 				var resource = resources[target.resourceIndex];
@@ -237,8 +248,9 @@ public class RenderGraph
 				subpasses.Add(new() { colorOutputs = new(colorOutputs.Span.AsArray()) });
 				colorOutputs.Clear();
 
-				Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(renderPass.Name)];
-				_ = Encoding.UTF8.GetBytes(renderPass.Name, debugNameUtf8);
+				var passName = passNames[i];
+				Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(passName)];
+				_ = Encoding.UTF8.GetBytes(passName, debugNameUtf8);
 
 				command.BeginRenderPass(renderPass.Size.x, renderPass.Size.y, renderPass.Samples, attachments.Span.AsArray(), depthIndex, subpasses.Span.AsArray(), debugNameUtf8);
 				subpasses.Clear();
