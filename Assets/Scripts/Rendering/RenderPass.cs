@@ -8,15 +8,11 @@ public struct RenderPass<T> : IRenderPass
 {
 	private readonly T data;
 	private readonly Action<CommandBuffer, T> render;
-	public bool IsNativeRenderPass { get; private set; }
-	public Int2 Size { get; private set; }
-	public int Samples { get; private set; }
+	public bool IsNativeRenderPass { get; }
 
-	public RenderPass(bool isNativeRenderPass, Int2 size, int samples, T data, Action<CommandBuffer, T> render)
+	public RenderPass(bool isNativeRenderPass, T data, Action<CommandBuffer, T> render)
 	{
 		IsNativeRenderPass = isNativeRenderPass;
-		Size = size;
-		Samples = samples;
 		this.data = data;
 		this.render = render;
 	}

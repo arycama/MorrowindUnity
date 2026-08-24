@@ -16,6 +16,8 @@ public class RenderGraph
 	private readonly List<string> passNames = new();
 	private readonly List<Range> inputRanges = new();
 	private readonly List<Range> outputRanges = new();
+	private readonly List<ViewHandle> passViewHandles = new();
+	private readonly List<ViewInfo> viewInfos = new();
 
 	private TextureHandle[] passInputs = new TextureHandle[8], passOutputs = new TextureHandle[8];
 	private int inputCount, outputCount;
@@ -26,16 +28,16 @@ public class RenderGraph
 		return new(targets.Count - 1);
 	}
 
-	public RenderPass<T> AddRenderPass<T>(string name, bool isNativeRenderPass, Int2 size, int samples, T data, ReadOnlySpan<TextureHandle> outputs, ReadOnlySpan<TextureHandle> inputs, Action<CommandBuffer, T> render)
+	public RenderPass<T> AddRenderPass<T>(string name, bool isNativeRenderPass, ViewHandle viewHandle, T data, ReadOnlySpan<TextureHandle> outputs, ReadOnlySpan<TextureHandle> inputs, Action<CommandBuffer, T> render)
 	{
 		var index = renderPasses.Count;
 
 		passNames.Add(name);
-
 		inputRanges.Add(SetInputs(inputs, index));
 		outputRanges.Add(SetOutputs(outputs, index));
+		passViewHandles.Add(viewHandle);
 
-		var renderPass = new RenderPass<T>(isNativeRenderPass, size, samples, data, render);
+		var renderPass = new RenderPass<T>(isNativeRenderPass, data, render);
 		renderPasses.Add(renderPass);
 		return renderPass;
 	}
@@ -108,6 +110,13 @@ public class RenderGraph
 		return start..outputCount;
 	}
 
+	public ViewHandle AddViewInfo(Int2 size, int samples = 1)
+	{
+		var index = viewInfos.Count;
+		viewInfos.Add(new(size, samples));
+		return new(index);
+	}
+
 	public void Clear()
 	{
 		targets.Clear();
@@ -117,6 +126,8 @@ public class RenderGraph
 		passNames.Clear();
 		inputRanges.Clear();
 		outputRanges.Clear();
+		passViewHandles.Clear();
+		viewInfos.Clear();
 		inputCount = 0;
 		outputCount = 0;
 	}
@@ -131,8 +142,10 @@ public class RenderGraph
 		for (var i = 0; i < renderPasses.Count; i++)
 		{
 			var renderPass = renderPasses[i];
-			
-			foreach(var output in passOutputs[outputRanges[i]])
+			var viewHandle = passViewHandles[i];
+			var viewData = viewInfos[viewHandle.index];
+
+			foreach (var output in passOutputs[outputRanges[i]])
 			{
 				var target = targets[output.index];
 				var attachmentDescriptor = new AttachmentDescriptor
@@ -168,7 +181,7 @@ public class RenderGraph
 				};
 
 				// If this is the last pass, it needs to be resolved
-				var requiresResolve = renderPass.Samples > 1 && i == target.lastWriteIndex && isColor;
+				var requiresResolve = viewData.samples > 1 && i == target.lastWriteIndex && isColor;
 				if (requiresResolve)
 				{
 					target.resourceIndex = resources.Count;
@@ -182,14 +195,14 @@ public class RenderGraph
 				else
 				{
 					// Depth targets can't be msaa resolved so we need to store the msaa version.
-					var requiresMsaaStore = renderPass.Samples > 1 && (i < target.lastWriteIndex || (i == target.lastWriteIndex && !isColor));
+					var requiresMsaaStore = viewData.samples > 1 && (i < target.lastWriteIndex || (i == target.lastWriteIndex && !isColor));
 					if (requiresMsaaStore)
 					{
 						if (isFirstWrite)
 						{
 							target.resourceIndex = resources.Count;
 							var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
-							command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(renderPass.Samples));
+							command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(viewData.samples));
 							resources.Add(resourceId);
 							targets[output.index] = target;
 						}
@@ -254,7 +267,7 @@ public class RenderGraph
 				Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(passName)];
 				_ = Encoding.UTF8.GetBytes(passName, debugNameUtf8);
 
-				command.BeginRenderPass(renderPass.Size.x, renderPass.Size.y, renderPass.Samples, attachments.Span.AsArray(), depthIndex, subpasses.Span.AsArray(), debugNameUtf8);
+				command.BeginRenderPass(viewData.size.x, viewData.size.y, viewData.samples, attachments.Span.AsArray(), depthIndex, subpasses.Span.AsArray(), debugNameUtf8);
 				subpasses.Clear();
 				attachments.Clear();
 				depthIndex = -1;
