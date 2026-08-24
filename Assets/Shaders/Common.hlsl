@@ -63,6 +63,11 @@ cbuffer EnvironmentData
 	float FogStart;
 	float FogEnd;
 	float FogDensity;
+	
+	float3 SunDirection;
+	float EnvironmentDataPadding0;
+	float3 SunColor;
+	float EnvironmentDataPadding1;
 };
 
 cbuffer ViewData
@@ -70,25 +75,20 @@ cbuffer ViewData
 	matrix WorldToClip;
 	matrix ViewToClip;
 	matrix WorldToView;
-	matrix ViewToWorld;
-	matrix PixelToClip;
-	matrix ScreenToWorld; 
-	matrix WorldToPreviousScreen;
-	matrix PixelToWorld;
 	matrix UiOverlayMatrix;
-	
 	float LinearDepthScale, LinearDepthOffset, Near, Far;
-	
 	float2 ViewSize;
 	float2 RcpViewSize;
-	
 	float3 ViewPosition;
 	float ViewDataPadding0;
-	
-	float4 FrustumCorners[3];
 	float2 TanHalfFov;
 	float2 ViewDataPadding1;
 };
+
+matrix ViewToWorld;
+matrix ScreenToWorld;
+matrix WorldToPreviousScreen;
+matrix PixelToWorld;
 
 cbuffer CascadeData
 {
@@ -97,9 +97,7 @@ cbuffer CascadeData
 
 cbuffer LightingData
 {
-	float3 SunDirection;
 	float SunShadowFadeScale;
-	float3 SunColor;
 	float SunShadowFadeOffset;
 	
 	row_major float3x4 ViewToSunShadow;
@@ -136,8 +134,14 @@ Texture2DArray<float> PointShadows;
 Texture3D<float4> VolumetricLighting;
 Texture2D<float> ScreenShadows;
 
-Texture2D<float> CameraDepth;
 Texture2D<float4> GBufferAlbedoMetallic, GBufferNormalOcclusionRoughness;
+Texture2D<float4> CameraColor;
+
+#ifdef MSAA
+	Texture2DMS<float, 8> CameraDepth;
+#else
+	Texture2D<float> CameraDepth;
+#endif
 
 float3 UnderwaterColor;
 float UnderwaterColorWeight;
@@ -346,11 +350,6 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition)
 {
 	float3 illuminance;
 	return GetLuminance(normal, viewPosition, screenPosition, illuminance);
-}
-
-float3 GetFrustumCorner(uint id)
-{
-	return FrustumCorners[id].xyz;
 }
 
 float FogFactor(float3 viewPosition)

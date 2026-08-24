@@ -1,20 +1,30 @@
+using System;
+using System.Collections.Generic;
+using Unity.Collections.LowLevel.Unsafe;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using Unmath;
 using static Unmath.Math;
+using Quaternion = Unmath.Quaternion;
 
 public class NewPipeline : RenderPipelineBase
 {
 	private readonly NewPipelineAsset asset;
 	private readonly Material blitMaterial, deferredMaterial;
+	private readonly Dictionary<int, (Float3, Quaternion, Float4x4)> previousCameraTransform = new();
+	private readonly GraphicsBuffer environmentDataBuffer, viewDataBuffer;
+	private readonly MaterialPropertyBlock propertyBlock;
 
 	public NewPipeline(NewPipelineAsset asset)
 	{
 		this.asset = asset;
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
 		deferredMaterial = new Material(Shader.Find("Hidden/Morrowind Deferred")) { hideFlags = HideFlags.HideAndDontSave };
+		propertyBlock = new();
+		environmentDataBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Constant, 1, UnsafeUtility.SizeOf<EnvironmentDataStruct>());
+		viewDataBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Constant, 1, UnsafeUtility.SizeOf<ViewDataStruct>());
 	}
 
 	protected override void RenderCamera(Camera camera, ScriptableCullingParameters cullingParameters, ScriptableRenderContext context)
@@ -43,48 +53,49 @@ public class NewPipeline : RenderPipelineBase
 			sunColor = visibleLight.finalColor.Float3();
 		}
 
-		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
-		var viewInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
-		renderGraph.AddRenderPass("Set View Data", viewInfo, (camera, fogEnabled, sunDirection, sunColor), render: static (command, data) =>
+		static void SetViewDataStruct(Camera camera, CommandBuffer command, GraphicsBuffer viewDataBuffer, bool isFlipped)
 		{
-			var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
-			var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
-			var worldToView = Float4x4.WorldToLocal(0.0f, data.camera.transform.WorldRotation());
-			var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, data.camera.nearClipPlane, data.camera.farClipPlane);
+			var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
+			var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
+			var worldToView = Float4x4.WorldToLocal(0.0f, camera.transform.WorldRotation());
+			var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, camera.nearClipPlane, camera.farClipPlane, 0, isFlipped);
 			var worldToClip = viewToClip.Mul(worldToView);
-
-			//ReadOnlySpan<byte> cbuffer = MemoryMarshal.AsBytes(stackalloc[] {
-			//(
-			//	worldToView,
-			//	viewToClip,
-			//	worldToClip,
-			//	data.camera.transform.position,
-			//	(Float4)tanHalfFov,
-			//	data.sunDirection,
-			//	data.sunColor,
-			//	RenderSettings.ambientLight.linear,
-			//	RenderSettings.fogColor.linear
-			//)});
-
-			command.SetGlobalMatrix("WorldToView", worldToView);
-			command.SetGlobalMatrix("ViewToClip", viewToClip);
-			command.SetGlobalMatrix("WorldToClip", worldToClip);
-			command.SetGlobalVector("ViewPosition", data.camera.transform.position);
-			command.SetGlobalVector("TanHalfFov", (Float4)tanHalfFov);
-
-			command.SetGlobalVector("SunDirection", data.sunDirection);
-			command.SetGlobalVector("SunColor", data.sunColor);
-			command.SetGlobalVector("AmbientLight", RenderSettings.ambientLight.linear);
-			command.SetGlobalVector("FogColor", RenderSettings.fogColor.linear);
-			command.SetGlobalFloat("FogScale", data.fogEnabled ? 1 / (RenderSettings.fogEndDistance - RenderSettings.fogStartDistance) : 0);
-			command.SetGlobalFloat("FogOffset", data.fogEnabled ? RenderSettings.fogStartDistance / (RenderSettings.fogStartDistance - RenderSettings.fogEndDistance) : 0);
-			command.SetGlobalVector("ViewSize", new(data.camera.pixelWidth, data.camera.pixelHeight));
-
-			command.SetGlobalFloat("LinearDepthScale", (data.camera.farClipPlane - data.camera.nearClipPlane) * Rcp(data.camera.nearClipPlane * data.camera.farClipPlane));
-			command.SetGlobalFloat("LinearDepthOffset", Rcp(data.camera.farClipPlane));
-
 			var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
-			command.SetGlobalMatrix("UiOverlayMatrix", overlayMatrix);
+
+			var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
+			var near = camera.nearClipPlane;
+			var far = camera.farClipPlane;
+
+			command.SetBufferData(viewDataBuffer, stackalloc[] { new ViewDataStruct(
+				worldToClip,
+				viewToClip,
+				worldToView,
+				overlayMatrix,
+				(far - near) * Rcp(near * far), Rcp(far), near, far,
+				(Float2)viewSize, 1.0f / (Float2)viewSize,
+				camera.transform.WorldPosition(), 0f,
+				tanHalfFov, 0, 0
+			)});
+		}
+
+		var viewInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
+		renderGraph.AddRenderPass("Set View Data", viewInfo, (camera, sunDirection, sunColor, fogEnabled, previousCameraTransform, environmentDataBuffer, viewDataBuffer), render: static (command, data) =>
+		{
+			var fogStart = data.fogEnabled ? RenderSettings.fogStartDistance : 0;
+			var fogEnd = data.fogEnabled ? RenderSettings.fogEndDistance : 0;
+			var fogScale = data.fogEnabled ? 1 / (fogEnd - fogStart) : 0;
+			var fogOffset = data.fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
+
+			command.SetBufferData(data.environmentDataBuffer, stackalloc[] 
+			{(
+				RenderSettings.ambientLight.LinearFloat3(), fogScale,
+				RenderSettings.fogColor.LinearFloat3(), fogOffset,
+				Time.time, fogStart, fogEnd, 0,
+				data.sunDirection, 0,
+				data.sunColor, 0
+			)}.AsArray());
+
+			SetViewDataStruct(data.camera, command, data.viewDataBuffer, false);
 		});
 
 		var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
@@ -95,19 +106,28 @@ public class NewPipeline : RenderPipelineBase
 		var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
 
 		var cameraColor = renderGraph.GetTexture(new(viewInfo, targetFormat, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
-		var albedoMetallic = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("GBufferAlbedoMetallic"));
+		var albedoMetallic = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_SRGB), Shader.PropertyToID("GBufferAlbedoMetallic"));
 		var normalOcclusionRoughness = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("GBufferNormalOcclusionRoughness"));
 
 		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.CommonOpaque }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
-		renderGraph.AddRenderPass("Gbuffer", viewInfo, opaqueRendererList, stackalloc[] { cameraDepth, albedoMetallic, normalOcclusionRoughness, cameraColor }, render: static (command, opaqueRendererList) => { command.DrawRendererList(opaqueRendererList); });
-
-		var deferredLighting = renderGraph.AddRenderPass("Deferred Lighting", viewInfo, (deferredMaterial, asset), stackalloc[] { cameraDepth, cameraColor }, default, stackalloc[] { cameraDepth, albedoMetallic, normalOcclusionRoughness }, static (command, data) =>
+		renderGraph.AddRenderPass("Gbuffer", viewInfo, (opaqueRendererList, viewDataBuffer, environmentDataBuffer), stackalloc[] { cameraDepth, albedoMetallic, normalOcclusionRoughness, cameraColor }, render: static (command, data) =>
 		{
+			command.SetGlobalConstantBuffer(data.environmentDataBuffer, Shader.PropertyToID("EnvironmentData"), 0, data.environmentDataBuffer.stride);
+			command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
+			command.DrawRendererList(data.opaqueRendererList);
+		});
+
+		renderGraph.AddRenderPass("Deferred Lighting", viewInfo, (deferredMaterial, asset, viewDataBuffer, environmentDataBuffer, propertyBlock), stackalloc[] { cameraDepth, cameraColor }, default, stackalloc[] { cameraDepth, albedoMetallic, normalOcclusionRoughness }, static (command, data) =>
+		{
+			data.propertyBlock.Clear();
+			data.propertyBlock.SetConstantBuffer(Shader.PropertyToID("EnvironmentData"), data.environmentDataBuffer, 0, data.environmentDataBuffer.stride);
+			data.propertyBlock.SetConstantBuffer(Shader.PropertyToID("ViewData"), data.viewDataBuffer, 0, data.viewDataBuffer.stride);
+
 			if (data.asset.Samples > 1)
 				command.EnableShaderKeyword("MSAA_ON");
 
-			command.DrawProcedural(default, data.deferredMaterial, 0, MeshTopology.Triangles, 3);
+			command.DrawProcedural(default, data.deferredMaterial, 0, MeshTopology.Triangles, 3, 1, data.propertyBlock);
 
 			if (data.asset.Samples > 1)
 				command.DisableShaderKeyword("MSAA_ON");
@@ -115,7 +135,12 @@ public class NewPipeline : RenderPipelineBase
 
 		var transparentRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.CommonTransparent }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 		var transparentRendererList = context.CreateRendererList(ref transparentRendererParams);
-		renderGraph.AddRenderPass("Render Forward Transparent", viewInfo, transparentRendererList, stackalloc[] { cameraDepth, cameraColor }, render: static (command, transparentRendererList) => { command.DrawRendererList(transparentRendererList); });
+		renderGraph.AddRenderPass("Render Forward Transparent", viewInfo, (transparentRendererList, viewDataBuffer, environmentDataBuffer), stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
+		{
+			command.SetGlobalConstantBuffer(data.environmentDataBuffer, Shader.PropertyToID("EnvironmentData"), 0, data.environmentDataBuffer.stride);
+			command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
+			command.DrawRendererList(data.transparentRendererList);
+		});
 
 		// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 		// TODO: Check for hardware msaa backbuffer resolve support
@@ -128,32 +153,6 @@ public class NewPipeline : RenderPipelineBase
 		{
 			var backbufferInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight));
 			var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
-			renderGraph.AddRenderPass("Final Blit Setup", backbufferInfo, (camera, asset, requiresSceneDepth), render: static (command, data) =>
-			{
-				if (data.camera.targetTexture == null)
-					command.EnableShaderKeyword("FLIP");
-
-				if (data.requiresSceneDepth)
-				{
-					switch (data.asset.Samples)
-					{
-						case 1:
-							command.EnableShaderKeyword("DEPTH");
-							break;
-						case 2:
-							command.EnableShaderKeyword("DEPTH_MSAA_2");
-							break;
-						case 4:
-							command.EnableShaderKeyword("DEPTH_MSAA_4");
-							break;
-						case 8:
-							command.EnableShaderKeyword("DEPTH_MSAA_8");
-							break;
-					}
-				}
-
-				command.SetWireframe(false);
-			});
 
 			// Final blit/resolve if needed
 			var backbufferColor = renderGraph.GetTexture(new(viewInfo, targetFormat), Shader.PropertyToID("SceneColor"));
@@ -168,34 +167,131 @@ public class NewPipeline : RenderPipelineBase
 
 			var outputs = requiresSceneDepth ? stackalloc[] { sceneDepth, backbufferColor } : stackalloc[] { backbufferColor };
 			var inputs = requiresSceneDepth ? stackalloc[] { cameraColor, cameraDepth } : stackalloc[] { cameraColor };
-			var finalBlitPass = renderGraph.AddRenderPass("Final Blit", backbufferInfo, (blitMaterial, camera, asset, requiresSceneDepth), outputs, inputs, render: static (command, data) =>
+			renderGraph.AddRenderPass("Final Blit", backbufferInfo, (blitMaterial, camera, asset, requiresSceneDepth, viewDataBuffer), outputs, inputs, render: static (command, data) =>
 			{
+				if (data.camera.targetTexture == null)
+					command.EnableShaderKeyword("FLIP");
+
+				if (data.requiresSceneDepth)
+					command.EnableShaderKeyword("DEPTH");
+
+				if (data.asset.Samples > 1)
+					command.EnableShaderKeyword("MSAA");
+
+				command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
+				command.SetWireframe(false);
 				command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
 
 				if (data.camera.targetTexture == null)
 					command.DisableShaderKeyword("FLIP");
 
 				if (data.requiresSceneDepth)
-				{
-					switch (data.asset.Samples)
-					{
-						case 1:
-							command.DisableShaderKeyword("DEPTH");
-							break;
-						case 2:
-							command.DisableShaderKeyword("DEPTH_MSAA_2");
-							break;
-						case 4:
-							command.DisableShaderKeyword("DEPTH_MSAA_4");
-							break;
-						case 8:
-							command.DisableShaderKeyword("DEPTH_MSAA_8");
-							break;
-					}
-				}
+					command.DisableShaderKeyword("DEPTH");
+
+				if (data.asset.Samples > 1)
+					command.DisableShaderKeyword("MSAA");
 			});
 
 			renderGraph.ExportResource(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+
+#if UNITY_EDITOR
+			// Render gizmos
+			var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
+			if (Handles.ShouldRenderGizmos())
+			{
+				var preImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PreImageEffects);
+				var postImageEffectsRenderList = context.CreateGizmoRendererList(camera, GizmoSubset.PostImageEffects);
+
+				renderGraph.AddRenderPass("Render Gizmos", viewInfo, (preImageEffectsRenderList, postImageEffectsRenderList), render: static (command, data) =>
+				{
+					// Note that gizmos use their own matrix logic which we can't override
+					command.DrawRendererList(data.preImageEffectsRenderList);
+					command.DrawRendererList(data.postImageEffectsRenderList);
+				});
+			}
+
+			// Render wireframe
+			if (camera.cameraType == CameraType.SceneView)
+			{
+				var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
+				renderGraph.AddRenderPass("Render Wireframe", viewInfo, (camera, wireframeRendererList, context, viewDataBuffer), render: static (command, data) =>
+				{
+					SetViewDataStruct(data.camera, command, data.viewDataBuffer, true);
+					data.context.SetupCameraProperties(data.camera);
+					command.DrawRendererList(data.wireframeRendererList);
+				});
+			}
+#endif
 		}
+	}
+}
+
+internal struct EnvironmentDataStruct
+{
+	public Float3 Item1;
+	public float fogScale;
+	public Float3 Item3;
+	public float fogOffset;
+	public float time;
+	public float fogStart;
+	public float fogEnd;
+	public int Item8;
+	public Float3 sunDirection;
+	public int Item10;
+	public Float3 sunColor;
+	public int Item12;
+
+	public EnvironmentDataStruct(Float3 item1, float fogScale, Float3 item3, float fogOffset, float time, float fogStart, float fogEnd, int item8, Float3 sunDirection, int item10, Float3 sunColor, int item12)
+	{
+		Item1 = item1;
+		this.fogScale = fogScale;
+		Item3 = item3;
+		this.fogOffset = fogOffset;
+		this.time = time;
+		this.fogStart = fogStart;
+		this.fogEnd = fogEnd;
+		Item8 = item8;
+		this.sunDirection = sunDirection;
+		Item10 = item10;
+		this.sunColor = sunColor;
+		Item12 = item12;
+	}
+}
+
+internal struct ViewDataStruct
+{
+	public Float4x4 worldToClip;
+	public Float4x4 viewToClip;
+	public Float4x4 worldToView;
+	public Float4x4 overlayMatrix;
+	public float Item5;
+	public float Item6;
+	public float near;
+	public float far;
+	public Float2 Item9;
+	public Float2 Item10;
+	public Float3 Item11;
+	public float Item12;
+	public Float2 tanHalfFov;
+	public int Item14;
+	public int Item15;
+
+	public ViewDataStruct(Float4x4 worldToClip, Float4x4 viewToClip, Float4x4 worldToView, Float4x4 overlayMatrix, float item5, float item6, float near, float far, Float2 item9, Float2 item10, Float3 item11, float item12, Float2 tanHalfFov, int item14, int item15)
+	{
+		this.worldToClip = worldToClip;
+		this.viewToClip = viewToClip;
+		this.worldToView = worldToView;
+		this.overlayMatrix = overlayMatrix;
+		Item5 = item5;
+		Item6 = item6;
+		this.near = near;
+		this.far = far;
+		Item9 = item9;
+		Item10 = item10;
+		Item11 = item11;
+		Item12 = item12;
+		this.tanHalfFov = tanHalfFov;
+		Item14 = item14;
+		Item15 = item15;
 	}
 }

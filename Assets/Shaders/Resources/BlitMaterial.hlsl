@@ -1,3 +1,4 @@
+#include "../Common.hlsl"
 
 float4 Vertex(uint vertexId : SV_VertexID, out float2 uv : TEXCOORD) : SV_Position
 {
@@ -13,32 +14,20 @@ float4 Vertex(uint vertexId : SV_VertexID, out float2 uv : TEXCOORD) : SV_Positi
 	return position;
 }
 
-Texture2D<float4> CameraColor;
-SamplerState PointClampSampler;
-float2 ViewSize;
-
-#ifdef DEPTH
-	Texture2D<float> CameraDepth;
-#elif defined(DEPTH_MSAA_2)
-	Texture2DMS<float, 2> CameraDepth;
-#elif defined(DEPTH_MSAA_4)
-	Texture2DMS<float, 4> CameraDepth;
-#elif defined(DEPTH_MSAA_8)
-	Texture2DMS<float, 8> CameraDepth;
-#endif
-
 float4 Fragment(float4 position : SV_Position, 
-#if defined(DEPTH) || defined(DEPTH_MSAA_2) || defined(DEPTH_MSAA_4) || defined(DEPTH_MSAA_8)
+#ifdef DEPTH
 	out float depth : SV_Depth,
 #endif
 	float2 uv : TEXCOORD) : SV_Target
 {
 	#ifdef DEPTH
-		depth = CameraDepth.Sample(PointClampSampler, uv);
-	#elif defined(DEPTH_MSAA_2) || defined(DEPTH_MSAA_4) || defined(DEPTH_MSAA_8)
-		float2 coord = position.xy;
-		coord.y = ViewSize.y - coord.y;
-		depth = CameraDepth.Load(coord, 0);
+		#ifdef MSAA
+			float2 coord = position.xy;
+			coord.y = ViewSize.y - coord.y;
+			depth = CameraDepth.Load(coord, 0);		
+		#else
+			depth = CameraDepth.Sample(PointClampSampler, uv);
+		#endif
 	#endif
 
 	return CameraColor.Sample(PointClampSampler, uv);

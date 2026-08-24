@@ -7,8 +7,10 @@ Shader "Hidden/Blit Material"
             HLSLPROGRAM
             #pragma vertex Vertex
             #pragma fragment Fragment
+            #pragma use_dxc
             #pragma multi_compile _ FLIP
-            #pragma multi_compile _ DEPTH DEPTH_MSAA_2 DEPTH_MSAA_4 DEPTH_MSAA_8
+            #pragma multi_compile _ DEPTH
+            #pragma multi_compile _ MSAA
             #include "BlitMaterial.hlsl"
             ENDHLSL
         }

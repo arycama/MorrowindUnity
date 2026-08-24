@@ -30,7 +30,7 @@ public class RenderGraph
 		return new(targets.Count - 1);
 	}
 
-	public RenderPass<T> AddRenderPass<T>(string name, ViewHandle viewHandle, T data = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> inputs = default, ReadOnlySpan<TextureHandle> inputAttachments = default, Action<CommandBuffer, T> render = default)
+	public void AddRenderPass<T>(string name, ViewHandle viewHandle, T data = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> inputs = default, ReadOnlySpan<TextureHandle> inputAttachments = default, Action<CommandBuffer, T> render = default)
 	{
 		var index = renderPasses.Count;
 
@@ -42,7 +42,6 @@ public class RenderGraph
 
 		var renderPass = new RenderPass<T>(data, render);
 		renderPasses.Add(renderPass);
-		return renderPass;
 	}
 
 	public void SetResourceReadIndex(TextureHandle handle, int index)
