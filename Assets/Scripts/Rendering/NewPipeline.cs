@@ -29,7 +29,7 @@ public class NewPipeline : RenderPipelineBase
 
 	protected override void RenderCamera(Camera camera, ScriptableCullingParameters cullingParameters, ScriptableRenderContext context)
 	{
-		cullingParameters.cullingOptions = CullingOptions.DisablePerObjectCulling;
+		cullingParameters.cullingOptions = CullingOptions.DisablePerObjectCulling | CullingOptions.NeedsLighting;
 		var cullingResults = context.Cull(ref cullingParameters);
 
 		var fogEnabled = RenderSettings.fog;
@@ -51,6 +51,7 @@ public class NewPipeline : RenderPipelineBase
 			var viewSpaceLightRotation = camera.transform.WorldRotation().InverseRotate(lightRotation);
 			sunDirection = -viewSpaceLightRotation.Forward;
 			sunColor = visibleLight.finalColor.Float3();
+			break;
 		}
 
 		static void SetViewDataStruct(Camera camera, CommandBuffer command, GraphicsBuffer viewDataBuffer, bool isFlipped)
