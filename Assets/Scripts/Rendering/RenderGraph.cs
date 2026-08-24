@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -28,7 +29,11 @@ public class RenderGraph
 		return new(targets.Count - 1);
 	}
 
-	public RenderPass<T> AddRenderPass<T>(string name, bool isNativeRenderPass, ViewHandle viewHandle, T data, ReadOnlySpan<TextureHandle> outputs, ReadOnlySpan<TextureHandle> inputs, Action<CommandBuffer, T> render)
+	// Render pass 
+	private readonly NativeList<TextureHandle> renderPassInputs = new(8, Allocator.Persistent);
+	private readonly NativeList<TextureHandle> renderPassOutputs = new(8, Allocator.Persistent);
+
+	public RenderPass<T> AddRenderPass<T>(string name, ViewHandle viewHandle, T data, ReadOnlySpan<TextureHandle> outputs, ReadOnlySpan<TextureHandle> inputs, Action<CommandBuffer, T> render)
 	{
 		var index = renderPasses.Count;
 
@@ -37,7 +42,8 @@ public class RenderGraph
 		outputRanges.Add(SetOutputs(outputs, index));
 		passViewHandles.Add(viewHandle);
 
-		var renderPass = new RenderPass<T>(isNativeRenderPass, data, render);
+		var isInRenderPass = renderPassOutputs.Length > 0;
+		var renderPass = new RenderPass<T>(data, render);
 		renderPasses.Add(renderPass);
 		return renderPass;
 	}
@@ -144,8 +150,9 @@ public class RenderGraph
 			var renderPass = renderPasses[i];
 			var viewHandle = passViewHandles[i];
 			var viewData = viewInfos[viewHandle.index];
+			var outputRange = outputRanges[i];
 
-			foreach (var output in passOutputs[outputRanges[i]])
+			foreach (var output in passOutputs[outputRange])
 			{
 				var target = targets[output.index];
 				var attachmentDescriptor = new AttachmentDescriptor
@@ -258,7 +265,8 @@ public class RenderGraph
 				command.SetGlobalTexture(target.propertyId, resource);
 			}
 
-			if (renderPass.IsNativeRenderPass)
+			var isNativeRenderPass = !outputRange.Start.Equals(outputRange.End);
+			if (isNativeRenderPass)
 			{
 				subpasses.Add(new() { colorOutputs = new(colorOutputs.Span.AsArray()) });
 				colorOutputs.Clear();
@@ -275,7 +283,7 @@ public class RenderGraph
 
 			renderPass.Execute(command);
 
-			if (renderPass.IsNativeRenderPass)
+			if (isNativeRenderPass)
 				command.EndRenderPass();
 		}
 	}

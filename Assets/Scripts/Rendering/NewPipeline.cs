@@ -45,7 +45,7 @@ public class NewPipeline : RenderPipelineBase
 
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var viewInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
-		renderGraph.AddRenderPass("Set View Data", false, viewInfo, (camera, fogEnabled, sunDirection, sunColor), default, default, static (command, data) =>
+		renderGraph.AddRenderPass("Set View Data", viewInfo, (camera, fogEnabled, sunDirection, sunColor), default, default, static (command, data) =>
 		{
 			var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
 			var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
@@ -100,14 +100,13 @@ public class NewPipeline : RenderPipelineBase
 
 		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.CommonOpaque }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
-		renderGraph.AddRenderPass("Gbuffer", true, viewInfo, opaqueRendererList, stackalloc[] { cameraDepth, albedoMetallic, normalOcclusionRoughness, cameraColor }, default,
-		static (command, opaqueRendererList) => { command.DrawRendererList(opaqueRendererList); });
+		renderGraph.AddRenderPass("Gbuffer", viewInfo, opaqueRendererList, stackalloc[] { cameraDepth, albedoMetallic, normalOcclusionRoughness, cameraColor }, default, static (command, opaqueRendererList) => { command.DrawRendererList(opaqueRendererList); });
 
-		var deferredLighting = renderGraph.AddRenderPass("Deferred Lighting", true, viewInfo, (deferredMaterial, asset), stackalloc[] { cameraDepth, cameraColor }, stackalloc[] { cameraDepth, albedoMetallic, normalOcclusionRoughness }, static (command, data) => { command.DrawProcedural(default, data.deferredMaterial, 0, MeshTopology.Triangles, 3); });
+		var deferredLighting = renderGraph.AddRenderPass("Deferred Lighting", viewInfo, (deferredMaterial, asset), stackalloc[] { cameraDepth, cameraColor }, stackalloc[] { cameraDepth, albedoMetallic, normalOcclusionRoughness }, static (command, data) => { command.DrawProcedural(default, data.deferredMaterial, 0, MeshTopology.Triangles, 3); });
 
 		var transparentRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.CommonTransparent }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 		var transparentRendererList = context.CreateRendererList(ref transparentRendererParams);
-		renderGraph.AddRenderPass("Render Forward Transparent", true, viewInfo, transparentRendererList, stackalloc[] { cameraDepth, cameraColor }, default, static (command, transparentRendererList) => { command.DrawRendererList(transparentRendererList); });
+		renderGraph.AddRenderPass("Render Forward Transparent", viewInfo, transparentRendererList, stackalloc[] { cameraDepth, cameraColor }, default, static (command, transparentRendererList) => { command.DrawRendererList(transparentRendererList); });
 
 		// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 		// TODO: Check for hardware msaa backbuffer resolve support
@@ -120,7 +119,7 @@ public class NewPipeline : RenderPipelineBase
 		{
 			var backbufferInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight));
 			var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
-			renderGraph.AddRenderPass("Final Blit Setup", false, backbufferInfo, (camera, asset, requiresSceneDepth), default, default, static (command, data) =>
+			renderGraph.AddRenderPass("Final Blit Setup", backbufferInfo, (camera, asset, requiresSceneDepth), default, default, static (command, data) =>
 			{
 				if (data.camera.targetTexture == null)
 					command.EnableShaderKeyword("FLIP");
@@ -160,7 +159,7 @@ public class NewPipeline : RenderPipelineBase
 
 			var outputs = requiresSceneDepth ? stackalloc[] { sceneDepth, backbufferColor } : stackalloc[] { backbufferColor };
 			var inputs = requiresSceneDepth ? stackalloc[] { cameraColor, cameraDepth } : stackalloc[] { cameraColor };
-			var finalBlitPass = renderGraph.AddRenderPass("Final Blit", true, backbufferInfo, (blitMaterial, camera, asset, requiresSceneDepth), outputs, inputs, static (command, data) =>
+			var finalBlitPass = renderGraph.AddRenderPass("Final Blit", backbufferInfo, (blitMaterial, camera, asset, requiresSceneDepth), outputs, inputs, static (command, data) =>
 			{
 				command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
 
