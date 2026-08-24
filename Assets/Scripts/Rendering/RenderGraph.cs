@@ -115,6 +115,8 @@ public class RenderGraph
 		renderPasses.Clear();
 		resources.Clear();
 		passNames.Clear();
+		inputRanges.Clear();
+		outputRanges.Clear();
 		inputCount = 0;
 		outputCount = 0;
 	}
