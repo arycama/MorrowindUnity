@@ -35,7 +35,7 @@ FragmentInput Vertex(uint id : SV_VertexID)
 	return output;
 }
 
-float3 Fragment(FragmentInput input) : SV_Target
+float4 Fragment(FragmentInput input) : SV_Target
 {
 	#ifdef MSAA_ON
 		float depth = _UnityFBInput0.Load(input.position.xy, input.sampleIndex).r;
