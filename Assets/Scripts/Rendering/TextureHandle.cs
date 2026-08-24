@@ -1,3 +1,6 @@
+using System.Diagnostics;
+
+[DebuggerDisplay("{index}")]
 public readonly struct TextureHandle
 {
 	public readonly int index;

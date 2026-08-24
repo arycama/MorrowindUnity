@@ -22,6 +22,8 @@ public abstract class RenderPipelineBase : RenderPipeline
 
 	protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
 	{
+		renderGraph.Clear();
+
 		//BeginContextRendering(context, cameras);
 		foreach (var camera in cameras)
 		{

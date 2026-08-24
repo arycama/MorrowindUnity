@@ -5,14 +5,16 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using Unmath;
+using Math = Unmath.Math;
 
 public class RenderGraph
 {
 	private readonly List<RenderTargetInfo> targets = new();
 	private readonly List<RenderTargetIdentifier> exportedResources = new();
 	private readonly List<IRenderPass> renderPasses = new();
-	private readonly List<TextureHandle> passInputs = new();
-	private readonly List<TextureHandle> passOutputs = new();
+	private readonly List<RenderTargetIdentifier> resources = new();
+	private TextureHandle[] passInputs = new TextureHandle[8], passOutputs = new TextureHandle[8];
+	private int inputCount, outputCount;
 
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, int propertyId)
 	{
@@ -62,10 +64,52 @@ public class RenderGraph
 		targets[handle.index] = target;
 	}
 
+	public Range SetInputs(ReadOnlySpan<TextureHandle> inputs, int passIndex)
+	{
+		var start = inputCount;
+		var newCount = inputCount + inputs.Length;
+
+		if (passInputs.Length < newCount)
+			Array.Resize(ref passInputs, Math.Max(newCount, passInputs.Length * 2));
+
+		inputs.CopyTo(passInputs.AsSpan(start, inputs.Length));
+		inputCount = newCount;
+
+		foreach(var input in inputs)
+			SetResourceReadIndex(input, passIndex);
+
+		return start..inputCount;
+	}
+
+	public Range SetOutputs(ReadOnlySpan<TextureHandle> outputs, int passIndex)
+	{
+		var start = outputCount;
+		var newCount = outputCount + outputs.Length;
+
+		if (passOutputs.Length < newCount)
+			Array.Resize(ref passOutputs, Math.Max(newCount, passOutputs.Length * 2));
+
+		outputs.CopyTo(passOutputs.AsSpan(start, outputs.Length));
+		outputCount = newCount;
+
+		foreach (var output in outputs)
+			SetResourceWriteIndex(output, passIndex);
+
+		return start..outputCount;
+	}
+
+	public void Clear()
+	{
+		targets.Clear();
+		exportedResources.Clear();
+		renderPasses.Clear();
+		resources.Clear();
+		inputCount = 0;
+		outputCount = 0;
+	}
+
 	public void Execute(CommandBuffer command)
 	{
-		List<RenderTargetIdentifier> resources = new();
-
 		var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
 		var subpasses = new FixedBuffer<SubPassDescriptor>(stackalloc SubPassDescriptor[8]);
 		var colorOutputs = new FixedBuffer<int>(stackalloc int[8]);
@@ -74,7 +118,8 @@ public class RenderGraph
 		for (var i = 0; i < renderPasses.Count; i++)
 		{
 			var renderPass = renderPasses[i];
-			foreach (var output in renderPass.Outputs)
+			
+			foreach(var output in passOutputs[renderPass.Outputs])
 			{
 				var target = targets[output.index];
 				var attachmentDescriptor = new AttachmentDescriptor
@@ -180,7 +225,7 @@ public class RenderGraph
 					depthIndex = index;
 			}
 
-			foreach (var input in renderPass.Inputs)
+			foreach (var input in passInputs[renderPass.Inputs])
 			{
 				var target = targets[input.index];
 				var resource = resources[target.resourceIndex];
@@ -206,11 +251,5 @@ public class RenderGraph
 			if (renderPass.IsNativeRenderPass)
 				command.EndRenderPass();
 		}
-
-		targets.Clear();
-		exportedResources.Clear();
-		renderPasses.Clear();
-		passInputs.Clear();
-		passOutputs.Clear();
 	}
 }
