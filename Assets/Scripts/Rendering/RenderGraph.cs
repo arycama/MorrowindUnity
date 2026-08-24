@@ -186,7 +186,7 @@ public class RenderGraph
 				{
 					target.resourceIndex = resources.Count;
 					var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
-					command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1));
+					command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfos[target.descriptor.viewHandle.index]));
 					resources.Add(resourceId);
 					targets[output.index] = target;
 					attachmentDescriptor.resolveTarget = resources[target.resourceIndex];
@@ -202,7 +202,7 @@ public class RenderGraph
 						{
 							target.resourceIndex = resources.Count;
 							var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
-							command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(viewData.samples));
+							command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(viewData.samples, viewInfos[target.descriptor.viewHandle.index]));
 							resources.Add(resourceId);
 							targets[output.index] = target;
 						}
@@ -225,7 +225,7 @@ public class RenderGraph
 								{
 									target.resourceIndex = resources.Count;
 									var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
-									command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1));
+									command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfos[target.descriptor.viewHandle.index]));
 									resources.Add(resourceId);
 									targets[output.index] = target;
 								}

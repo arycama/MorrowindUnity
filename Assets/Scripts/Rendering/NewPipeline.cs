@@ -88,15 +88,15 @@ public class NewPipeline : RenderPipelineBase
 		});
 
 		var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
-		var cameraDepth = renderGraph.GetTexture(new(viewSize, depthFormat, true), Shader.PropertyToID("CameraDepth"));
+		var cameraDepth = renderGraph.GetTexture(new(viewInfo, depthFormat, true), Shader.PropertyToID("CameraDepth"));
 
 		// TODO: This should also account for HDR
 		var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 		var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
 
-		var cameraColor = renderGraph.GetTexture(new(viewSize, targetFormat, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
-		var albedoMetallic = renderGraph.GetTexture(new(viewSize, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("GBufferAlbedoMetallic"));
-		var normalOcclusionRoughness = renderGraph.GetTexture(new(viewSize, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("GBufferNormalOcclusionRoughness"));
+		var cameraColor = renderGraph.GetTexture(new(viewInfo, targetFormat, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
+		var albedoMetallic = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("GBufferAlbedoMetallic"));
+		var normalOcclusionRoughness = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("GBufferNormalOcclusionRoughness"));
 
 		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.CommonOpaque }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
@@ -148,13 +148,13 @@ public class NewPipeline : RenderPipelineBase
 			});
 
 			// Final blit/resolve if needed
-			var backbufferColor = renderGraph.GetTexture(new(viewSize, targetFormat), Shader.PropertyToID("SceneColor"));
+			var backbufferColor = renderGraph.GetTexture(new(viewInfo, targetFormat), Shader.PropertyToID("SceneColor"));
 
 			// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 			TextureHandle sceneDepth = default;
 			if (requiresSceneDepth)
 			{
-				sceneDepth = renderGraph.GetTexture(new(viewSize, depthFormat), Shader.PropertyToID("SceneDepth"));
+				sceneDepth = renderGraph.GetTexture(new(viewInfo, depthFormat), Shader.PropertyToID("SceneDepth"));
 				renderGraph.ExportResource(sceneDepth, camera.targetTexture);
 			}
 

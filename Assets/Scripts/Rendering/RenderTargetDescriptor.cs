@@ -7,16 +7,16 @@ using Unmath;
 [DebuggerDisplay("{size} {samples}xAA {format}, clear: ({clear}, color: {clearColor}, depth: {clearDepth}, stencil {clearStencil})")]
 public readonly struct RenderTargetDescriptor
 {
-	public readonly Int2 size;
+	public readonly ViewHandle viewHandle;
 	public readonly GraphicsFormat format;
 	public readonly bool clear;
 	public readonly Color clearColor;
 	public readonly float clearDepth;
 	public readonly uint clearStencil;
 
-	public RenderTargetDescriptor(Int2 size, GraphicsFormat format, bool clear = false, Color clearColor = default, float clearDepth = 1f, uint clearStencil = default)
+	public RenderTargetDescriptor(ViewHandle viewHandle, GraphicsFormat format, bool clear = false, Color clearColor = default, float clearDepth = 1f, uint clearStencil = default)
 	{
-		this.size = size;
+		this.viewHandle = viewHandle;
 		this.format = format;
 		this.clear = clear;
 		this.clearColor = clearColor;
@@ -24,13 +24,13 @@ public readonly struct RenderTargetDescriptor
 		this.clearStencil = clearStencil;
 	}
 
-	public RenderTextureDescriptor GetRenderTextureDescriptor(int samples)
+	public RenderTextureDescriptor GetRenderTextureDescriptor(int samples, ViewInfo viewInfo)
 	{
 		// Otherwise we need to create a new resource
 		var descriptor = new RenderTextureDescriptor
 		{
-			width = size.x,
-			height = size.y,
+			width = viewInfo.size.x,
+			height = viewInfo.size.y,
 			volumeDepth = 1,
 			mipCount = 1,
 			dimension = TextureDimension.Tex2D,
