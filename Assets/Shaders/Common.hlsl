@@ -136,13 +136,8 @@ Texture2DArray<float> PointShadows;
 Texture3D<float4> VolumetricLighting;
 Texture2D<float> ScreenShadows;
 
-#ifdef MSAA_ON
-	Texture2DMS<float, 2> CameraDepth;
-	Texture2DMS<float4, 2> GBufferAlbedoMetallic, GBufferNormalOcclusionRoughness;
-#else
-	Texture2D<float> CameraDepth;
-	Texture2D<float4> GBufferAlbedoMetallic, GBufferNormalOcclusionRoughness;
-#endif
+Texture2D<float> CameraDepth;
+Texture2D<float4> GBufferAlbedoMetallic, GBufferNormalOcclusionRoughness;
 
 float3 UnderwaterColor;
 float UnderwaterColorWeight;

@@ -1,8 +1,6 @@
 using System;
-using System.Diagnostics;
 using UnityEngine.Rendering;
 
-[DebuggerDisplay("{Name}")]
 public readonly struct RenderPass<T> : IRenderPass
 {
 	private readonly T data;

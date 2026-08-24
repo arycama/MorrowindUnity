@@ -1,12 +1,34 @@
+#ifdef __INTELLISENSE__
+	#define MSAA_ON
+#endif
+
 #include "Assets/Shaders/Common.hlsl"
 
 Texture2D<float> ScreenSpaceOcclusion;
 Texture2D<float3> ScreenSpaceDiffuse;
 
+#ifdef MSAA_ON
+	Texture2DMS<float4, 8> _UnityFBInput0;
+	Texture2DMS<float4, 8> _UnityFBInput1;
+	Texture2DMS<float4, 8> _UnityFBInput2;
+#else
+	Texture2D<float4> _UnityFBInput0;
+	Texture2D<float4> _UnityFBInput1;
+	Texture2D<float4> _UnityFBInput2;
+#endif
+
 struct FragmentInput
 {
 	float4 position : SV_Position;
 	float3 worldDirection : TEXCOORD;
+	
+	#ifdef MSAA_ON
+		#ifdef SHADER_STAGE_FRAGMENT
+			uint sampleIndex : SV_SampleIndex;
+		#else
+			uint sampleIndex : TEXCOORD1;
+		#endif
+	#endif
 };
 
 FragmentInput Vertex(uint id : SV_VertexID)
@@ -21,13 +43,13 @@ FragmentInput Vertex(uint id : SV_VertexID)
 float3 Fragment(FragmentInput input) : SV_Target
 {
 	#ifdef MSAA_ON
-		float depth = CameraDepth.Load(input.position.xy, 0);
-		float4 albedoMetallic = GBufferAlbedoMetallic.Load(input.position.xy, 0);
-		float4 normalOcclusionRoughness = GBufferNormalOcclusionRoughness.Load(input.position.xy, 0);
+		float depth = _UnityFBInput0.Load(input.position.xy, input.sampleIndex).r;
+		float4 albedoMetallic = _UnityFBInput1.Load(input.position.xy, input.sampleIndex);
+		float4 normalOcclusionRoughness = _UnityFBInput2.Load(input.position.xy, input.sampleIndex);
 	#else
-		float depth = CameraDepth[input.position.xy];
-		float4 albedoMetallic = GBufferAlbedoMetallic[input.position.xy];
-		float4 normalOcclusionRoughness = GBufferNormalOcclusionRoughness[input.position.xy];
+		float depth = _UnityFBInput0[input.position.xy].r;
+		float4 albedoMetallic = _UnityFBInput1[input.position.xy];
+		float4 normalOcclusionRoughness = _UnityFBInput2[input.position.xy];
 	#endif
 	
 	float eyeDepth = LinearEyeDepth(depth);
@@ -39,7 +61,7 @@ float3 Fragment(FragmentInput input) : SV_Target
 	
 	float3 result = GetLuminanceAndFog(float4(albedoMetallic.rgb, 1.0), 0.0, N, input.position.xy, viewPosition).rgb;
 	
-	#ifdef RAYTRACING_ON
+#ifdef RAYTRACING_ON
 		//float occlusion = ScreenSpaceOcclusion[input.position.xy];
 		//result += ScreenSpaceDiffuse[input.position.xy] * albedoMetallic.rgb;
 	#endif

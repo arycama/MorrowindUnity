@@ -16,12 +16,13 @@ public class RenderGraph
 	private readonly List<RenderTargetIdentifier> resources = new();
 	private readonly List<string> passNames = new();
 	private readonly List<Range> inputRanges = new();
+	private readonly List<Range> inputAttachmentRanges = new();
 	private readonly List<Range> outputRanges = new();
 	private readonly List<ViewHandle> passViewHandles = new();
 	private readonly List<ViewInfo> viewInfos = new();
 
-	private TextureHandle[] passInputs = new TextureHandle[8], passOutputs = new TextureHandle[8];
-	private int inputCount, outputCount;
+	private TextureHandle[] passInputs = new TextureHandle[8], passInputAttachments = new TextureHandle[8], passOutputs = new TextureHandle[8];
+	private int inputCount, inputAttachmentCount, outputCount;
 
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, int propertyId)
 	{
@@ -29,20 +30,16 @@ public class RenderGraph
 		return new(targets.Count - 1);
 	}
 
-	// Render pass 
-	private readonly NativeList<TextureHandle> renderPassInputs = new(8, Allocator.Persistent);
-	private readonly NativeList<TextureHandle> renderPassOutputs = new(8, Allocator.Persistent);
-
-	public RenderPass<T> AddRenderPass<T>(string name, ViewHandle viewHandle, T data, ReadOnlySpan<TextureHandle> outputs, ReadOnlySpan<TextureHandle> inputs, Action<CommandBuffer, T> render)
+	public RenderPass<T> AddRenderPass<T>(string name, ViewHandle viewHandle, T data = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> inputs = default, ReadOnlySpan<TextureHandle> inputAttachments = default, Action<CommandBuffer, T> render = default)
 	{
 		var index = renderPasses.Count;
 
 		passNames.Add(name);
 		inputRanges.Add(SetInputs(inputs, index));
+		inputAttachmentRanges.Add(SetInputAttachments(inputAttachments, index));
 		outputRanges.Add(SetOutputs(outputs, index));
 		passViewHandles.Add(viewHandle);
 
-		var isInRenderPass = renderPassOutputs.Length > 0;
 		var renderPass = new RenderPass<T>(data, render);
 		renderPasses.Add(renderPass);
 		return renderPass;
@@ -82,38 +79,40 @@ public class RenderGraph
 		targets[handle.index] = target;
 	}
 
-	public Range SetInputs(ReadOnlySpan<TextureHandle> inputs, int passIndex)
+	private static Range SetItems(ReadOnlySpan<TextureHandle> items, ref int count, ref TextureHandle[] array)
 	{
-		var start = inputCount;
-		var newCount = inputCount + inputs.Length;
+		var start = count;
+		var newCount = count + items.Length;
 
-		if (passInputs.Length < newCount)
-			Array.Resize(ref passInputs, Math.Max(newCount, passInputs.Length * 2));
+		if (array.Length < newCount)
+			Array.Resize(ref array, Math.Max(newCount, array.Length * 2));
 
-		inputs.CopyTo(passInputs.AsSpan(start, inputs.Length));
-		inputCount = newCount;
+		items.CopyTo(array.AsSpan(start, items.Length));
+		count = newCount;
 
-		foreach(var input in inputs)
-			SetResourceReadIndex(input, passIndex);
-
-		return start..inputCount;
+		return start..count;
 	}
 
-	public Range SetOutputs(ReadOnlySpan<TextureHandle> outputs, int passIndex)
+	public Range SetInputs(ReadOnlySpan<TextureHandle> items, int passIndex)
 	{
-		var start = outputCount;
-		var newCount = outputCount + outputs.Length;
+		foreach (var item in items)
+			SetResourceReadIndex(item, passIndex);
+		return SetItems(items, ref inputCount, ref passInputs);
+	}
 
-		if (passOutputs.Length < newCount)
-			Array.Resize(ref passOutputs, Math.Max(newCount, passOutputs.Length * 2));
+	public Range SetInputAttachments(ReadOnlySpan<TextureHandle> items, int passIndex)
+	{
+		// We tread input attachments as 'writes' to prevent them from resolving too early since a resolve is done after all writes
+		foreach (var item in items)
+			SetResourceWriteIndex(item, passIndex);
+		return SetItems(items, ref inputAttachmentCount, ref passInputAttachments);
+	}
 
-		outputs.CopyTo(passOutputs.AsSpan(start, outputs.Length));
-		outputCount = newCount;
-
-		foreach (var output in outputs)
-			SetResourceWriteIndex(output, passIndex);
-
-		return start..outputCount;
+	public Range SetOutputs(ReadOnlySpan<TextureHandle> items, int passIndex)
+	{
+		foreach (var item in items)
+			SetResourceWriteIndex(item, passIndex);
+		return SetItems(items, ref outputCount, ref passOutputs);
 	}
 
 	public ViewHandle AddViewInfo(Int2 size, int samples = 1)
@@ -131,30 +130,107 @@ public class RenderGraph
 		resources.Clear();
 		passNames.Clear();
 		inputRanges.Clear();
+		inputAttachmentRanges.Clear();
 		outputRanges.Clear();
 		passViewHandles.Clear();
 		viewInfos.Clear();
 		inputCount = 0;
 		outputCount = 0;
+		inputAttachmentCount = 0;
 	}
 
 	public void Execute(CommandBuffer command)
 	{
-		var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
-		var subpasses = new FixedBuffer<SubPassDescriptor>(stackalloc SubPassDescriptor[8]);
-		var colorOutputs = new FixedBuffer<int>(stackalloc int[8]);
-		var depthIndex = -1;
-
 		for (var i = 0; i < renderPasses.Count; i++)
 		{
+			var attachmentHandles = new FixedBuffer<TextureHandle>(stackalloc TextureHandle[8]);
+			var subpasses = new FixedBuffer<SubPassDescriptor>(stackalloc SubPassDescriptor[8]);
+			var passOutputIndices = new FixedBuffer<int>(stackalloc int[8]);
+			var passInputIndices = new FixedBuffer<int>(stackalloc int[8]);
+			var depthIndex = -1;
+
 			var renderPass = renderPasses[i];
+
+			// Inputs
+			foreach (var input in passInputs[inputRanges[i]])
+			{
+				var target = targets[input.index];
+				var resource = resources[target.resourceIndex];
+				command.SetGlobalTexture(target.propertyId, resource);
+			}
+
 			var viewHandle = passViewHandles[i];
 			var viewData = viewInfos[viewHandle.index];
-			var outputRange = outputRanges[i];
 
+			// Outputs
+			var outputRange = outputRanges[i];
 			foreach (var output in passOutputs[outputRange])
 			{
+				// Check if handle already exists, otherwise add
+				var index = -1;
+				for (var j = 0; j < attachmentHandles.Count; j++)
+				{
+					if (attachmentHandles[j].index == output.index)
+					{
+						index = j;
+						break;
+					}
+				}
+
+				if (index == -1)
+				{
+					index = attachmentHandles.Count;
+					_ = attachmentHandles.Add(output);
+				}
+
 				var target = targets[output.index];
+				var isColor = target.descriptor.format switch
+				{
+					GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
+					_ => true,
+				};
+
+				if (isColor)
+					_ = passOutputIndices.Add(index);
+				else
+					depthIndex = index;
+			}
+
+			// Input attachments
+			var flags = SubPassFlags.None;
+			var inputAttachmentRange = inputAttachmentRanges[i];
+			foreach (var inputAttachment in passInputAttachments[inputAttachmentRange])
+			{
+				// Check if handle already exists, otherwise add
+				var index = -1;
+				for (var j = 0; j < attachmentHandles.Count; j++)
+				{
+					if (attachmentHandles[j].index == inputAttachment.index)
+					{
+						index = j;
+						break;
+					}
+				}
+
+				if (index == -1)
+				{
+					index = attachmentHandles.Count;
+					_ = attachmentHandles.Add(inputAttachment);
+				}
+				if(index == depthIndex)
+				{
+					flags |= SubPassFlags.ReadOnlyDepth;
+				}
+
+				_ = passInputIndices.Add(index);
+			}
+
+			var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
+			for (var j = 0; j < attachmentHandles.Count; j++)
+			{
+				var attachment = attachmentHandles[j];
+
+				var target = targets[attachment.index];
 				var attachmentDescriptor = new AttachmentDescriptor
 				{
 					graphicsFormat = target.descriptor.format
@@ -195,14 +271,14 @@ public class RenderGraph
 					var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
 					command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfos[target.descriptor.viewHandle.index]));
 					resources.Add(resourceId);
-					targets[output.index] = target;
+					targets[attachment.index] = target;
 					attachmentDescriptor.resolveTarget = resources[target.resourceIndex];
 					attachmentDescriptor.storeAction = RenderBufferStoreAction.Resolve;
 				}
 				else
 				{
 					// Depth targets can't be msaa resolved so we need to store the msaa version.
-					var requiresMsaaStore = viewData.samples > 1 && (i < target.lastWriteIndex || (i == target.lastWriteIndex && !isColor));
+					var requiresMsaaStore = viewData.samples > 1 && (i < target.lastWriteIndex || i == target.lastWriteIndex && !isColor);
 					if (requiresMsaaStore)
 					{
 						if (isFirstWrite)
@@ -211,7 +287,7 @@ public class RenderGraph
 							var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
 							command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(viewData.samples, viewInfos[target.descriptor.viewHandle.index]));
 							resources.Add(resourceId);
-							targets[output.index] = target;
+							targets[attachment.index] = target;
 						}
 
 						attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
@@ -234,7 +310,7 @@ public class RenderGraph
 									var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
 									command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfos[target.descriptor.viewHandle.index]));
 									resources.Add(resourceId);
-									targets[output.index] = target;
+									targets[attachment.index] = target;
 								}
 
 								attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
@@ -249,36 +325,19 @@ public class RenderGraph
 					}
 				}
 
-				var index = attachments.Count;
-				attachments.Add(attachmentDescriptor);
-
-				if (isColor)
-					colorOutputs.Add(index);
-				else
-					depthIndex = index;
-			}
-
-			foreach (var input in passInputs[inputRanges[i]])
-			{
-				var target = targets[input.index];
-				var resource = resources[target.resourceIndex];
-				command.SetGlobalTexture(target.propertyId, resource);
+				_ = attachments.Add(attachmentDescriptor);
 			}
 
 			var isNativeRenderPass = !outputRange.Start.Equals(outputRange.End);
 			if (isNativeRenderPass)
 			{
-				subpasses.Add(new() { colorOutputs = new(colorOutputs.Span.AsArray()) });
-				colorOutputs.Clear();
+				_ = subpasses.Add(new() { inputs = new(passInputIndices.Span.AsArray()), colorOutputs = new(passOutputIndices.Span.AsArray()), flags = flags });
 
 				var passName = passNames[i];
 				Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(passName)];
 				_ = Encoding.UTF8.GetBytes(passName, debugNameUtf8);
 
-				command.BeginRenderPass(viewData.size.x, viewData.size.y, viewData.samples, attachments.Span.AsArray(), depthIndex, subpasses.Span.AsArray(), debugNameUtf8);
-				subpasses.Clear();
-				attachments.Clear();
-				depthIndex = -1;
+				command.BeginRenderPass(viewData.size.x, viewData.size.y, 1, viewData.samples, attachments.Span.AsArray(), depthIndex, -1, subpasses.Span.AsArray(), debugNameUtf8);
 			}
 
 			renderPass.Execute(command);

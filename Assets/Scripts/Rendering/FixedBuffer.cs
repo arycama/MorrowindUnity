@@ -13,9 +13,11 @@ public ref struct FixedBuffer<T>
 	public int Count { get; private set; }
 	public readonly Span<T> Span => buffer[..Count];
 
+	public readonly T this[int index] => buffer[index];
+
 	public bool Add(T item)
 	{
-		if (Count >= buffer.Length) 
+		if (Count >= buffer.Length)
 			return false;
 
 		buffer[Count++] = item;
