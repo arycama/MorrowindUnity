@@ -18,8 +18,6 @@ public static class NativeArrayExtensions
 
 	public static NativeArray<T> ToNativeArray<T>(this Span<T> span, Allocator allocator = Allocator.Temp) where T : unmanaged
 	{
-		var result = new NativeArray<T>(span.Length, allocator);
-		span.CopyTo(result.AsSpan());
-		return result;
+		return new(span.AsArray(), allocator);
 	}
 }

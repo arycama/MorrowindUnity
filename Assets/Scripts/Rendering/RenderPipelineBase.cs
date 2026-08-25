@@ -1,12 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
-using Unmath;
-using static Unmath.Math;
-
-#if UNITY_EDITOR
-using UnityEditor;
-#endif
 
 public abstract class RenderPipelineBase : RenderPipeline
 {
@@ -16,6 +10,11 @@ public abstract class RenderPipelineBase : RenderPipeline
 	public RenderPipelineBase()
 	{
 		command = new() { name = "Render Frame" };
+	}
+
+	protected override void Dispose(bool disposing)
+	{
+		renderGraph.Dispose();
 	}
 
 	protected abstract void RenderCamera(Camera camera, ScriptableCullingParameters cullingParameters, ScriptableRenderContext context);

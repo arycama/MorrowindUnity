@@ -8,7 +8,7 @@ using UnityEngine.Rendering;
 using Unmath;
 using Math = Unmath.Math;
 
-public class RenderGraph
+public class RenderGraph : IDisposable
 {
 	private readonly List<RenderTargetInfo> targets = new();
 	private readonly List<RenderTargetIdentifier> exportedResources = new();
@@ -21,12 +21,26 @@ public class RenderGraph
 	private readonly List<ViewHandle> passViewHandles = new();
 	private readonly List<ViewInfo> viewInfos = new();
 
+	// Renderpass
+	private readonly NativeList<TextureHandle> attachmentHandles = new(8, Allocator.Persistent);
+	private readonly NativeList<int> passOutputIndices = new(8, Allocator.Persistent);
+	private readonly NativeList<int> passInputIndices = new(8, Allocator.Persistent);
+	private int depthIndex = -1;
+	private SubPassFlags flags;
+
 	// Subpasses
 	private readonly List<NativeRenderPassDescriptor> nativeRenderPassDescriptors = new();
 	private readonly List<int> nativeRenderPassDescriptorIndices = new();
 
 	private TextureHandle[] passInputs = new TextureHandle[8], passInputAttachments = new TextureHandle[8], passOutputs = new TextureHandle[8];
 	private int inputCount, inputAttachmentCount, outputCount;
+
+	public void Dispose()
+	{
+		attachmentHandles.Dispose();
+		passOutputIndices.Dispose();
+		passInputIndices.Dispose();
+	}
 
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, int propertyId)
 	{
@@ -48,11 +62,6 @@ public class RenderGraph
 		renderPasses.Add(renderPass);
 
 		// Calcualte native render pass parameters
-		var attachmentHandles = new FixedBuffer<TextureHandle>(stackalloc TextureHandle[8]);
-		var passOutputIndices = new FixedBuffer<int>(stackalloc int[8]);
-		var passInputIndices = new FixedBuffer<int>(stackalloc int[8]);
-		var depthIndex = -1;
-
 		var viewData = viewInfos[viewHandle.index];
 
 		// Outputs
@@ -61,7 +70,7 @@ public class RenderGraph
 		{
 			// Check if handle already exists, otherwise add
 			var attachmentIndex = -1;
-			for (var j = 0; j < attachmentHandles.Count; j++)
+			for (var j = 0; j < attachmentHandles.Length; j++)
 			{
 				if (attachmentHandles[j].index == output.index)
 				{
@@ -72,8 +81,8 @@ public class RenderGraph
 
 			if (attachmentIndex == -1)
 			{
-				attachmentIndex = attachmentHandles.Count;
-				_ = attachmentHandles.Add(output);
+				attachmentIndex = attachmentHandles.Length;
+				attachmentHandles.Add(output);
 			}
 
 			var target = targets[output.index];
@@ -84,19 +93,18 @@ public class RenderGraph
 			};
 
 			if (isColor)
-				_ = passOutputIndices.Add(attachmentIndex);
+				passOutputIndices.Add(attachmentIndex);
 			else
 				depthIndex = attachmentIndex;
 		}
 
 		// Input attachments
-		var flags = SubPassFlags.None;
 		var inputAttachmentRange = inputAttachmentRanges[index];
 		foreach (var inputAttachment in passInputAttachments[inputAttachmentRange])
 		{
 			// Check if handle already exists, otherwise add
 			var attachmentIndex = -1;
-			for (var j = 0; j < attachmentHandles.Count; j++)
+			for (var j = 0; j < attachmentHandles.Length; j++)
 			{
 				if (attachmentHandles[j].index == inputAttachment.index)
 				{
@@ -107,15 +115,15 @@ public class RenderGraph
 
 			if (attachmentIndex == -1)
 			{
-				attachmentIndex = attachmentHandles.Count;
-				_ = attachmentHandles.Add(inputAttachment);
+				attachmentIndex = attachmentHandles.Length;
+				attachmentHandles.Add(inputAttachment);
 			}
 			if (attachmentIndex == depthIndex)
 			{
 				flags |= SubPassFlags.ReadOnlyDepth;
 			}
 
-			_ = passInputIndices.Add(attachmentIndex);
+			passInputIndices.Add(attachmentIndex);
 		}
 
 		var nativeRenderPassDescriptorIndex = -1;
@@ -123,11 +131,17 @@ public class RenderGraph
 		if (isNativeRenderPass)
 		{
 			var subpasses = new FixedBuffer<SubPassDescriptor>(stackalloc SubPassDescriptor[8]);
-			_ = subpasses.Add(new() { inputs = new(passInputIndices.Span.ToNativeArray()), colorOutputs = new(passOutputIndices.Span.ToNativeArray()), flags = flags });
+			_ = subpasses.Add(new() { inputs = new(passInputIndices.AsArray()), colorOutputs = new(passOutputIndices.AsArray()), flags = flags });
 
-			var descriptor = new NativeRenderPassDescriptor(attachmentHandles.Span.ToNativeArray(), subpasses.Span.ToNativeArray(), depthIndex, name);
+			var descriptor = new NativeRenderPassDescriptor(new(attachmentHandles.AsArray(), Allocator.Temp), subpasses.Span.ToNativeArray(), depthIndex, name);
 			nativeRenderPassDescriptorIndex = nativeRenderPassDescriptors.Count;
 			nativeRenderPassDescriptors.Add(descriptor);
+
+			attachmentHandles.Clear();
+			passOutputIndices.Clear();
+			passInputIndices.Clear();
+			depthIndex = -1;
+			flags = SubPassFlags.None;
 		}
 
 		nativeRenderPassDescriptorIndices.Add(nativeRenderPassDescriptorIndex);
