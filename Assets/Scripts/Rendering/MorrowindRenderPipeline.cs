@@ -49,7 +49,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 
 	protected override List<ViewRenderFeature> InitializePerCameraRenderFeatures() => new()
 	{
-		new SetupCamera(renderGraph, asset.LightingSettings, asset),
+		new SetupCameraOld(renderGraph, asset.LightingSettings, asset),
 		new SetupLightingOld(renderGraph, asset.LightingSettings, asset.LightCulling),
 
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>

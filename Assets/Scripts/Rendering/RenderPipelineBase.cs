@@ -47,6 +47,6 @@ public abstract class RenderPipelineBase : RenderPipeline
 		context.ExecuteCommandBuffer(command);
 
 		//if (context.SubmitForRenderPassValidation())
-			context.Submit();
+		context.Submit();
 	}
 }
