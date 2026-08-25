@@ -1,9 +1,11 @@
+using System;
 using System.Collections.Generic;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.RendererUtils;
 using Unmath;
 using static Unmath.Math;
 using Quaternion = Unmath.Quaternion;
@@ -108,14 +110,14 @@ public class NewPipeline : RenderPipelineBase
 
 		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.CommonOpaque }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
-		renderGraph.AddRenderPass("Gbuffer", viewInfo, (opaqueRendererList, viewDataBuffer, environmentDataBuffer), stackalloc[] { cameraDepth, albedoNormal, cameraColor }, render: static (command, data) =>
+		renderGraph.AddRenderPass("Gbuffer", viewInfo, (opaqueRendererList, viewDataBuffer, environmentDataBuffer), outputs: stackalloc[] { cameraDepth, albedoNormal, cameraColor }, render: static (command, data) =>
 		{
 			command.SetGlobalConstantBuffer(data.environmentDataBuffer, Shader.PropertyToID("EnvironmentData"), 0, data.environmentDataBuffer.stride);
 			command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
 			command.DrawRendererList(data.opaqueRendererList);
 		});
 
-		renderGraph.AddRenderPass("Deferred Lighting", viewInfo, (deferredMaterial, asset, viewDataBuffer, environmentDataBuffer, propertyBlock), stackalloc[] { cameraDepth, cameraColor }, default, stackalloc[] { cameraDepth, albedoNormal }, static (command, data) =>
+		renderGraph.AddRenderPass("Deferred Lighting", viewInfo, (deferredMaterial, asset, viewDataBuffer, environmentDataBuffer, propertyBlock), default, stackalloc[] { cameraDepth, cameraColor }, stackalloc[] { cameraDepth, albedoNormal }, static (command, data) =>
 		{
 			data.propertyBlock.Clear();
 			data.propertyBlock.SetConstantBuffer(Shader.PropertyToID("EnvironmentData"), data.environmentDataBuffer, 0, data.environmentDataBuffer.stride);
@@ -130,9 +132,17 @@ public class NewPipeline : RenderPipelineBase
 				command.DisableShaderKeyword("MSAA_ON");
 		});
 
+		var skyRendererList = context.CreateRendererList(new RendererListDesc(new ShaderTagId("Sky"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all });
+		renderGraph.AddRenderPass("Render Sky", viewInfo, (skyRendererList, viewDataBuffer, environmentDataBuffer), outputs: stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
+		{
+			command.SetGlobalConstantBuffer(data.environmentDataBuffer, Shader.PropertyToID("EnvironmentData"), 0, data.environmentDataBuffer.stride);
+			command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
+			command.DrawRendererList(data.skyRendererList);
+		});
+
 		var transparentRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.CommonTransparent }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 		var transparentRendererList = context.CreateRendererList(ref transparentRendererParams);
-		renderGraph.AddRenderPass("Render Forward Transparent", viewInfo, (transparentRendererList, viewDataBuffer, environmentDataBuffer), stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
+		renderGraph.AddRenderPass("Render Forward Transparent", viewInfo, (transparentRendererList, viewDataBuffer, environmentDataBuffer), outputs: stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
 		{
 			command.SetGlobalConstantBuffer(data.environmentDataBuffer, Shader.PropertyToID("EnvironmentData"), 0, data.environmentDataBuffer.stride);
 			command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
@@ -142,29 +152,36 @@ public class NewPipeline : RenderPipelineBase
 		// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 		// TODO: Check for hardware msaa backbuffer resolve support
 		var backbufferInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight));
-		var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
 
 		// Final blit/resolve if needed
 		// TODO: This should also account for HDR
 		var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 		var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
-		var backbufferColor = renderGraph.GetTexture(new(viewInfo, targetFormat), Shader.PropertyToID("SceneColor"));
+		var sceneColor = renderGraph.GetTexture(new(viewInfo, targetFormat), Shader.PropertyToID("SceneColor"));
+		renderGraph.ExportResource(sceneColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
 
 		// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 		TextureHandle sceneDepth = default;
+		var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
 		if (requiresSceneDepth)
 		{
 			sceneDepth = renderGraph.GetTexture(new(viewInfo, depthFormat), Shader.PropertyToID("SceneDepth"));
 			renderGraph.ExportResource(sceneDepth, camera.targetTexture);
 		}
 
-		renderGraph.ExportResource(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+		var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
+		var requiresFlip = camera.targetTexture == null;
 
-		var outputs = requiresSceneDepth ? stackalloc[] { sceneDepth, backbufferColor } : stackalloc[] { backbufferColor };
-		var inputs = requiresSceneDepth ? stackalloc[] { cameraColor, cameraDepth } : stackalloc[] { cameraColor };
-		renderGraph.AddRenderPass("Final Blit", backbufferInfo, (blitMaterial, camera, asset, requiresSceneDepth, viewDataBuffer), outputs, inputs, render: static (command, data) =>
+		var resources = renderToBackbuffer ? default : requiresSceneDepth ? stackalloc[] { cameraColor, cameraDepth } : stackalloc[] { cameraColor };
+		var outputs = requiresSceneDepth ? stackalloc[] { sceneDepth, sceneColor } : stackalloc[] { sceneColor };
+		var inputs = renderToBackbuffer ? stackalloc[] { cameraColor } : default;
+
+		renderGraph.AddRenderPass("Final Blit", backbufferInfo, (blitMaterial, requiresFlip, asset, requiresSceneDepth, viewDataBuffer, renderToBackbuffer), resources, outputs, inputs, static (command, data) =>
 		{
-			if (data.camera.targetTexture == null)
+			if(data.renderToBackbuffer)
+				command.EnableShaderKeyword("DIRECT");
+
+			if (data.requiresFlip)
 				command.EnableShaderKeyword("FLIP");
 
 			if (data.requiresSceneDepth)
@@ -177,7 +194,7 @@ public class NewPipeline : RenderPipelineBase
 			command.SetWireframe(false);
 			command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
 
-			if (data.camera.targetTexture == null)
+			if (data.requiresFlip)
 				command.DisableShaderKeyword("FLIP");
 
 			if (data.requiresSceneDepth)
@@ -185,6 +202,9 @@ public class NewPipeline : RenderPipelineBase
 
 			if (data.asset.Samples > 1)
 				command.DisableShaderKeyword("MSAA");
+
+			if (data.renderToBackbuffer)
+				command.DisableShaderKeyword("DIRECT");
 		});
 
 #if UNITY_EDITOR

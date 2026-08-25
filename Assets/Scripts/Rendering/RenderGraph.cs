@@ -41,7 +41,7 @@ public class RenderGraph : IDisposable
 		return new(targets.Count - 1);
 	}
 
-	public void AddRenderPass<T>(string name, ViewHandle viewHandle, T data = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> resources = default, ReadOnlySpan<TextureHandle> inputs = default, Action<CommandBuffer, T> render = default)
+	public void AddRenderPass<T>(string name, ViewHandle viewHandle, T data = default, ReadOnlySpan<TextureHandle> resources = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> inputs = default, Action<CommandBuffer, T> render = default)
 	{
 		passViewHandles.Add(viewHandle);
 
@@ -220,10 +220,8 @@ public class RenderGraph : IDisposable
 
 					// Resolve the attachments to their final values
 					var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
-					for (var j = 0; j < attachmentHandles.Length; j++)
+					foreach (var attachment in attachmentHandles)
 					{
-						var attachment = attachmentHandles[j];
-
 						var target = targets[attachment.index];
 						var attachmentDescriptor = new AttachmentDescriptor
 						{
@@ -248,7 +246,6 @@ public class RenderGraph : IDisposable
 						{
 							// If this target has been written previously, it must be loaded
 							attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
-							attachmentDescriptor.loadAction = RenderBufferLoadAction.Load;
 						}
 
 						var isColor = target.descriptor.format switch
@@ -285,7 +282,6 @@ public class RenderGraph : IDisposable
 								}
 
 								attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
-								attachmentDescriptor.storeAction = RenderBufferStoreAction.Store;
 							}
 							else
 							{
@@ -310,8 +306,6 @@ public class RenderGraph : IDisposable
 
 										attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
 									}
-
-									attachmentDescriptor.storeAction = RenderBufferStoreAction.Store;
 								}
 								else
 								{

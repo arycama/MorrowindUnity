@@ -11,7 +11,6 @@ struct VertexInput
 struct FragmentInput
 {
 	float4 position : SV_POSITION;
-	float3 worldPosition : POSITION1;
 	float2 uv : TEXCOORD0;
 	float4 color : COLOR;
 };
@@ -28,11 +27,8 @@ cbuffer UnityPerMaterial
 
 FragmentInput Vertex(VertexInput input)
 {
-	float3 worldPosition = ObjectToWorldPosition(input.position, 0);
-
 	FragmentInput output;
-	output.worldPosition = worldPosition;
-	output.position = WorldToClipPosition(worldPosition);
+	output.position = ObjectToClipPosition(input.position, 0);
 	output.position.z /= output.position.w;
 	output.uv = input.uv;// * _MainTex_ST.xy + _MainTex_ST.zw; //	+_CloudSpeed * Time * 0.003;
 	

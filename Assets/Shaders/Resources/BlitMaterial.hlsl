@@ -1,5 +1,7 @@
 #include "../Common.hlsl"
 
+Texture2D<float4> _UnityFBInput0;
+
 float4 Vertex(uint vertexId : SV_VertexID, out float2 uv : TEXCOORD) : SV_Position
 {
 	#ifdef FLIP
@@ -29,6 +31,10 @@ float4 Fragment(float4 position : SV_Position,
 			depth = CameraDepth.Sample(PointClampSampler, uv);
 		#endif
 	#endif
-
-	return float4(CameraColor.Sample(PointClampSampler, uv), 1.0);
+	
+	#ifdef DIRECT
+		return float4(_UnityFBInput0[position.xy].rgb, 1.0);
+	#else
+		return float4(CameraColor.Sample(PointClampSampler, uv), 1.0);
+	#endif
 }
