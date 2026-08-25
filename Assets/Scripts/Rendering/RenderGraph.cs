@@ -21,6 +21,10 @@ public class RenderGraph
 	private readonly List<ViewHandle> passViewHandles = new();
 	private readonly List<ViewInfo> viewInfos = new();
 
+	// Subpasses
+	private readonly List<NativeRenderPassDescriptor> nativeRenderPassDescriptors = new();
+	private readonly List<int> nativeRenderPassDescriptorIndices = new();
+
 	private TextureHandle[] passInputs = new TextureHandle[8], passInputAttachments = new TextureHandle[8], passOutputs = new TextureHandle[8];
 	private int inputCount, inputAttachmentCount, outputCount;
 
@@ -42,6 +46,91 @@ public class RenderGraph
 
 		var renderPass = new RenderPass<T>(data, render);
 		renderPasses.Add(renderPass);
+
+		// Calcualte native render pass parameters
+		var attachmentHandles = new FixedBuffer<TextureHandle>(stackalloc TextureHandle[8]);
+		var passOutputIndices = new FixedBuffer<int>(stackalloc int[8]);
+		var passInputIndices = new FixedBuffer<int>(stackalloc int[8]);
+		var depthIndex = -1;
+
+		var viewData = viewInfos[viewHandle.index];
+
+		// Outputs
+		var outputRange = outputRanges[index];
+		foreach (var output in passOutputs[outputRange])
+		{
+			// Check if handle already exists, otherwise add
+			var attachmentIndex = -1;
+			for (var j = 0; j < attachmentHandles.Count; j++)
+			{
+				if (attachmentHandles[j].index == output.index)
+				{
+					attachmentIndex = j;
+					break;
+				}
+			}
+
+			if (attachmentIndex == -1)
+			{
+				attachmentIndex = attachmentHandles.Count;
+				_ = attachmentHandles.Add(output);
+			}
+
+			var target = targets[output.index];
+			var isColor = target.descriptor.format switch
+			{
+				GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
+				_ => true,
+			};
+
+			if (isColor)
+				_ = passOutputIndices.Add(attachmentIndex);
+			else
+				depthIndex = attachmentIndex;
+		}
+
+		// Input attachments
+		var flags = SubPassFlags.None;
+		var inputAttachmentRange = inputAttachmentRanges[index];
+		foreach (var inputAttachment in passInputAttachments[inputAttachmentRange])
+		{
+			// Check if handle already exists, otherwise add
+			var attachmentIndex = -1;
+			for (var j = 0; j < attachmentHandles.Count; j++)
+			{
+				if (attachmentHandles[j].index == inputAttachment.index)
+				{
+					attachmentIndex = j;
+					break;
+				}
+			}
+
+			if (attachmentIndex == -1)
+			{
+				attachmentIndex = attachmentHandles.Count;
+				_ = attachmentHandles.Add(inputAttachment);
+			}
+			if (attachmentIndex == depthIndex)
+			{
+				flags |= SubPassFlags.ReadOnlyDepth;
+			}
+
+			_ = passInputIndices.Add(attachmentIndex);
+		}
+
+		var nativeRenderPassDescriptorIndex = -1;
+		var isNativeRenderPass = !outputRange.Start.Equals(outputRange.End);
+		if (isNativeRenderPass)
+		{
+			var subpasses = new FixedBuffer<SubPassDescriptor>(stackalloc SubPassDescriptor[8]);
+			_ = subpasses.Add(new() { inputs = new(passInputIndices.Span.ToNativeArray()), colorOutputs = new(passOutputIndices.Span.ToNativeArray()), flags = flags });
+
+			var descriptor = new NativeRenderPassDescriptor(attachmentHandles.Span.ToNativeArray(), subpasses.Span.ToNativeArray(), depthIndex, name);
+			nativeRenderPassDescriptorIndex = nativeRenderPassDescriptors.Count;
+			nativeRenderPassDescriptors.Add(descriptor);
+		}
+
+		nativeRenderPassDescriptorIndices.Add(nativeRenderPassDescriptorIndex);
 	}
 
 	public void SetResourceReadIndex(TextureHandle handle, int index)
@@ -133,6 +222,8 @@ public class RenderGraph
 		outputRanges.Clear();
 		passViewHandles.Clear();
 		viewInfos.Clear();
+		nativeRenderPassDescriptors.Clear();
+		nativeRenderPassDescriptorIndices.Clear();
 		inputCount = 0;
 		outputCount = 0;
 		inputAttachmentCount = 0;
@@ -142,14 +233,6 @@ public class RenderGraph
 	{
 		for (var i = 0; i < renderPasses.Count; i++)
 		{
-			var attachmentHandles = new FixedBuffer<TextureHandle>(stackalloc TextureHandle[8]);
-			var subpasses = new FixedBuffer<SubPassDescriptor>(stackalloc SubPassDescriptor[8]);
-			var passOutputIndices = new FixedBuffer<int>(stackalloc int[8]);
-			var passInputIndices = new FixedBuffer<int>(stackalloc int[8]);
-			var depthIndex = -1;
-
-			var renderPass = renderPasses[i];
-
 			// Inputs
 			foreach (var input in passInputs[inputRanges[i]])
 			{
@@ -158,187 +241,126 @@ public class RenderGraph
 				command.SetGlobalTexture(target.propertyId, resource);
 			}
 
-			var viewHandle = passViewHandles[i];
-			var viewData = viewInfos[viewHandle.index];
+			var nativeRenderPassDescriptorIndex = nativeRenderPassDescriptorIndices[i];
 
-			// Outputs
-			var outputRange = outputRanges[i];
-			foreach (var output in passOutputs[outputRange])
+			var isNativeRenderPass = nativeRenderPassDescriptorIndex != -1;
+			if (isNativeRenderPass)
 			{
-				// Check if handle already exists, otherwise add
-				var index = -1;
-				for (var j = 0; j < attachmentHandles.Count; j++)
+				var nativeRenderPassDescriptor = nativeRenderPassDescriptors[nativeRenderPassDescriptorIndex];
+				var attachmentHandles = nativeRenderPassDescriptor.attachments;
+				var viewHandle = passViewHandles[i];
+				var viewData = viewInfos[viewHandle.index];
+
+				var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
+				for (var j = 0; j < attachmentHandles.Length; j++)
 				{
-					if (attachmentHandles[j].index == output.index)
+					var attachment = attachmentHandles[j];
+
+					var target = targets[attachment.index];
+					var attachmentDescriptor = new AttachmentDescriptor
 					{
-						index = j;
-						break;
-					}
-				}
+						graphicsFormat = target.descriptor.format
+					};
 
-				if (index == -1)
-				{
-					index = attachmentHandles.Count;
-					_ = attachmentHandles.Add(output);
-				}
-
-				var target = targets[output.index];
-				var isColor = target.descriptor.format switch
-				{
-					GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
-					_ => true,
-				};
-
-				if (isColor)
-					_ = passOutputIndices.Add(index);
-				else
-					depthIndex = index;
-			}
-
-			// Input attachments
-			var flags = SubPassFlags.None;
-			var inputAttachmentRange = inputAttachmentRanges[i];
-			foreach (var inputAttachment in passInputAttachments[inputAttachmentRange])
-			{
-				// Check if handle already exists, otherwise add
-				var index = -1;
-				for (var j = 0; j < attachmentHandles.Count; j++)
-				{
-					if (attachmentHandles[j].index == inputAttachment.index)
+					// Clear the target on the first write if needed, or just leave contents uninitialized. If this is not the first write, then it will default to a load action.
+					var isFirstWrite = i == target.firstWriteIndex;
+					if (isFirstWrite)
 					{
-						index = j;
-						break;
-					}
-				}
-
-				if (index == -1)
-				{
-					index = attachmentHandles.Count;
-					_ = attachmentHandles.Add(inputAttachment);
-				}
-				if(index == depthIndex)
-				{
-					flags |= SubPassFlags.ReadOnlyDepth;
-				}
-
-				_ = passInputIndices.Add(index);
-			}
-
-			var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
-			for (var j = 0; j < attachmentHandles.Count; j++)
-			{
-				var attachment = attachmentHandles[j];
-
-				var target = targets[attachment.index];
-				var attachmentDescriptor = new AttachmentDescriptor
-				{
-					graphicsFormat = target.descriptor.format
-				};
-
-				// Clear the target on the first write if needed, or just leave contents uninitialized. If this is not the first write, then it will default to a load action.
-				var isFirstWrite = i == target.firstWriteIndex;
-				if (isFirstWrite)
-				{
-					if (target.descriptor.clear)
-					{
-						attachmentDescriptor.loadAction = RenderBufferLoadAction.Clear;
-						attachmentDescriptor.clearColor = target.descriptor.clearColor;
-						attachmentDescriptor.clearDepth = target.descriptor.clearDepth;
-						attachmentDescriptor.clearStencil = target.descriptor.clearStencil;
-					}
-					else
-						attachmentDescriptor.loadAction = RenderBufferLoadAction.DontCare;
-				}
-				else
-				{
-					// If this target has been written previously, it must be loaded
-					attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
-					attachmentDescriptor.loadAction = RenderBufferLoadAction.Load;
-				}
-
-				var isColor = target.descriptor.format switch
-				{
-					GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
-					_ => true,
-				};
-
-				// If this is the last pass, it needs to be resolved
-				var requiresResolve = viewData.samples > 1 && i == target.lastWriteIndex && isColor;
-				if (requiresResolve)
-				{
-					target.resourceIndex = resources.Count;
-					var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
-					command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfos[target.descriptor.viewHandle.index]));
-					resources.Add(resourceId);
-					targets[attachment.index] = target;
-					attachmentDescriptor.resolveTarget = resources[target.resourceIndex];
-					attachmentDescriptor.storeAction = RenderBufferStoreAction.Resolve;
-				}
-				else
-				{
-					// Depth targets can't be msaa resolved so we need to store the msaa version.
-					var requiresMsaaStore = viewData.samples > 1 && (i < target.lastWriteIndex || i == target.lastWriteIndex && !isColor);
-					if (requiresMsaaStore)
-					{
-						if (isFirstWrite)
+						if (target.descriptor.clear)
 						{
-							target.resourceIndex = resources.Count;
-							var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
-							command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(viewData.samples, viewInfos[target.descriptor.viewHandle.index]));
-							resources.Add(resourceId);
-							targets[attachment.index] = target;
+							attachmentDescriptor.loadAction = RenderBufferLoadAction.Clear;
+							attachmentDescriptor.clearColor = target.descriptor.clearColor;
+							attachmentDescriptor.clearDepth = target.descriptor.clearDepth;
+							attachmentDescriptor.clearStencil = target.descriptor.clearStencil;
 						}
-
-						attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
-						attachmentDescriptor.storeAction = RenderBufferStoreAction.Store;
+						else
+							attachmentDescriptor.loadAction = RenderBufferLoadAction.DontCare;
 					}
 					else
 					{
-						var requiresStore = i < target.lastReadIndex || target.isExported;
-						if (requiresStore)
+						// If this target has been written previously, it must be loaded
+						attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
+						attachmentDescriptor.loadAction = RenderBufferLoadAction.Load;
+					}
+
+					var isColor = target.descriptor.format switch
+					{
+						GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
+						_ => true,
+					};
+
+					// If this is the last pass, it needs to be resolved
+					var requiresResolve = viewData.samples > 1 && i == target.lastWriteIndex && isColor;
+					if (requiresResolve)
+					{
+						target.resourceIndex = resources.Count;
+						var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
+						command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfos[target.descriptor.viewHandle.index]));
+						resources.Add(resourceId);
+						targets[attachment.index] = target;
+						attachmentDescriptor.resolveTarget = resources[target.resourceIndex];
+						attachmentDescriptor.storeAction = RenderBufferStoreAction.Resolve;
+					}
+					else
+					{
+						// Depth targets can't be msaa resolved so we need to store the msaa version.
+						var requiresMsaaStore = viewData.samples > 1 && (i < target.lastWriteIndex || i == target.lastWriteIndex && !isColor);
+						if (requiresMsaaStore)
 						{
-							if (target.isExported)
+							if (isFirstWrite)
 							{
-								attachmentDescriptor.loadStoreTarget = exportedResources[target.resourceIndex];
-							}
-							else
-							{
-								if (isFirstWrite)
-								{
-									target.resourceIndex = resources.Count;
-									var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
-									command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfos[target.descriptor.viewHandle.index]));
-									resources.Add(resourceId);
-									targets[attachment.index] = target;
-								}
-
-								attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
+								target.resourceIndex = resources.Count;
+								var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
+								command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(viewData.samples, viewInfos[target.descriptor.viewHandle.index]));
+								resources.Add(resourceId);
+								targets[attachment.index] = target;
 							}
 
+							attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
 							attachmentDescriptor.storeAction = RenderBufferStoreAction.Store;
 						}
 						else
 						{
-							attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
+							var requiresStore = i < target.lastReadIndex || target.isExported;
+							if (requiresStore)
+							{
+								if (target.isExported)
+								{
+									attachmentDescriptor.loadStoreTarget = exportedResources[target.resourceIndex];
+								}
+								else
+								{
+									if (isFirstWrite)
+									{
+										target.resourceIndex = resources.Count;
+										var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
+										command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfos[target.descriptor.viewHandle.index]));
+										resources.Add(resourceId);
+										targets[attachment.index] = target;
+									}
+
+									attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
+								}
+
+								attachmentDescriptor.storeAction = RenderBufferStoreAction.Store;
+							}
+							else
+							{
+								attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
+							}
 						}
 					}
+
+					_ = attachments.Add(attachmentDescriptor);
 				}
 
-				_ = attachments.Add(attachmentDescriptor);
+				Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(nativeRenderPassDescriptor.debugName)];
+				_ = Encoding.UTF8.GetBytes(nativeRenderPassDescriptor.debugName, debugNameUtf8);
+
+				command.BeginRenderPass(viewData.size.x, viewData.size.y, 1, viewData.samples, attachments.Span.AsArray(), nativeRenderPassDescriptor.depthIndex, -1, nativeRenderPassDescriptor.subpasses, debugNameUtf8);
 			}
 
-			var isNativeRenderPass = !outputRange.Start.Equals(outputRange.End);
-			if (isNativeRenderPass)
-			{
-				_ = subpasses.Add(new() { inputs = new(passInputIndices.Span.AsArray()), colorOutputs = new(passOutputIndices.Span.AsArray()), flags = flags });
-
-				var passName = passNames[i];
-				Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(passName)];
-				_ = Encoding.UTF8.GetBytes(passName, debugNameUtf8);
-
-				command.BeginRenderPass(viewData.size.x, viewData.size.y, 1, viewData.samples, attachments.Span.AsArray(), depthIndex, -1, subpasses.Span.AsArray(), debugNameUtf8);
-			}
-
+			var renderPass = renderPasses[i];
 			renderPass.Execute(command);
 
 			if (isNativeRenderPass)
