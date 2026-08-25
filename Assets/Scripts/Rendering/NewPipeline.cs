@@ -103,8 +103,8 @@ public class NewPipeline : RenderPipelineBase
 
 		var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
 		var cameraDepth = renderGraph.GetTexture(new(viewInfo, depthFormat, true), Shader.PropertyToID("CameraDepth"));
-		var cameraColor = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.B10G11R11_UFloatPack32, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
 		var albedoNormal = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"));
+		var cameraColor = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.B10G11R11_UFloatPack32, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
 
 		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.CommonOpaque }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
@@ -158,6 +158,8 @@ public class NewPipeline : RenderPipelineBase
 			renderGraph.ExportResource(sceneDepth, camera.targetTexture);
 		}
 
+		renderGraph.ExportResource(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+
 		var outputs = requiresSceneDepth ? stackalloc[] { sceneDepth, backbufferColor } : stackalloc[] { backbufferColor };
 		var inputs = requiresSceneDepth ? stackalloc[] { cameraColor, cameraDepth } : stackalloc[] { cameraColor };
 		renderGraph.AddRenderPass("Final Blit", backbufferInfo, (blitMaterial, camera, asset, requiresSceneDepth, viewDataBuffer), outputs, inputs, render: static (command, data) =>
@@ -184,8 +186,6 @@ public class NewPipeline : RenderPipelineBase
 			if (data.asset.Samples > 1)
 				command.DisableShaderKeyword("MSAA");
 		});
-
-		renderGraph.ExportResource(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
 
 #if UNITY_EDITOR
 		// Render gizmos
