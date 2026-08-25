@@ -143,9 +143,9 @@ Texture2D<float3> CameraColor;
 	Texture2D<float4> AlbedoNormal;
 #endif
 
-float3 UnderwaterColor;
-float UnderwaterColorWeight;
-float WaterHeight;
+//float3 UnderwaterColor;
+//float UnderwaterColorWeight;
+//float WaterHeight;
 
 #ifdef INSTANCING_ON
 	cbuffer UnityDrawCallInfo
@@ -354,8 +354,8 @@ float4 GetLuminanceAndFog(float4 color, float3 ambient, float3 normal, float2 sc
 {
 	color.rgb *= ambient + GetLuminance(normal, viewPosition, screenPosition);
 	
-	if (ViewPosition.y < WaterHeight)
-		color.rgb = lerp(color.rgb, color.rgb * UnderwaterColor, UnderwaterColorWeight);
+	//if (ViewPosition.y < WaterHeight)
+	//	color.rgb = lerp(color.rgb, color.rgb * UnderwaterColor, UnderwaterColorWeight);
 	
 	// Fog
 	#ifdef VOLUMETRIC_LIGHT_ON

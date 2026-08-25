@@ -81,8 +81,8 @@ FragmentOutput Fragment(FragmentInput input)
 		color *= input.color;
 		
 		float3 emissive = AmbientLight * color;
-		if (ViewPosition.y < WaterHeight)
-			emissive = lerp(emissive, emissive * UnderwaterColor, UnderwaterColorWeight);
+		//if (ViewPosition.y < WaterHeight)
+		//	emissive = lerp(emissive, emissive * UnderwaterColor, UnderwaterColorWeight);
 		
 		output.gbuffer = OutputGbuffer(color, input.normal, emissive, normalize(-input.viewPosition), input.position.xy);
 	#endif

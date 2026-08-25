@@ -22,18 +22,18 @@ public class RenderGraph : IDisposable
 	private int resourceHandleCount;
 
 	// Native Renderpass
-	private readonly NativeList<TextureHandle> attachmentHandles = new(8, Allocator.Persistent);
-	private readonly NativeList<int> passOutputIndices = new(8, Allocator.Persistent);
-	private readonly NativeList<int> passInputIndices = new(8, Allocator.Persistent);
+	private readonly NativeList<TextureHandle> attachments = new(8, Allocator.Persistent);
+	private readonly NativeList<int> outputIndices = new(8, Allocator.Persistent);
+	private readonly NativeList<int> inputIndices = new(8, Allocator.Persistent);
 	private readonly NativeList<SubPassDescriptor> subPasses = new(8, Allocator.Persistent);
 	private int depthIndex = -1;
 	private SubPassFlags flags;
 	private readonly StringBuilder passNameBuilder = new();
 
 	// Subpasses
-	private readonly List<NativeRenderPassDescriptor> nativeRenderPassDescriptors = new();
-	private readonly List<int> nativeRenderPassIndices = new();
-	private readonly List<bool> newSubPassFlags = new();
+	private readonly List<NativePassDescriptor> nativePassDescriptors = new();
+	private readonly List<int> nativePassIndices = new();
+	private readonly List<bool> isNewSubPassFlags = new();
 
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, int propertyId)
 	{
@@ -59,23 +59,30 @@ public class RenderGraph : IDisposable
 		resourceHandleCount += resources.Length;
 		resourceRanges.Add(inputStart..resourceHandleCount);
 
-		// Native render pass logic
-		var nativeRenderPassDescriptorIndex = -1;
-		var isInNativeRenderPass = attachmentHandles.Length > 0;
-
-		// Process resources
-		var canMergeWithExistingPass = true;
+		// Set resource use markers
 		foreach (var resource in resources)
 		{
 			// Mark each resource as read by this pass
 			var target = targets[resource.index];
 			target.lastReadIndex = index;
 			targets[resource.index] = target;
+		}
 
+		foreach (var output in outputs)
+			SetResourceWriteIndex(output, index);
+
+		foreach (var input in inputs)
+			SetResourceWriteIndex(input, index);
+
+		// Native render pass logic
+		var isNativePass = outputs.Length > 0;
+		var canMergeWithExistingPass = isNativePass && subPasses.Length < 8;
+		foreach (var resource in resources)
+		{
 			// Check to see if any of the resources read are part of the current render pass
-			for (var i = 0; i < attachmentHandles.Length; i++)
+			for (var i = 0; i < attachments.Length; i++)
 			{
-				if (attachmentHandles[i].index != resource.index)
+				if (attachments[i].index != resource.index)
 					continue;
 
 				canMergeWithExistingPass = false;
@@ -83,74 +90,143 @@ public class RenderGraph : IDisposable
 			}
 		}
 
-		// If a pass has started and can't be merged, end it and reset the data
-		var isNativeRenderPass = outputs.Length > 0;
-		if (isInNativeRenderPass && (!isNativeRenderPass || !canMergeWithExistingPass))
+		// If we have a current pass in progress we can't merge with, end it
+		var isInNativePass = attachments.Length > 0;
+		if (!canMergeWithExistingPass && isInNativePass)
 		{
-			var passEndIndex = index - 1; // Since htis is called from the first pass that is not the render pass index, the previous pass is the end index
-			nativeRenderPassDescriptors.Add(new(new(attachmentHandles.AsArray(), Allocator.Temp), new(subPasses.AsArray(), Allocator.Temp), depthIndex, passEndIndex, passNameBuilder.ToString()));
-			attachmentHandles.Clear();
+			// End current sub pass
+			subPasses.Add(new() { inputs = new(inputIndices.AsArray()), colorOutputs = new(outputIndices.AsArray()), flags = flags });
+			outputIndices.Clear();
+			inputIndices.Clear();
+			flags = SubPassFlags.None;
+
+			// Start new renderpass?
+			var passEndIndex = index - 1; // Since this is called from the first pass that is not the render pass index, the previous pass is the end index
+			nativePassDescriptors.Add(new(new(attachments.AsArray(), Allocator.Temp), new(subPasses.AsArray(), Allocator.Temp), depthIndex, passEndIndex, passNameBuilder.ToString()));
+			attachments.Clear();
 			subPasses.Clear();
 			_ = passNameBuilder.Clear();
 			depthIndex = -1;
 		}
 
-		int GetAttachmentIndex(TextureHandle attachment)
-		{
-			// Check if handle already exists, otherwise add
-			for (var i = 0; i < attachmentHandles.Length; i++)
-				if (attachmentHandles[i].index == attachment.index)
-					return i;
-
-			attachmentHandles.Add(attachment);
-			return attachmentHandles.Length - 1;
-		}
-
-		// Outputs
-		foreach (var output in outputs)
-		{
-			SetResourceWriteIndex(output, index);
-			var attachmentIndex = GetAttachmentIndex(output);
-			var target = targets[output.index];
-			var isColor = target.descriptor.format switch
-			{
-				GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
-				_ => true,
-			};
-
-			if (isColor)
-				passOutputIndices.Add(attachmentIndex);
-			else
-				depthIndex = attachmentIndex;
-		}
-
-		// Input attachments
-		foreach (var inputAttachment in inputs)
-		{
-			SetResourceWriteIndex(inputAttachment, index);
-			var attachmentIndex = GetAttachmentIndex(inputAttachment);
-			passInputIndices.Add(attachmentIndex);
-			if (attachmentIndex == depthIndex)
-				flags |= SubPassFlags.ReadOnlyDepth;
-		}
-
 		var isNewSubPass = false;
-		if (isNativeRenderPass)
+		var nativePassIndex = -1;
+		if (isNativePass) // TODO: Does it matter if we skip this check
 		{
-			nativeRenderPassDescriptorIndex = nativeRenderPassDescriptors.Count;
-			isNewSubPass = true;
-			subPasses.Add(new() { inputs = new(passInputIndices.AsArray()), colorOutputs = new(passOutputIndices.AsArray()), flags = flags });
-			passOutputIndices.Clear();
-			passInputIndices.Clear();
-			flags = SubPassFlags.None;
-
+			nativePassIndex = nativePassDescriptors.Count;
 			if (passNameBuilder.Length > 0)
 				_ = passNameBuilder.Append(", ");
 			_ = passNameBuilder.Append(name);
+
+			// Check if we can merge with an existing subpass
+			var canMergeSubPass = canMergeWithExistingPass && subPasses.Length < 8;
+			if (canMergeSubPass)
+			{
+				// Depth must always be first, if assigned
+				if (depthIndex != -1)
+				{
+					if (outputs[0].index != depthIndex || outputs.Length - 1 != outputIndices.Length)
+						canMergeSubPass = false;
+				}
+				else if (outputs.Length != outputIndices.Length)
+				{
+					// Otherwise we can compare the output length and indices directly
+					canMergeSubPass = false;
+				}
+
+				if (canMergeSubPass)
+				{
+					// Check if all input indices are equal to existing ones. We don't check more than this, because this allows subpasses with no inputs to be merged with subpasses with inputs.
+					// It also allows a subpass with input 0 to be merged with a subpass with inputs 0 and 1, since this doesn't break the indexing.
+					for (var i = 0; i < inputs.Length; i++)
+					{
+						var input = inputs[i];
+						var currentInput = attachments[inputIndices[i]];
+						if (currentInput.index == input.index)
+							continue;
+
+						canMergeSubPass = false;
+						break;
+					}
+
+					// Check outputs
+					if (canMergeSubPass)
+					{
+						// If a depth index is assigned and equal, it will be at zero, so skip it as we already compared
+						var start = depthIndex != -1 ? 1 : 0;
+						var offset = depthIndex != -1 ? 1 : 0;
+						for (var i = start; i < outputs.Length; i++)
+						{
+							var output = outputs[i];
+							var currentInput = attachments[outputIndices[i - offset]];
+							if (currentInput.index == output.index)
+								continue;
+
+							canMergeSubPass = false;
+							break;
+						}
+					}
+				}
+			}
+
+			// If we can't merge or this is a new pass, add attachments
+			if (!canMergeSubPass || !isInNativePass)
+			{
+				// If there is already a subpass, end it
+				var isInSubPass = outputIndices.Length > 0;
+				if (isInSubPass)
+				{
+					subPasses.Add(new() { inputs = new(inputIndices.AsArray()), colorOutputs = new(outputIndices.AsArray()), flags = flags });
+					outputIndices.Clear();
+					inputIndices.Clear();
+					flags = SubPassFlags.None;
+					isNewSubPass = true;
+				}
+
+				// Start new subpass
+				// If we can't merge, start a new subpass and add the attachments and output+input indices
+				int GetAttachmentIndexOrAdd(TextureHandle attachment)
+				{
+					// Check if handle already exists, otherwise add
+					for (var i = 0; i < attachments.Length; i++)
+						if (attachments[i].index == attachment.index)
+							return i;
+
+					attachments.Add(attachment);
+					return attachments.Length - 1;
+				}
+
+				// Outputs
+				foreach (var output in outputs)
+				{
+					var attachmentIndex = GetAttachmentIndexOrAdd(output);
+					var target = targets[output.index];
+					var isColor = target.descriptor.format switch
+					{
+						GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
+						_ => true,
+					};
+
+					if (isColor)
+						outputIndices.Add(attachmentIndex);
+					else
+						depthIndex = attachmentIndex;
+				}
+
+				// Input attachments
+				// TODO: Detect read-only depth and set in later pass
+				foreach (var input in inputs)
+				{
+					var attachmentIndex = GetAttachmentIndexOrAdd(input);
+					inputIndices.Add(attachmentIndex);
+					if (attachmentIndex == depthIndex)
+						flags |= SubPassFlags.ReadOnlyDepth;
+				}
+			}
 		}
 
-		nativeRenderPassIndices.Add(nativeRenderPassDescriptorIndex);
-		newSubPassFlags.Add(isNewSubPass);
+		nativePassIndices.Add(nativePassIndex);
+		isNewSubPassFlags.Add(isNewSubPass);
 	}
 
 	private void SetResourceWriteIndex(TextureHandle handle, int index)
@@ -189,7 +265,7 @@ public class RenderGraph : IDisposable
 
 	public void Execute(CommandBuffer command)
 	{
-		var currentNativeRenderPass = -1;
+		var lastNativePass = -1;
 
 		for (var i = 0; i < renderPasses.Count; i++)
 		{
@@ -201,20 +277,20 @@ public class RenderGraph : IDisposable
 				command.SetGlobalTexture(target.propertyId, resource);
 			}
 
-			var nativeRenderPassIndex = nativeRenderPassIndices[i];
-			if (nativeRenderPassIndex != currentNativeRenderPass)
+			var nativePass = nativePassIndices[i];
+			if (nativePass != lastNativePass)
 			{
 				// End current pass if needed
-				if (currentNativeRenderPass != -1)
+				if (lastNativePass != -1)
 				{
 					command.EndRenderPass();
-					currentNativeRenderPass = -1;
+					lastNativePass = -1;
 				}
 
-				if (nativeRenderPassIndex > -1)
+				if (nativePass > -1)
 				{
-					var nativeRenderPassDescriptor = nativeRenderPassDescriptors[nativeRenderPassIndex];
-					var attachmentHandles = nativeRenderPassDescriptor.attachments;
+					var nativePassDesc = nativePassDescriptors[nativePass];
+					var attachmentHandles = nativePassDesc.attachments;
 					var viewHandle = passViewHandles[i];
 					var viewInfo = viewInfos[viewHandle.index];
 
@@ -223,29 +299,29 @@ public class RenderGraph : IDisposable
 					foreach (var attachment in attachmentHandles)
 					{
 						var target = targets[attachment.index];
-						var attachmentDescriptor = new AttachmentDescriptor
+						var attachmentDesc = new AttachmentDescriptor
 						{
 							graphicsFormat = target.descriptor.format
 						};
 
 						// Load the target if it has been written to before this renderpass, otherwise clear it if required
-						var isFirstWrite = target.firstWriteIndex >= i && target.firstWriteIndex <= nativeRenderPassDescriptor.passEndIndex;
+						var isFirstWrite = target.firstWriteIndex >= i && target.firstWriteIndex <= nativePassDesc.passEndIndex;
 						if (isFirstWrite)
 						{
 							if (target.descriptor.clear)
 							{
-								attachmentDescriptor.loadAction = RenderBufferLoadAction.Clear;
-								attachmentDescriptor.clearColor = target.descriptor.clearColor;
-								attachmentDescriptor.clearDepth = target.descriptor.clearDepth;
-								attachmentDescriptor.clearStencil = target.descriptor.clearStencil;
+								attachmentDesc.loadAction = RenderBufferLoadAction.Clear;
+								attachmentDesc.clearColor = target.descriptor.clearColor;
+								attachmentDesc.clearDepth = target.descriptor.clearDepth;
+								attachmentDesc.clearStencil = target.descriptor.clearStencil;
 							}
 							else
-								attachmentDescriptor.loadAction = RenderBufferLoadAction.DontCare;
+								attachmentDesc.loadAction = RenderBufferLoadAction.DontCare;
 						}
 						else
 						{
 							// If this target has been written previously, it must be loaded
-							attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
+							attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
 						}
 
 						var isColor = target.descriptor.format switch
@@ -255,7 +331,7 @@ public class RenderGraph : IDisposable
 						};
 
 						// If this is the last pass, it needs to be resolved
-						var requiresResolve = viewInfo.samples > 1 && nativeRenderPassDescriptor.passEndIndex == target.lastWriteIndex && isColor;
+						var requiresResolve = viewInfo.samples > 1 && nativePassDesc.passEndIndex == target.lastWriteIndex && isColor;
 						if (requiresResolve)
 						{
 							target.resourceIndex = resources.Count;
@@ -263,13 +339,13 @@ public class RenderGraph : IDisposable
 							command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfo));
 							resources.Add(resourceId);
 							targets[attachment.index] = target;
-							attachmentDescriptor.resolveTarget = resources[target.resourceIndex];
-							attachmentDescriptor.storeAction = RenderBufferStoreAction.Resolve;
+							attachmentDesc.resolveTarget = resources[target.resourceIndex];
+							attachmentDesc.storeAction = RenderBufferStoreAction.Resolve;
 						}
 						else
 						{
 							// Depth targets can't be msaa resolved so we need to store the msaa version.
-							var requiresMsaaStore = viewInfo.samples > 1 && (nativeRenderPassDescriptor.passEndIndex < target.lastWriteIndex || nativeRenderPassDescriptor.passEndIndex == target.lastWriteIndex && !isColor);
+							var requiresMsaaStore = viewInfo.samples > 1 && (nativePassDesc.passEndIndex < target.lastWriteIndex || nativePassDesc.passEndIndex == target.lastWriteIndex && !isColor);
 							if (requiresMsaaStore)
 							{
 								if (isFirstWrite)
@@ -281,17 +357,17 @@ public class RenderGraph : IDisposable
 									targets[attachment.index] = target;
 								}
 
-								attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
+								attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
 							}
 							else
 							{
-								// A store is required if the target is read outside of this nativeRenderPass, or it is exported
-								var requiresStore = target.lastReadIndex > nativeRenderPassDescriptor.passEndIndex || target.isExported;
+								// A store is required if the target is read outside of this nativePass, or it is exported
+								var requiresStore = target.lastReadIndex > nativePassDesc.passEndIndex || target.isExported;
 								if (requiresStore)
 								{
 									if (target.isExported)
 									{
-										attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
+										attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
 									}
 									else
 									{
@@ -304,27 +380,27 @@ public class RenderGraph : IDisposable
 											targets[attachment.index] = target;
 										}
 
-										attachmentDescriptor.loadStoreTarget = resources[target.resourceIndex];
+										attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
 									}
 								}
 								else
 								{
-									attachmentDescriptor.storeAction = RenderBufferStoreAction.DontCare;
+									attachmentDesc.storeAction = RenderBufferStoreAction.DontCare;
 								}
 							}
 						}
 
-						_ = attachments.Add(attachmentDescriptor);
+						_ = attachments.Add(attachmentDesc);
 					}
 
-					Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(nativeRenderPassDescriptor.debugName)];
-					_ = Encoding.UTF8.GetBytes(nativeRenderPassDescriptor.debugName, debugNameUtf8);
+					Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(nativePassDesc.debugName)];
+					_ = Encoding.UTF8.GetBytes(nativePassDesc.debugName, debugNameUtf8);
 
-					command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, 1, viewInfo.samples, attachments.Span.AsArray(), nativeRenderPassDescriptor.depthIndex, -1, nativeRenderPassDescriptor.subpasses, debugNameUtf8);
-					currentNativeRenderPass = nativeRenderPassIndex;
+					command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, 1, viewInfo.samples, attachments.Span.AsArray(), nativePassDesc.depthIndex, -1, nativePassDesc.subpasses, debugNameUtf8);
+					lastNativePass = nativePass;
 				}
 			}
-			else if (newSubPassFlags[i])
+			else if (isNewSubPassFlags[i])
 				command.NextSubPass();
 
 			renderPasses[i].Execute(command);
@@ -339,17 +415,17 @@ public class RenderGraph : IDisposable
 		resourceRanges.Clear();
 		passViewHandles.Clear();
 		viewInfos.Clear();
-		nativeRenderPassDescriptors.Clear();
-		nativeRenderPassIndices.Clear();
-		newSubPassFlags.Clear();
+		nativePassDescriptors.Clear();
+		nativePassIndices.Clear();
+		isNewSubPassFlags.Clear();
 		resourceHandleCount = 0;
 	}
 
 	public void Dispose()
 	{
-		attachmentHandles.Dispose();
-		passOutputIndices.Dispose();
-		passInputIndices.Dispose();
+		attachments.Dispose();
+		outputIndices.Dispose();
+		inputIndices.Dispose();
 		subPasses.Dispose();
 	}
 }

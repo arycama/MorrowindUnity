@@ -47,8 +47,8 @@ float4 Fragment(FragmentInput input) : SV_Target
 {
 	float4 color = _MainTex.Sample(sampler_MainTex, input.uv) * input.color;
 	
-	if (ViewPosition.y < WaterHeight)
-		color.rgb = lerp(color.rgb, UnderwaterColor, UnderwaterColorWeight);
+	//if (ViewPosition.y < WaterHeight)
+	//	color.rgb = lerp(color.rgb, UnderwaterColor, UnderwaterColorWeight);
 	
 	return color;
 }

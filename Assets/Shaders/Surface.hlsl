@@ -83,8 +83,8 @@ FragmentOutput Fragment(FragmentInput input)
 	
 	#ifdef GBUFFER
 		float3 emissive = input.color * color.rgb;
-		if (ViewPosition.y < WaterHeight)
-			emissive = lerp(emissive, emissive * UnderwaterColor, UnderwaterColorWeight);
+		//if (ViewPosition.y < WaterHeight)
+		//	emissive = lerp(emissive, emissive * UnderwaterColor, UnderwaterColorWeight);
 	
 		output.gbuffer = OutputGbuffer(color.rgb, input.normal, emissive, -normalize(input.viewPosition), input.position.xy);
 	#endif

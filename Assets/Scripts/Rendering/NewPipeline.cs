@@ -108,7 +108,7 @@ public class NewPipeline : RenderPipelineBase
 		var albedoNormal = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"));
 		var cameraColor = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.B10G11R11_UFloatPack32, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
 
-		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.CommonOpaque }) { enableInstancing = true }, new(RenderQueueRange.opaque));
+		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
 		renderGraph.AddRenderPass("Gbuffer", viewInfo, (opaqueRendererList, viewDataBuffer, environmentDataBuffer), outputs: stackalloc[] { cameraDepth, albedoNormal, cameraColor }, render: static (command, data) =>
 		{
@@ -117,7 +117,7 @@ public class NewPipeline : RenderPipelineBase
 			command.DrawRendererList(data.opaqueRendererList);
 		});
 
-		renderGraph.AddRenderPass("Deferred Lighting", viewInfo, (deferredMaterial, asset, viewDataBuffer, environmentDataBuffer, propertyBlock), default, stackalloc[] { cameraDepth, cameraColor }, stackalloc[] { cameraDepth, albedoNormal }, static (command, data) =>
+		renderGraph.AddRenderPass("Deferred Light", viewInfo, (deferredMaterial, asset, viewDataBuffer, environmentDataBuffer, propertyBlock), default, stackalloc[] { cameraDepth, cameraColor }, stackalloc[] { cameraDepth, albedoNormal }, static (command, data) =>
 		{
 			data.propertyBlock.Clear();
 			data.propertyBlock.SetConstantBuffer(Shader.PropertyToID("EnvironmentData"), data.environmentDataBuffer, 0, data.environmentDataBuffer.stride);
@@ -133,16 +133,16 @@ public class NewPipeline : RenderPipelineBase
 		});
 
 		var skyRendererList = context.CreateRendererList(new RendererListDesc(new ShaderTagId("Sky"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all });
-		renderGraph.AddRenderPass("Render Sky", viewInfo, (skyRendererList, viewDataBuffer, environmentDataBuffer), outputs: stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
+		renderGraph.AddRenderPass("Sky", viewInfo, (skyRendererList, viewDataBuffer, environmentDataBuffer), outputs: stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
 		{
 			command.SetGlobalConstantBuffer(data.environmentDataBuffer, Shader.PropertyToID("EnvironmentData"), 0, data.environmentDataBuffer.stride);
 			command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
 			command.DrawRendererList(data.skyRendererList);
 		});
 
-		var transparentRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.CommonTransparent }) { enableInstancing = true }, new(RenderQueueRange.transparent));
+		var transparentRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 		var transparentRendererList = context.CreateRendererList(ref transparentRendererParams);
-		renderGraph.AddRenderPass("Render Forward Transparent", viewInfo, (transparentRendererList, viewDataBuffer, environmentDataBuffer), outputs: stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
+		renderGraph.AddRenderPass("Forward Transparent", viewInfo, (transparentRendererList, viewDataBuffer, environmentDataBuffer), outputs: stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
 		{
 			command.SetGlobalConstantBuffer(data.environmentDataBuffer, Shader.PropertyToID("EnvironmentData"), 0, data.environmentDataBuffer.stride);
 			command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
@@ -172,7 +172,7 @@ public class NewPipeline : RenderPipelineBase
 		var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
 		var requiresFlip = camera.targetTexture == null;
 
-		var resources = renderToBackbuffer ? default : requiresSceneDepth ? stackalloc[] { cameraColor, cameraDepth } : stackalloc[] { cameraColor };
+		var resources = renderToBackbuffer ? default : requiresSceneDepth ? stackalloc[] { cameraDepth, cameraColor } : stackalloc[] { cameraColor };
 		var outputs = requiresSceneDepth ? stackalloc[] { sceneDepth, sceneColor } : stackalloc[] { sceneColor };
 		var inputs = renderToBackbuffer ? stackalloc[] { cameraColor } : default;
 
