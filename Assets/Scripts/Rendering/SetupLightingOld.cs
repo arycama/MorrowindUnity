@@ -10,7 +10,7 @@ using Unmath;
 using static Unmath.Math;
 using Quaternion = Unmath.Quaternion;
 
-public class SetupLighting : ViewRenderFeature
+public class SetupLightingOld : ViewRenderFeature
 {
 	private readonly NativeList<LightShadowCasterCullingInfo> perLightInfos = new(1, Allocator.Persistent);
 	private readonly NativeList<ShadowSplitData> splitBuffer = new(1, Allocator.Persistent);
@@ -26,7 +26,7 @@ public class SetupLighting : ViewRenderFeature
 	private readonly LightingSettings lighting;
 	private readonly LightCulling.Settings lightCulling;
 
-	public SetupLighting(CustomRenderPipeline.RenderGraph renderGraph, LightingSettings lighting, LightCulling.Settings lightCulling) : base(renderGraph)
+	public SetupLightingOld(CustomRenderPipeline.RenderGraph renderGraph, LightingSettings lighting, LightCulling.Settings lightCulling) : base(renderGraph)
 	{
 		this.lighting = lighting;
 		this.lightCulling = lightCulling;

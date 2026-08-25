@@ -1,5 +1,5 @@
-using System;
 using System.Collections.Generic;
+using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEditor;
 using UnityEngine;
@@ -30,7 +30,8 @@ public class NewPipeline : RenderPipelineBase
 
 	protected override void RenderCamera(Camera camera, ScriptableCullingParameters cullingParameters, ScriptableRenderContext context)
 	{
-		cullingParameters.cullingOptions = CullingOptions.DisablePerObjectCulling | CullingOptions.NeedsLighting;
+		cullingParameters.cullingOptions = CullingOptions.DisablePerObjectCulling | CullingOptions.NeedsLighting | CullingOptions.ShadowCasters;
+		cullingParameters.shadowDistance = asset.Lighting.DirectionalShadowDistance;
 		var cullingResults = context.Cull(ref cullingParameters);
 
 		var fogEnabled = RenderSettings.fog;
@@ -38,22 +39,6 @@ public class NewPipeline : RenderPipelineBase
 		if (SceneView.currentDrawingSceneView != null)
 			fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
-
-		var sunDirection = camera.transform.WorldRotation().InverseRotate(Float3.Up);
-		var sunColor = Float3.One;
-		for (var i = 0; i < cullingResults.visibleLights.Length; i++)
-		{
-			var visibleLight = cullingResults.visibleLights[i];
-			if (visibleLight.lightType != LightType.Directional)
-				continue;
-
-			var lightToWorld = (Float4x4)visibleLight.localToWorldMatrix;
-			var lightRotation = lightToWorld.Rotation;
-			var viewSpaceLightRotation = camera.transform.WorldRotation().InverseRotate(lightRotation);
-			sunDirection = -viewSpaceLightRotation.Forward;
-			sunColor = visibleLight.finalColor.Float3();
-			break;
-		}
 
 		static void SetViewDataStruct(Camera camera, CommandBuffer command, GraphicsBuffer viewDataBuffer, bool isFlipped)
 		{
@@ -84,29 +69,125 @@ public class NewPipeline : RenderPipelineBase
 		}
 
 		var viewInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
-		renderGraph.AddRenderPass("Set View Data", viewInfo, (camera, sunDirection, sunColor, fogEnabled, previousCameraTransform, environmentDataBuffer, viewDataBuffer), render: static (command, data) =>
+		renderGraph.AddRenderPass("Set View Data", viewInfo, (camera, previousCameraTransform, viewDataBuffer), render: static (command, data) =>
+		{
+			SetViewDataStruct(data.camera, command, data.viewDataBuffer, false);
+		});
+
+		var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
+		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
+
+		var shadowView = renderGraph.AddViewInfo(asset.Lighting.DirectionalShadowResolution);
+		var sunDirection = camera.transform.WorldRotation().InverseRotate(Float3.Up);
+		var sunColor = Float3.One;
+		var mainLightIndex = -1;
+		var sunShadow = renderGraph.GetTexture(new(shadowView, GraphicsFormat.D16_UNorm, true), Shader.PropertyToID("SunShadow"));
+		var viewToSunShadow = Float4x4.Identity;
+		var sunShadowEnabled = false;
+		var lightCount = cullingResults.visibleLights.Length;
+
+		var perLightInfos = new NativeArray<LightShadowCasterCullingInfo>(lightCount, Allocator.Temp);
+		var splitBuffer = new NativeList<ShadowSplitData>(Allocator.Temp);
+
+		for (var i = 0; i < lightCount; i++)
+		{
+			var visibleLight = cullingResults.visibleLights[i];
+			var lightToWorld = (Float4x4)visibleLight.localToWorldMatrix;
+			var lightColor = visibleLight.finalColor.Float3();
+			var lightDirection = -lightToWorld.Forward;
+			var splitRange = new RangeInt(0, 0);
+			var lightRotation = lightToWorld.Rotation;
+			var viewSpaceLightRotation = camera.transform.WorldRotation().InverseRotate(lightRotation);
+			var hasShadows = visibleLight.light.shadows != LightShadows.None;
+
+			if (visibleLight.lightType == LightType.Directional && mainLightIndex == -1)
+			{
+				mainLightIndex = i;
+				sunDirection = -viewSpaceLightRotation.Forward;
+				sunColor = lightColor;
+
+				sunShadowEnabled = hasShadows && cullingResults.GetShadowCasterBounds(mainLightIndex, out _);
+				if (sunShadowEnabled)
+				{
+					// Transform from view space to light space
+					var viewToLight = Float4x4.Rotate(viewSpaceLightRotation.Inverse);
+					var viewSpaceLightBounds = Geometry.GetFrustumBounds(tanHalfFov, camera.nearClipPlane, asset.Lighting.DirectionalShadowDistance, viewToLight);
+
+					// Matrix that goes from world space to light space
+					var worldToLight = Float4x4.Rotate(lightRotation.Inverse);
+					var worldToLightClip = Float4x4.OrthoReverseZ(viewSpaceLightBounds).Mul(worldToLight);
+
+					var shadowSplitData = CalculateShadowSplitData(worldToLightClip, lightDirection, true);
+					shadowSplitData.shadowCascadeBlendCullingFactor = 1;
+					splitRange = new RangeInt(splitBuffer.Length, 1);
+					splitBuffer.Add(in shadowSplitData);
+
+					// Matrix that converts from view space to shadow-sampling space
+					viewToSunShadow = Float4x4.OrthoReverseZSample(viewSpaceLightBounds).Mul(viewToLight);
+
+					var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, i);
+					var rendererList = context.CreateShadowRendererList(ref shadowDrawingSettings);
+
+					renderGraph.AddRenderPass("Directional Shadows", shadowView, (rendererList, worldToLightClip, asset.Lighting, viewDataBuffer), outputs: stackalloc[] { sunShadow }, render: (command, data) =>
+					{
+						command.SetGlobalDepthBias(data.Lighting.DirectionalShadowBias, data.Lighting.DirectionalShadowSlopeBias);
+						command.SetGlobalInt("ZClip", 0);
+						command.SetGlobalMatrix("WorldToShadowClip", data.worldToLightClip);
+						command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
+						command.DrawRendererList(rendererList);
+						command.SetGlobalDepthBias(0.0f, 0.0f);
+						command.SetGlobalInt("ZClip", 1);
+					});
+				}
+			}
+
+			perLightInfos[i] = new LightShadowCasterCullingInfo
+			{
+				projectionType = visibleLight.lightType == LightType.Directional ? BatchCullingProjectionType.Orthographic : BatchCullingProjectionType.Perspective,
+				splitExclusionMask = 0,
+				splitRange = splitRange
+			};
+		}
+
+		context.CullShadowCasters(cullingResults, new ShadowCastersCullingInfos
+		{
+			perLightInfos = perLightInfos,
+			splitBuffer = splitBuffer.AsArray()
+		});
+
+		renderGraph.AddRenderPass("Set Environment Data", viewInfo, (sunDirection, sunColor, fogEnabled, environmentDataBuffer, asset.Lighting, viewToSunShadow), render: static (command, data) =>
 		{
 			var fogStart = data.fogEnabled ? RenderSettings.fogStartDistance : 0;
 			var fogEnd = data.fogEnabled ? RenderSettings.fogEndDistance : 0;
 			var fogScale = data.fogEnabled ? 1 / (fogEnd - fogStart) : 0;
 			var fogOffset = data.fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
+			var sunShadowFadeScale = -1.0f / data.Lighting.DirectionalFadeLength;
+			var sunShadowFadeOffset = data.Lighting.DirectionalShadowDistance / data.Lighting.DirectionalFadeLength;
 
 			command.SetBufferData(data.environmentDataBuffer, stackalloc[]
 			{(
 				RenderSettings.ambientLight.LinearFloat3(), fogScale,
 				RenderSettings.fogColor.LinearFloat3(), fogOffset,
 				Time.time, fogStart, fogEnd, 0,
-				data.sunDirection, 0,
-				data.sunColor, 0
+				data.sunDirection, sunShadowFadeScale,
+				data.sunColor, sunShadowFadeOffset,
+				data.viewToSunShadow
 			)}.AsArray());
-
-			SetViewDataStruct(data.camera, command, data.viewDataBuffer, false);
 		});
 
 		var depthFormat = camera.targetTexture == null ? GraphicsFormat.D32_SFloat_S8_UInt : camera.targetTexture.depthStencilFormat;
 		var cameraDepth = renderGraph.GetTexture(new(viewInfo, depthFormat, true), Shader.PropertyToID("CameraDepth"));
 		var albedoNormal = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"));
 		var cameraColor = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.B10G11R11_UFloatPack32, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
+
+		var terrainRendererParams = new RendererListParams(cullingResults, new(new("Terrain"), new(camera) { criteria = SortingCriteria.QuantizedFrontToBack }) { enableInstancing = true }, new(RenderQueueRange.all));
+		var terrainRendererList = context.CreateRendererList(ref terrainRendererParams);
+		renderGraph.AddRenderPass("Terrain", viewInfo, (terrainRendererList, viewDataBuffer, environmentDataBuffer), outputs: stackalloc[] { cameraDepth, albedoNormal, cameraColor }, render: static (command, data) =>
+		{
+			command.SetGlobalConstantBuffer(data.environmentDataBuffer, Shader.PropertyToID("EnvironmentData"), 0, data.environmentDataBuffer.stride);
+			command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
+			command.DrawRendererList(data.terrainRendererList);
+		});
 
 		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
@@ -117,7 +198,7 @@ public class NewPipeline : RenderPipelineBase
 			command.DrawRendererList(data.opaqueRendererList);
 		});
 
-		renderGraph.AddRenderPass("Deferred Light", viewInfo, (deferredMaterial, asset, viewDataBuffer, environmentDataBuffer, propertyBlock), default, stackalloc[] { cameraDepth, cameraColor }, stackalloc[] { cameraDepth, albedoNormal }, static (command, data) =>
+		renderGraph.AddRenderPass("Deferred", viewInfo, (deferredMaterial, asset, viewDataBuffer, environmentDataBuffer, propertyBlock, sunShadowEnabled), stackalloc[] { sunShadow }, stackalloc[] { cameraDepth, cameraColor }, stackalloc[] { cameraDepth, albedoNormal }, static (command, data) =>
 		{
 			data.propertyBlock.Clear();
 			data.propertyBlock.SetConstantBuffer(Shader.PropertyToID("EnvironmentData"), data.environmentDataBuffer, 0, data.environmentDataBuffer.stride);
@@ -126,10 +207,16 @@ public class NewPipeline : RenderPipelineBase
 			if (data.asset.Samples > 1)
 				command.EnableShaderKeyword("MSAA_ON");
 
+			if (data.sunShadowEnabled)
+				command.EnableShaderKeyword("SHADOWS_ON");
+
 			command.DrawProcedural(default, data.deferredMaterial, 0, MeshTopology.Triangles, 3, 1, data.propertyBlock);
 
 			if (data.asset.Samples > 1)
 				command.DisableShaderKeyword("MSAA_ON");
+
+			if (data.sunShadowEnabled)
+				command.DisableShaderKeyword("SHADOWS_ON");
 		});
 
 		var skyRendererList = context.CreateRendererList(new RendererListDesc(new ShaderTagId("Sky"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all });
@@ -142,11 +229,18 @@ public class NewPipeline : RenderPipelineBase
 
 		var transparentRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 		var transparentRendererList = context.CreateRendererList(ref transparentRendererParams);
-		renderGraph.AddRenderPass("Forward Transparent", viewInfo, (transparentRendererList, viewDataBuffer, environmentDataBuffer), outputs: stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
+		renderGraph.AddRenderPass("Forward Transparent", viewInfo, (transparentRendererList, viewDataBuffer, environmentDataBuffer, sunShadowEnabled), stackalloc[] { sunShadow }, stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
 		{
 			command.SetGlobalConstantBuffer(data.environmentDataBuffer, Shader.PropertyToID("EnvironmentData"), 0, data.environmentDataBuffer.stride);
 			command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
+
+			if (data.sunShadowEnabled)
+				command.EnableShaderKeyword("SHADOWS_ON");
+
 			command.DrawRendererList(data.transparentRendererList);
+
+			if (data.sunShadowEnabled)
+				command.DisableShaderKeyword("SHADOWS_ON");
 		});
 
 		// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
@@ -178,7 +272,7 @@ public class NewPipeline : RenderPipelineBase
 
 		renderGraph.AddRenderPass("Final Blit", backbufferInfo, (blitMaterial, requiresFlip, asset, requiresSceneDepth, viewDataBuffer, renderToBackbuffer), resources, outputs, inputs, static (command, data) =>
 		{
-			if(data.renderToBackbuffer)
+			if (data.renderToBackbuffer)
 				command.EnableShaderKeyword("DIRECT");
 
 			if (data.requiresFlip)
@@ -236,6 +330,33 @@ public class NewPipeline : RenderPipelineBase
 		}
 #endif
 	}
+
+	private static ShadowSplitData CalculateShadowSplitData(Float4x4 matrix, Float3 lightDirection, bool skipNearPlane)
+	{
+		var shadowSplitData = new ShadowSplitData() { shadowCascadeBlendCullingFactor = 1 };
+		for (var i = FrustumPlane.Left; i < FrustumPlane.Count; i++)
+		{
+			if (!skipNearPlane || i != FrustumPlane.Near)
+			{
+				var plane = matrix.GetFrustumPlane(i);
+				shadowSplitData.SetCullingPlane(shadowSplitData.cullingPlaneCount++, plane);
+			}
+		}
+
+		for (var i = FrustumPlane.Left; i < FrustumPlane.Count; i++)
+		{
+			var plane = matrix.GetFrustumPlane(i);
+			if (plane.normal.Dot(lightDirection) > 0.0f)
+			{
+				shadowSplitData.SetCullingPlane(shadowSplitData.cullingPlaneCount++, plane);
+
+				if (shadowSplitData.cullingPlaneCount == 10)
+					break;
+			}
+		}
+
+		return shadowSplitData;
+	}
 }
 
 internal struct EnvironmentDataStruct
@@ -252,22 +373,7 @@ internal struct EnvironmentDataStruct
 	public int Item10;
 	public Float3 sunColor;
 	public int Item12;
-
-	public EnvironmentDataStruct(Float3 item1, float fogScale, Float3 item3, float fogOffset, float time, float fogStart, float fogEnd, int item8, Float3 sunDirection, int item10, Float3 sunColor, int item12)
-	{
-		Item1 = item1;
-		this.fogScale = fogScale;
-		Item3 = item3;
-		this.fogOffset = fogOffset;
-		this.time = time;
-		this.fogStart = fogStart;
-		this.fogEnd = fogEnd;
-		Item8 = item8;
-		this.sunDirection = sunDirection;
-		Item10 = item10;
-		this.sunColor = sunColor;
-		Item12 = item12;
-	}
+	public Float4x4 item13;
 }
 
 internal struct ViewDataStruct

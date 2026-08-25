@@ -13,6 +13,25 @@ MonoBehaviour:
   m_Name: New Pipeline
   m_EditorClassIdentifier: Rendering::NewPipelineAsset
   <Samples>k__BackingField: 1
+  <Lighting>k__BackingField:
+    <MicroShadows>k__BackingField: 1
+    <SunAngularDiameter>k__BackingField: 0.52
+    <DirectionalFadeLength>k__BackingField: 16
+    <DirectionalMaxFilterSize>k__BackingField: 1
+    <DirectionalBlockerDistance>k__BackingField: 1.5
+    <Use32Bit>k__BackingField: 0
+    <CascadeUniformity>k__BackingField: 0.5
+    <DirectionalCascadeCount>k__BackingField: 4
+    <DirectionalShadowDistance>k__BackingField: 8192
+    <DirectionalShadowResolution>k__BackingField: 4096
+    <DirectionalShadowBias>k__BackingField: 5
+    <DirectionalShadowSlopeBias>k__BackingField: 1
+    <PointShadowResolution>k__BackingField: 256
+    <PointShadowBias>k__BackingField: 0
+    <PointShadowSlopeBias>k__BackingField: 0
+    <SpotShadowResolution>k__BackingField: 512
+    <SpotShadowBias>k__BackingField: 0
+    <SpotShadowSlopeBias>k__BackingField: 0
   defaultMaterials:
     <DefaultMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,
       type: 2}

@@ -65,9 +65,11 @@ cbuffer EnvironmentData
 	float FogDensity;
 	
 	float3 SunDirection;
-	float EnvironmentDataPadding0;
+	float SunShadowFadeScale;
 	float3 SunColor;
-	float EnvironmentDataPadding1;
+	float SunShadowFadeOffset;
+	
+	matrix ViewToSunShadow;
 };
 
 cbuffer ViewData
@@ -90,17 +92,14 @@ matrix ScreenToWorld;
 matrix WorldToPreviousScreen;
 matrix PixelToWorld;
 
-cbuffer CascadeData
-{
+//cbuffer CascadeData
+//{
 	matrix WorldToShadowClip;
-};
+//};
 
 cbuffer LightingData
 {
-	float SunShadowFadeScale;
-	float SunShadowFadeOffset;
-	
-	row_major float3x4 ViewToSunShadow;
+	//row_major float3x4 ViewToSunShadow;
 	
 	float SunShadowRcpResolution;
 	float SunShadowResolution;

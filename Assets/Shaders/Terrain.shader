@@ -10,13 +10,12 @@ Shader "Terrain"
 	{
 		Pass
 		{
-			Tags { "LightMode" = "Gbuffer" }
+			Tags { "LightMode" = "Terrain" }
 
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
 			#pragma use_dxc
-			#pragma multi_compile_instancing
 			#define GBUFFER
 			#include "Terrain.hlsl"
 			ENDHLSL
@@ -33,7 +32,6 @@ Shader "Terrain"
 			#pragma vertex Vertex
 			#pragma fragment Fragment
 			#pragma use_dxc
-			#pragma multi_compile_instancing
 			#define SHADOW
 			#include "Terrain.hlsl"
 			ENDHLSL
