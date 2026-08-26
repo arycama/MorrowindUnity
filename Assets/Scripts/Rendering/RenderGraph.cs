@@ -13,11 +13,9 @@ public class RenderGraph : IDisposable
 	private readonly List<RenderTargetInfo> targets = new();
 	private readonly List<IRenderPass> renderPasses = new();
 	private readonly List<RenderTargetIdentifier> resources = new();
-	private readonly List<ViewHandle> passViewHandles = new();
 	private readonly List<ViewInfo> viewInfos = new();
 
 	// Resources
-	private readonly List<Range> resourceRanges = new();
 	private TextureHandle[] resourceHandles = new TextureHandle[8];
 	private int resourceHandleCount;
 
@@ -29,11 +27,7 @@ public class RenderGraph : IDisposable
 	private int depthIndex = -1;
 	private SubPassFlags flags;
 	private readonly StringBuilder passNameBuilder = new();
-
-	// Subpasses
 	private readonly List<NativePassDescriptor> nativePassDescriptors = new();
-	private readonly List<int> nativePassIndices = new();
-	private readonly List<bool> isNewSubPassFlags = new();
 
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, int propertyId)
 	{
@@ -43,11 +37,7 @@ public class RenderGraph : IDisposable
 
 	public void AddRenderPass<T>(string name, ViewHandle viewHandle, T data = default, ReadOnlySpan<TextureHandle> resources = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> inputs = default, Action<CommandBuffer, T> render = default)
 	{
-		passViewHandles.Add(viewHandle);
-
 		var index = renderPasses.Count;
-		var renderPass = new RenderPass<T>(data, render);
-		renderPasses.Add(renderPass);
 
 		// Ensure capacity and add the input indices to the array
 		var newCount = resourceHandleCount + resources.Length;
@@ -57,7 +47,6 @@ public class RenderGraph : IDisposable
 
 		var inputStart = resourceHandleCount;
 		resourceHandleCount += resources.Length;
-		resourceRanges.Add(inputStart..resourceHandleCount);
 
 		// Set resource use markers
 		foreach (var resource in resources)
@@ -225,8 +214,8 @@ public class RenderGraph : IDisposable
 			}
 		}
 
-		nativePassIndices.Add(nativePassIndex);
-		isNewSubPassFlags.Add(isNewSubPass);
+		var renderPass = new RenderPass<T>(name, viewHandle, inputStart..resourceHandleCount, nativePassIndex, isNewSubPass, data, render);
+		renderPasses.Add(renderPass);
 	}
 
 	private void SetResourceWriteIndex(TextureHandle handle, int index)
@@ -269,16 +258,18 @@ public class RenderGraph : IDisposable
 
 		for (var i = 0; i < renderPasses.Count; i++)
 		{
+			var renderPass = renderPasses[i];
+			command.BeginSample(renderPass.Name);
+
 			// Set resources. TODO: Any other pass setup/initialization like cbuffers or render state (wireframe?) here, also mip generation etc.
-			foreach (var input in resourceHandles[resourceRanges[i]])
+			foreach (var input in resourceHandles[renderPass.ResourceRange])
 			{
 				var target = targets[input.index];
 				var resource = resources[target.resourceIndex];
 				command.SetGlobalTexture(target.propertyId, resource);
 			}
 
-			var nativePass = nativePassIndices[i];
-			if (nativePass != lastNativePass)
+			if (renderPass.NativePassIndex != lastNativePass)
 			{
 				// End current pass if needed
 				if (lastNativePass != -1)
@@ -287,12 +278,11 @@ public class RenderGraph : IDisposable
 					lastNativePass = -1;
 				}
 
-				if (nativePass > -1)
+				if (renderPass.NativePassIndex > -1)
 				{
-					var nativePassDesc = nativePassDescriptors[nativePass];
+					var nativePassDesc = nativePassDescriptors[renderPass.NativePassIndex];
 					var attachmentHandles = nativePassDesc.attachments;
-					var viewHandle = passViewHandles[i];
-					var viewInfo = viewInfos[viewHandle.index];
+					var viewInfo = viewInfos[renderPass.ViewHandle.index];
 
 					// Resolve the attachments to their final values
 					var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
@@ -397,13 +387,14 @@ public class RenderGraph : IDisposable
 					_ = Encoding.UTF8.GetBytes(nativePassDesc.debugName, debugNameUtf8);
 
 					command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, 1, viewInfo.samples, attachments.Span.AsArray(), nativePassDesc.depthIndex, -1, nativePassDesc.subpasses, debugNameUtf8);
-					lastNativePass = nativePass;
+					lastNativePass = renderPass.NativePassIndex;
 				}
 			}
-			else if (isNewSubPassFlags[i])
+			else if (renderPass.IsNewSubPass)
 				command.NextSubPass();
 
 			renderPasses[i].Execute(command);
+			command.EndSample(renderPass.Name);
 		}
 	}
 
@@ -412,12 +403,8 @@ public class RenderGraph : IDisposable
 		targets.Clear();
 		renderPasses.Clear();
 		resources.Clear();
-		resourceRanges.Clear();
-		passViewHandles.Clear();
 		viewInfos.Clear();
 		nativePassDescriptors.Clear();
-		nativePassIndices.Clear();
-		isNewSubPassFlags.Clear();
 		resourceHandleCount = 0;
 	}
 
