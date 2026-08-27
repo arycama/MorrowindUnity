@@ -1,7 +1,7 @@
 using System;
 using UnityEngine.Rendering;
 
-public readonly struct RenderPass<T> : IRenderPass
+public class RenderPass<T> : IRenderPass
 {
 	private readonly T data;
 	private readonly Action<CommandBuffer, T> render;
@@ -9,8 +9,8 @@ public readonly struct RenderPass<T> : IRenderPass
 	public RenderPass(string name, ViewHandle viewHandle, Range resourceRange, int nativePassIndex, bool isNewSubPass, T data, Action<CommandBuffer, T> render)
 	{
 		this.data = data;
-		this.render = render ?? throw new ArgumentNullException(nameof(render));
-		Name = name ?? throw new ArgumentNullException(nameof(name));
+		this.render = render;
+		Name = name;
 		ViewHandle = viewHandle;
 		ResourceRange = resourceRange;
 		NativePassIndex = nativePassIndex;
@@ -23,8 +23,13 @@ public readonly struct RenderPass<T> : IRenderPass
 	public int NativePassIndex { get; }
 	public bool IsNewSubPass { get; }
 
-	readonly void IRenderPass.Execute(CommandBuffer command)
+	void IRenderPass.Execute(CommandBuffer command)
 	{
 		render(command, data);
 	}
+}
+
+public struct RenderPassData
+{
+	public Range resourceRange { get; set; }
 }

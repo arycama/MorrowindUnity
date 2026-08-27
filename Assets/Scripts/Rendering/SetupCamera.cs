@@ -25,33 +25,36 @@ public class SetupView : IDisposable
 
 	public GraphicsBuffer Render(Camera camera, bool isFlipped = false)
 	{
-		renderGraph.AddRenderPass("Set View Data", default, (camera, previousCameraTransform, viewDataBuffer, isFlipped), render: static (command, data) =>
+		using (var pass = renderGraph.AddRenderPass("Set ViewData"))
 		{
-			var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
-			var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
-			var viewToWorld = Float4x4.Rotate(data.camera.transform.WorldRotation());
-			var worldToView = Float4x4.Rotate(data.camera.transform.WorldRotation().Inverse);
-			var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, data.camera.nearClipPlane, data.camera.farClipPlane, 0, data.isFlipped);
-			var worldToClip = viewToClip.Mul(worldToView);
-			var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
+			pass.SetRenderFunction((camera, previousCameraTransform, viewDataBuffer, isFlipped), static (command, data) =>
+			{
+				var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
+				var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
+				var viewToWorld = Float4x4.Rotate(data.camera.transform.WorldRotation());
+				var worldToView = Float4x4.Rotate(data.camera.transform.WorldRotation().Inverse);
+				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, data.camera.nearClipPlane, data.camera.farClipPlane, 0, data.isFlipped);
+				var worldToClip = viewToClip.Mul(worldToView);
+				var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
 
-			var viewSize = new Int2(data.camera.pixelWidth, data.camera.pixelHeight);
-			var near = data.camera.nearClipPlane;
-			var far = data.camera.farClipPlane;
+				var viewSize = new Int2(data.camera.pixelWidth, data.camera.pixelHeight);
+				var near = data.camera.nearClipPlane;
+				var far = data.camera.farClipPlane;
 
-			command.SetBufferData(data.viewDataBuffer, stackalloc[]
-			{(
-				worldToClip,
-				viewToClip,
-				worldToView,
-				viewToWorld,
-				overlayMatrix,
-				(far - near) * Rcp(near * far), Rcp(far), near, far,
-				(Float2)viewSize, 1.0f / (Float2)viewSize,
-				data.camera.transform.WorldPosition(), 0f,
-				tanHalfFov, 0, 0
-			)}.AsArray());
-		});
+				command.SetBufferData(data.viewDataBuffer, stackalloc[]
+				{(
+					worldToClip,
+					viewToClip,
+					worldToView,
+					viewToWorld,
+					overlayMatrix,
+					(far - near) * Rcp(near * far), Rcp(far), near, far,
+					(Float2)viewSize, 1.0f / (Float2)viewSize,
+					data.camera.transform.WorldPosition(), 0f,
+					tanHalfFov, 0, 0
+				)}.AsArray());
+			});
+		}
 
 		return viewDataBuffer;
 	}

@@ -288,7 +288,7 @@ public class SetupLightingOld : ViewRenderFeature
 			}
 
 			// Check if the light intersects the near plane
-			if(pointLightDepths[i] < viewPassData.near)
+			if (pointLightDepths[i] < viewPassData.near)
 				intersectingLightCount = i + 1;
 		}
 
@@ -330,7 +330,7 @@ public class SetupLightingOld : ViewRenderFeature
 			Rcp(binWidth)
 		));
 
-		renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, pointLightCount, lightDepthMinMaxBuffer, visibleLightBits, intersectingLightCount, pointShadows));
+		renderGraph.SetResource(new PointLightData(pointLightData, pointLightBuffer, pointLightCount, 0, lightDepthMinMaxBuffer, visibleLightBits, intersectingLightCount, 0, default, default, pointShadows));
 	}
 
 	private static ShadowSplitData CalculateShadowSplitData(Float4x4 matrix, Float3 lightDirection, bool skipNearPlane)

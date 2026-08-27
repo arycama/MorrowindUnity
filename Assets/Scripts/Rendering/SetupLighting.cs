@@ -81,7 +81,10 @@ public class SetupLighting : IDisposable
 					var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, i);
 					var rendererList = context.CreateShadowRendererList(ref shadowDrawingSettings);
 
-					renderGraph.AddRenderPass("Directional Shadows", shadowView, (rendererList, worldToLightClip, lighting, viewDataBuffer), outputs: stackalloc[] { sunShadow }, render: (command, data) =>
+					using var pass = renderGraph.AddRenderPass("Directional Shadows");
+
+					pass.SetOutputs(stackalloc[] { sunShadow });
+					pass.SetRenderFunction((rendererList, worldToLightClip, lighting, viewDataBuffer), (command, data) =>
 					{
 						command.SetGlobalDepthBias(data.lighting.DirectionalShadowBias, data.lighting.DirectionalShadowSlopeBias);
 						command.SetGlobalInt("ZClip", 0);
@@ -114,25 +117,28 @@ public class SetupLighting : IDisposable
 			fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
-		renderGraph.AddRenderPass("Set Environment Data", default, (sunDirection, sunColor, fogEnabled, environmentData, lighting, viewToSunShadow), render: static (command, data) =>
+		using (var pass = renderGraph.AddRenderPass("Set EnvironmentData"))
 		{
-			var fogStart = data.fogEnabled ? RenderSettings.fogStartDistance : 0;
-			var fogEnd = data.fogEnabled ? RenderSettings.fogEndDistance : 0;
-			var fogScale = data.fogEnabled ? 1 / (fogEnd - fogStart) : 0;
-			var fogOffset = data.fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
-			var sunShadowFadeScale = -1.0f / data.lighting.DirectionalFadeLength;
-			var sunShadowFadeOffset = data.lighting.DirectionalShadowDistance / data.lighting.DirectionalFadeLength;
+			pass.SetRenderFunction((sunDirection, sunColor, fogEnabled, environmentData, lighting, viewToSunShadow), static (command, data) =>
+			{
+				var fogStart = data.fogEnabled ? RenderSettings.fogStartDistance : 0;
+				var fogEnd = data.fogEnabled ? RenderSettings.fogEndDistance : 0;
+				var fogScale = data.fogEnabled ? 1 / (fogEnd - fogStart) : 0;
+				var fogOffset = data.fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
+				var sunShadowFadeScale = -1.0f / data.lighting.DirectionalFadeLength;
+				var sunShadowFadeOffset = data.lighting.DirectionalShadowDistance / data.lighting.DirectionalFadeLength;
 
-			command.SetBufferData(data.environmentData, stackalloc[]
-			{(
-				RenderSettings.ambientLight.LinearFloat3(), fogScale,
-				RenderSettings.fogColor.LinearFloat3(), fogOffset,
-				Time.time, fogStart, fogEnd, 0,
-				data.sunDirection, sunShadowFadeScale,
-				data.sunColor, sunShadowFadeOffset,
-				data.viewToSunShadow
-			)}.AsArray());
-		});
+				command.SetBufferData(data.environmentData, stackalloc[]
+				{(
+					RenderSettings.ambientLight.LinearFloat3(), fogScale,
+					RenderSettings.fogColor.LinearFloat3(), fogOffset,
+					Time.time, fogStart, fogEnd, 0,
+					data.sunDirection, sunShadowFadeScale,
+					data.sunColor, sunShadowFadeOffset,
+					data.viewToSunShadow
+				)}.AsArray());
+			});
+		}
 
 		return (environmentData, sunShadow);
 	}

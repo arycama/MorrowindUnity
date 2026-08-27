@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using Unmath;
 using Math = Unmath.Math;
 
-public class RenderGraph : IDisposable
+public partial class RenderGraph : IDisposable
 {
 	private readonly List<RenderTargetInfo> targets = new();
 	private readonly List<IRenderPass> renderPasses = new();
@@ -17,6 +18,11 @@ public class RenderGraph : IDisposable
 	// Resources
 	private TextureHandle[] resourceHandles = new TextureHandle[8];
 	private int resourceHandleCount;
+
+	private RenderPassData[] renderPassData = new RenderPassData[8];
+	private int renderPassDataCount;
+
+	private NativeList<TextureHandle> inputs = new(4, Allocator.Temp), outputs = new(4, Allocator.Temp);
 
 	public NativeRenderPassSystem nativeRenderPassSystem = new();
 
@@ -31,15 +37,39 @@ public class RenderGraph : IDisposable
 		nativeRenderPassSystem.Dispose();
 	}
 
-	public RenderPassBulider<T> AddRenderPass<T>(string name, T data)
-	{
-		return new RenderPassBulider<T>(this, name, data);
-	}
-
-	private void SetRenderPass<T>(string name, ViewHandle viewHandle, T data = default, ReadOnlySpan<TextureHandle> resources = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> inputs = default, Action<CommandBuffer, T> render = default)
+	public RenderPassBulider AddRenderPass(string name)
 	{
 		var index = renderPasses.Count;
 
+		// Ensure capacity
+		var newCount = renderPassDataCount + 1;
+		if (renderPassData.Length < newCount)
+			Array.Resize(ref renderPassData, renderPassData.Length * 2);
+
+		renderPassDataCount++;
+		return new RenderPassBulider(this, name, index);
+	}
+
+	private void AddInputs(ReadOnlySpan<TextureHandle> inputs, int index)
+	{
+		foreach (var input in inputs)
+		{
+			this.inputs.Add(input);
+			SetResourceWriteIndex(input, index);
+		}
+	}
+
+	private void AddOutputs(ReadOnlySpan<TextureHandle> outputs, int index)
+	{
+		foreach (var output in outputs)
+		{
+			this.outputs.Add(output);
+			SetResourceWriteIndex(output, index);
+		}
+	}
+
+	private void SetResources(ReadOnlySpan<TextureHandle> resources, int index)
+	{
 		// Ensure capacity and add the input indices to the array
 		var newCount = resourceHandleCount + resources.Length;
 		if (resourceHandles.Length < newCount)
@@ -58,15 +88,23 @@ public class RenderGraph : IDisposable
 			targets[resource.index] = target;
 		}
 
-		foreach (var output in outputs)
-			SetResourceWriteIndex(output, index);
+		renderPassData[index].resourceRange = inputStart..resourceHandleCount;
+	}
 
-		foreach (var input in inputs)
-			SetResourceWriteIndex(input, index);
+	private void SetRenderPass<T>(string name, ViewHandle viewHandle, int index, T data = default, Action<CommandBuffer, T> render = default)
+	{
+		var resourceRange = renderPassData[index].resourceRange;
+
+		var resources = resourceHandles.AsSpan(resourceRange);
+		var outputs = this.outputs.AsArray().AsReadOnlySpan();
+		var inputs = this.inputs.AsArray().AsReadOnlySpan();
 
 		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(name, index, targets, resources, outputs, inputs);
-		var renderPass = new RenderPass<T>(name, viewHandle, inputStart..resourceHandleCount, nativePassIndex, isNewSubPass, data, render);
+		var renderPass = new RenderPass<T>(name, viewHandle, resourceRange, nativePassIndex, isNewSubPass, data, render);
 		renderPasses.Add(renderPass);
+
+		this.inputs.Clear();
+		this.outputs.Clear();
 	}
 
 	public bool IsResourceWritten(TextureHandle resource)
@@ -265,32 +303,6 @@ public class RenderGraph : IDisposable
 		viewInfos.Clear();
 		nativeRenderPassSystem.Clear();
 		resourceHandleCount = 0;
-	}
-
-	public class RenderPassBulider<T> : IDisposable
-	{
-		private readonly RenderGraph renderGraph;
-		private readonly string name;
-		private readonly T data;
-		private Action<CommandBuffer, T> render;
-
-		public RenderPassBulider(RenderGraph renderGraph, string name, T data)
-		{
-			this.renderGraph = renderGraph;
-			this.name = name;
-			this.data = data;
-		}
-
-		public void SetRenderFunction(Action<CommandBuffer, T> render) => this.render = render;
-
-
-		public void Dispose()
-		{
-			renderGraph.SetRenderPass<T>(name, viewHandle, AttributeTargets, resources, outputs, inputs, render);
-		}
-
-		internal void SetOutputs(Span<TextureHandle> outputs)
-		{
-		}
+		renderPassData = 0;
 	}
 }
