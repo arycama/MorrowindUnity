@@ -31,7 +31,12 @@ public class RenderGraph : IDisposable
 		nativeRenderPassSystem.Dispose();
 	}
 
-	public void AddRenderPass<T>(string name, ViewHandle viewHandle, T data = default, ReadOnlySpan<TextureHandle> resources = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> inputs = default, Action<CommandBuffer, T> render = default)
+	public RenderPassBulider<T> AddRenderPass<T>(string name, T data)
+	{
+		return new RenderPassBulider<T>(this, name, data);
+	}
+
+	private void SetRenderPass<T>(string name, ViewHandle viewHandle, T data = default, ReadOnlySpan<TextureHandle> resources = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> inputs = default, Action<CommandBuffer, T> render = default)
 	{
 		var index = renderPasses.Count;
 
@@ -260,5 +265,32 @@ public class RenderGraph : IDisposable
 		viewInfos.Clear();
 		nativeRenderPassSystem.Clear();
 		resourceHandleCount = 0;
+	}
+
+	public class RenderPassBulider<T> : IDisposable
+	{
+		private readonly RenderGraph renderGraph;
+		private readonly string name;
+		private readonly T data;
+		private Action<CommandBuffer, T> render;
+
+		public RenderPassBulider(RenderGraph renderGraph, string name, T data)
+		{
+			this.renderGraph = renderGraph;
+			this.name = name;
+			this.data = data;
+		}
+
+		public void SetRenderFunction(Action<CommandBuffer, T> render) => this.render = render;
+
+
+		public void Dispose()
+		{
+			renderGraph.SetRenderPass<T>(name, viewHandle, AttributeTargets, resources, outputs, inputs, render);
+		}
+
+		internal void SetOutputs(Span<TextureHandle> outputs)
+		{
+		}
 	}
 }

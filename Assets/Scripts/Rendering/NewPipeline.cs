@@ -46,12 +46,25 @@ public class NewPipeline : RenderPipelineBase
 		var cameraColor = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.B10G11R11_UFloatPack32, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
 
 		var terrainRendererList = context.CreateRendererList(new(new ShaderTagId("Terrain"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all, sortingCriteria = SortingCriteria.QuantizedFrontToBack });
-		renderGraph.AddRenderPass("Terrain", viewInfo, (terrainRendererList, viewData, environmentData), outputs: stackalloc[] { cameraDepth, albedoNormal, cameraColor }, render: static (command, data) =>
+		using (var terrainPass = renderGraph.AddRenderPass("Terrain", (terrainRendererList, viewData, environmentData)))
 		{
-			command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
-			command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
-			command.DrawRendererList(data.terrainRendererList);
-		});
+			terrainPass.SetOutputs(outputs: stackalloc[] { cameraDepth, albedoNormal, cameraColor });
+
+			terrainPass.SetRenderFunction(static (command, data) =>
+			{
+				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
+				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
+				command.DrawRendererList(data.terrainRendererList);
+			});
+		}
+
+
+			renderGraph.AddRenderPass("Terrain", viewInfo, (terrainRendererList, viewData, environmentData), outputs: stackalloc[] { cameraDepth, albedoNormal, cameraColor }, render: static (command, data) =>
+			{
+				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
+				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
+				command.DrawRendererList(data.terrainRendererList);
+			});
 
 		var opaqueRendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 		var opaqueRendererList = context.CreateRendererList(ref opaqueRendererParams);
