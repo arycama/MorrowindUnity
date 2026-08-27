@@ -19,10 +19,10 @@ public partial class RenderGraph : IDisposable
 	private TextureHandle[] resourceHandles = new TextureHandle[8];
 	private int resourceHandleCount;
 
-	private RenderPassData[] renderPassData = new RenderPassData[8];
+	private RenderPassData[] renderPassDatas = new RenderPassData[8];
 	private int renderPassDataCount;
 
-	private NativeList<TextureHandle> inputs = new(4, Allocator.Temp), outputs = new(4, Allocator.Temp);
+	private NativeList<TextureHandle> inputs = new(4, Allocator.Persistent), outputs = new(4, Allocator.Persistent);
 
 	public NativeRenderPassSystem nativeRenderPassSystem = new();
 
@@ -43,11 +43,16 @@ public partial class RenderGraph : IDisposable
 
 		// Ensure capacity
 		var newCount = renderPassDataCount + 1;
-		if (renderPassData.Length < newCount)
-			Array.Resize(ref renderPassData, renderPassData.Length * 2);
+		if (renderPassDatas.Length < newCount)
+			Array.Resize(ref renderPassDatas, renderPassDatas.Length * 2);
 
 		renderPassDataCount++;
 		return new RenderPassBulider(this, name, index);
+	}
+
+	private void AddRenderPass(IRenderPass renderPass)
+	{
+		renderPasses.Add(renderPass);
 	}
 
 	private void AddInputs(ReadOnlySpan<TextureHandle> inputs, int index)
@@ -88,20 +93,23 @@ public partial class RenderGraph : IDisposable
 			targets[resource.index] = target;
 		}
 
-		renderPassData[index].resourceRange = inputStart..resourceHandleCount;
+		renderPassDatas[index].resourceRange = inputStart..resourceHandleCount;
 	}
 
-	private void SetRenderPass<T>(string name, ViewHandle viewHandle, int index, T data = default, Action<CommandBuffer, T> render = default)
+	private void SetRenderPass<T>(string name, ViewHandle viewHandle, int index)
 	{
-		var resourceRange = renderPassData[index].resourceRange;
+		var resourceRange = renderPassDatas[index].resourceRange;
 
 		var resources = resourceHandles.AsSpan(resourceRange);
 		var outputs = this.outputs.AsArray().AsReadOnlySpan();
 		var inputs = this.inputs.AsArray().AsReadOnlySpan();
 
 		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(name, index, targets, resources, outputs, inputs);
-		var renderPass = new RenderPass<T>(name, viewHandle, resourceRange, nativePassIndex, isNewSubPass, data, render);
-		renderPasses.Add(renderPass);
+
+		renderPassDatas[index].IsNewSubPass = isNewSubPass;
+		renderPassDatas[index].ViewHandle = viewHandle;
+		renderPassDatas[index].Name = name;
+		renderPassDatas[index].NativePassIndex = nativePassIndex;
 
 		this.inputs.Clear();
 		this.outputs.Clear();
@@ -154,30 +162,30 @@ public partial class RenderGraph : IDisposable
 		for (var i = 0; i < renderPasses.Count; i++)
 		{
 			var renderPass = renderPasses[i];
+			var renderPassData = renderPassDatas[i];
 
 			// Set resources. TODO: Any other pass setup/initialization like cbuffers or render state (wireframe?) here, also mip generation etc.
-			foreach (var input in resourceHandles[renderPass.ResourceRange])
+			foreach (var input in resourceHandles[renderPassData.resourceRange])
 			{
 				var target = targets[input.index];
 				var resource = resources[target.resourceIndex];
 				command.SetGlobalTexture(target.propertyId, resource);
 			}
 
-			if (renderPass.NativePassIndex != lastNativePass)
+			if (renderPassData.NativePassIndex != lastNativePass)
 			{
 				// End current pass if needed
 				if (lastNativePass != -1)
 				{
 					command.EndRenderPass();
-					//command.EndSample(lastNativePass.ToString());
 					lastNativePass = -1;
 				}
 
-				if (renderPass.NativePassIndex > -1)
+				if (renderPassData.NativePassIndex > -1)
 				{
-					var nativePassDesc = nativeRenderPassSystem.GetDescriptor(renderPass.NativePassIndex);
+					var nativePassDesc = nativeRenderPassSystem.GetDescriptor(renderPassData.NativePassIndex);
 					var attachmentHandles = nativePassDesc.attachments;
-					var viewInfo = viewInfos[renderPass.ViewHandle.index];
+					var viewInfo = viewInfos[renderPassData.ViewHandle.index];
 
 					// Resolve the attachments to their final values
 					var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
@@ -283,15 +291,15 @@ public partial class RenderGraph : IDisposable
 
 					//command.BeginSample(renderPass.NativePassIndex.ToString());
 					command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, 1, viewInfo.samples, attachments.Span.AsArray(), nativePassDesc.depthIndex, -1, nativePassDesc.subpasses, debugNameUtf8);
-					lastNativePass = renderPass.NativePassIndex;
+					lastNativePass = renderPassData.NativePassIndex;
 				}
 			}
-			else if (renderPass.IsNewSubPass)
+			else if (renderPassData.IsNewSubPass)
 				command.NextSubPass();
 
-			command.BeginSample(renderPass.Name);
+			command.BeginSample(renderPassData.Name);
 			renderPasses[i].Execute(command);
-			command.EndSample(renderPass.Name);
+			command.EndSample(renderPassData.Name);
 		}
 	}
 
@@ -303,6 +311,6 @@ public partial class RenderGraph : IDisposable
 		viewInfos.Clear();
 		nativeRenderPassSystem.Clear();
 		resourceHandleCount = 0;
-		renderPassData = 0;
+		renderPassDataCount = 0;
 	}
 }

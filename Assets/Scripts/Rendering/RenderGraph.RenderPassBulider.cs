@@ -30,7 +30,7 @@ public partial class RenderGraph
 
 		public readonly void SetOutputs(ReadOnlySpan<TextureHandle> outputs)
 		{
-			renderGraph.AddInputs(outputs, index);
+			renderGraph.AddOutputs(outputs, index);
 		}
 
 		public readonly void SetInputs(ReadOnlySpan<TextureHandle> inputs)
@@ -40,11 +40,13 @@ public partial class RenderGraph
 
 		public void SetRenderFunction<T>(T data, Action<CommandBuffer, T> render)
 		{
+			renderGraph.AddRenderPass(new RenderPass<T>(data, render));
+
 		}
 
 		public void Dispose()
 		{
-			renderGraph.SetRenderPass<T>(name, viewHandle, AttributeTargets, resources, outputs, inputs, render);
+			renderGraph.SetRenderPass<int>(name, viewInfo, index);
 		}
 	}
 }
