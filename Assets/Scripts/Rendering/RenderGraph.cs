@@ -64,6 +64,11 @@ public class RenderGraph : IDisposable
 		renderPasses.Add(renderPass);
 	}
 
+	public bool IsResourceWritten(TextureHandle resource)
+	{
+		return targets[resource.index].lastWriteIndex != -1;
+	}
+
 	private void SetResourceWriteIndex(TextureHandle handle, int index)
 	{
 		var target = targets[handle.index];
@@ -76,6 +81,7 @@ public class RenderGraph : IDisposable
 		target.lastWriteIndex = index;
 
 		// Writes are also treataed as reads for the purposes of resource tracking, this stops a texture from being discarded as a future write (Eg a 2nd pass to the same RT) would not be treated as a read otherwise, and would cause the texture to be discarded after the first pass
+		// TODO: This might not be neccessary and might make culling passes not possible?
 		target.lastReadIndex = index;
 		targets[handle.index] = target;
 	}

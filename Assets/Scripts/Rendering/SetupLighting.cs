@@ -26,7 +26,7 @@ public class SetupLighting : IDisposable
 		environmentData.Dispose();
 	}
 
-	public (GraphicsBuffer environmentData, TextureHandle sunShadow, bool sunShadowEnabled) Render(Camera camera, CullingResults cullingResults, ScriptableRenderContext context, GraphicsBuffer viewDataBuffer)
+	public (GraphicsBuffer environmentData, TextureHandle sunShadow) Render(Camera camera, CullingResults cullingResults, ScriptableRenderContext context, GraphicsBuffer viewDataBuffer)
 	{
 		var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -37,7 +37,6 @@ public class SetupLighting : IDisposable
 		var mainLightIndex = -1;
 		var sunShadow = renderGraph.GetTexture(new(shadowView, GraphicsFormat.D16_UNorm, true), Shader.PropertyToID("SunShadow"));
 		var viewToSunShadow = Float4x4.Identity;
-		var sunShadowEnabled = false;
 		var lightCount = cullingResults.visibleLights.Length;
 
 		var perLightInfos = new NativeArray<LightShadowCasterCullingInfo>(lightCount, Allocator.Temp);
@@ -60,8 +59,8 @@ public class SetupLighting : IDisposable
 				sunDirection = -viewSpaceLightRotation.Forward;
 				sunColor = lightColor;
 
-				sunShadowEnabled = hasShadows && cullingResults.GetShadowCasterBounds(mainLightIndex, out _);
-				if (sunShadowEnabled)
+				// TODO: Constrain cascade bounds to shadow caster bounds
+				if (hasShadows && cullingResults.GetShadowCasterBounds(mainLightIndex, out _))
 				{
 					// Transform from view space to light space
 					var viewToLight = Float4x4.Rotate(viewSpaceLightRotation.Inverse);
@@ -135,7 +134,7 @@ public class SetupLighting : IDisposable
 			)}.AsArray());
 		});
 
-		return (environmentData, sunShadow, sunShadowEnabled);
+		return (environmentData, sunShadow);
 	}
 
 	private static ShadowSplitData CalculateShadowSplitData(Float4x4 matrix, Float3 lightDirection, bool skipNearPlane)

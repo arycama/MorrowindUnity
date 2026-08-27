@@ -2,7 +2,6 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
-using UnityEngine.Rendering.RendererUtils;
 
 public class NewPipeline : RenderPipelineBase
 {
@@ -40,7 +39,7 @@ public class NewPipeline : RenderPipelineBase
 
 		var viewData = setupView.Render(camera);
 		var viewInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
-		var (environmentData, sunShadow, sunShadowEnabled) = setupLighting.Render(camera, cullingResults, context, viewData);
+		var (environmentData, sunShadow) = setupLighting.Render(camera, cullingResults, context, viewData);
 
 		var cameraDepth = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.D32_SFloat_S8_UInt, true), Shader.PropertyToID("CameraDepth"));
 		var albedoNormal = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"));
@@ -63,7 +62,8 @@ public class NewPipeline : RenderPipelineBase
 			command.DrawRendererList(data.opaqueRendererList);
 		});
 
-		renderGraph.AddRenderPass("Deferred", viewInfo, (deferredMaterial, asset, viewData, environmentData, propertyBlock, sunShadowEnabled), stackalloc[] { sunShadow }, stackalloc[] { cameraDepth, cameraColor }, stackalloc[] { cameraDepth, albedoNormal }, static (command, data) =>
+		var hasShadow = renderGraph.IsResourceWritten(sunShadow);
+		renderGraph.AddRenderPass("Deferred", viewInfo, (deferredMaterial, asset, viewData, environmentData, propertyBlock, hasShadow), hasShadow ? stackalloc[] { sunShadow } : default, stackalloc[] { cameraDepth, cameraColor }, stackalloc[] { cameraDepth, albedoNormal }, static (command, data) =>
 		{
 			data.propertyBlock.Clear();
 			data.propertyBlock.SetConstantBuffer(environmentDataId, data.environmentData, 0, data.environmentData.stride);
@@ -72,7 +72,7 @@ public class NewPipeline : RenderPipelineBase
 			if (data.asset.Samples > 1)
 				command.EnableShaderKeyword("MSAA_ON");
 
-			if (data.sunShadowEnabled)
+			if (data.hasShadow)
 				command.EnableShaderKeyword("SHADOWS_ON");
 
 			command.DrawProcedural(default, data.deferredMaterial, 0, MeshTopology.Triangles, 3, 1, data.propertyBlock);
@@ -80,7 +80,7 @@ public class NewPipeline : RenderPipelineBase
 			if (data.asset.Samples > 1)
 				command.DisableShaderKeyword("MSAA_ON");
 
-			if (data.sunShadowEnabled)
+			if (data.hasShadow)
 				command.DisableShaderKeyword("SHADOWS_ON");
 		});
 
@@ -94,17 +94,17 @@ public class NewPipeline : RenderPipelineBase
 
 		var transparentRendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 		var transparentRendererList = context.CreateRendererList(ref transparentRendererParams);
-		renderGraph.AddRenderPass("Forward Transparent", viewInfo, (transparentRendererList, viewData, environmentData, sunShadowEnabled), stackalloc[] { sunShadow }, stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
+		renderGraph.AddRenderPass("Forward Transparent", viewInfo, (transparentRendererList, viewData, environmentData, hasShadow), hasShadow ? stackalloc[] { sunShadow } : default, stackalloc[] { cameraDepth, cameraColor }, render: static (command, data) =>
 		{
 			command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
 			command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 
-			if (data.sunShadowEnabled)
+			if (data.hasShadow)
 				command.EnableShaderKeyword("SHADOWS_ON");
 
 			command.DrawRendererList(data.transparentRendererList);
 
-			if (data.sunShadowEnabled)
+			if (data.hasShadow)
 				command.DisableShaderKeyword("SHADOWS_ON");
 		});
 
