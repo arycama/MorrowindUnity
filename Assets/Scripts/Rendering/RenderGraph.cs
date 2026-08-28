@@ -50,6 +50,9 @@ public class RenderGraph : IDisposable
 			handles.Add(resource);
 		}
 
+		if (builder.DepthStencil.index != -1)
+			SetResourceWriteIndex(builder.DepthStencil, builder.Index);
+
 		// Set outputs
 		foreach (var output in builder.Outputs)
 			SetResourceWriteIndex(output, builder.Index);
@@ -58,7 +61,7 @@ public class RenderGraph : IDisposable
 		foreach (var input in builder.Inputs)
 			SetResourceWriteIndex(input, builder.Index);
 
-		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(builder.Name, builder.Index, targets, builder.Resources, builder.Outputs, builder.Inputs);
+		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(builder.Name, builder.Index, builder.Resources, builder.Outputs, builder.Inputs, builder.DepthStencil);
 
 		var renderPass = builder.RenderPass;
 		renderPass.ResourceRange = inputStart..handles.Count;

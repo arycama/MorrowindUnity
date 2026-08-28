@@ -83,7 +83,7 @@ public class SetupLighting : IDisposable
 
 					using var pass = renderGraph.AddRenderPass("Directional Shadows");
 					pass.ViewHandle = shadowView;
-					pass.AddOutput(sunShadow);
+					pass.DepthStencil = sunShadow;
 					pass.SetRenderFunction((rendererList, worldToLightClip, lighting, viewDataBuffer), (command, data) =>
 					{
 						command.SetGlobalDepthBias(data.lighting.DirectionalShadowBias, data.lighting.DirectionalShadowSlopeBias);

@@ -48,7 +48,8 @@ public class NewPipeline : RenderPipelineBase
 		using (var pass = renderGraph.AddRenderPass("Terrain"))
 		{
 			pass.ViewHandle = viewInfo;
-			pass.AddOutputs(stackalloc[] { cameraDepth, albedoNormal, cameraColor });
+			pass.DepthStencil = cameraDepth;
+			pass.AddOutputs(stackalloc[] { albedoNormal, cameraColor });
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Terrain"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all, sortingCriteria = SortingCriteria.QuantizedFrontToBack });
 			pass.SetRenderFunction((rendererList, viewData, environmentData), static (command, data) =>
@@ -62,7 +63,8 @@ public class NewPipeline : RenderPipelineBase
 		using (var pass = renderGraph.AddRenderPass("GBuffer"))
 		{
 			pass.ViewHandle = viewInfo;
-			pass.AddOutputs(stackalloc[] { cameraDepth, albedoNormal, cameraColor });
+			pass.DepthStencil = cameraDepth;
+			pass.AddOutputs(stackalloc[] { albedoNormal, cameraColor });
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 			var rendererList = context.CreateRendererList(ref rendererParams);
@@ -77,7 +79,8 @@ public class NewPipeline : RenderPipelineBase
 		using (var pass = renderGraph.AddRenderPass("Deferred"))
 		{
 			pass.ViewHandle = viewInfo;
-			pass.AddOutputs(stackalloc[] { cameraDepth, cameraColor });
+			pass.DepthStencil = cameraDepth;
+			pass.AddOutputs(stackalloc[] { cameraColor });
 			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
 
 			var hasShadow = renderGraph.IsResourceWritten(sunShadow);
@@ -102,7 +105,8 @@ public class NewPipeline : RenderPipelineBase
 		using (var pass = renderGraph.AddRenderPass("Sky"))
 		{
 			pass.ViewHandle = viewInfo;
-			pass.AddOutputs(stackalloc[] { cameraDepth, cameraColor });
+			pass.DepthStencil = cameraDepth;
+			pass.AddOutput(cameraColor);
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Sky"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all });
 			pass.SetRenderFunction((rendererList, viewData, environmentData), static (command, data) =>
@@ -116,7 +120,8 @@ public class NewPipeline : RenderPipelineBase
 		using (var pass = renderGraph.AddRenderPass("Forward Transparent"))
 		{
 			pass.ViewHandle = viewInfo;
-			pass.AddOutputs(stackalloc[] { cameraDepth, cameraColor });
+			pass.DepthStencil = cameraDepth;
+			pass.AddOutput(cameraColor);
 
 			var hasShadow = renderGraph.IsResourceWritten(sunShadow);
 			if (hasShadow)
@@ -174,7 +179,8 @@ public class NewPipeline : RenderPipelineBase
 			// TODO: Currently we need to set depth as the first output if it exists. Once this is replaced with a set depth stencil function, this wont be neccessary
 			if (requiresSceneDepth)
 			{
-				pass.AddOutputs(stackalloc[] { sceneDepth, sceneColor });
+				pass.DepthStencil = sceneDepth;
+				pass.AddOutput(sceneColor);
 				pass.AddKeyword("DEPTH");
 			}
 			else

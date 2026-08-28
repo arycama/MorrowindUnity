@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Unity.Collections;
-using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using static Unmath.Math;
 
 public class NativeRenderPassSystem : IDisposable
 {
@@ -11,8 +11,8 @@ public class NativeRenderPassSystem : IDisposable
 	private readonly NativeList<int> outputIndices = new(8, Allocator.Persistent);
 	private readonly NativeList<int> inputIndices = new(8, Allocator.Persistent);
 	private readonly NativeList<SubPassDescriptor> subPasses = new(8, Allocator.Persistent);
-	private int depthIndex = -1;
-	private int depthHandleIndex = -1;
+	private int depthStencilAttachmentIndex = -1;
+	private int depthStencilIndex = -1;
 	private SubPassFlags flags;
 	private readonly StringBuilder passNameBuilder = new();
 	private readonly List<NativePassDescriptor> nativePassDescriptors = new();
@@ -24,38 +24,54 @@ public class NativeRenderPassSystem : IDisposable
 		nativePassDescriptors.Clear();
 	}
 
-	public (int nativePassIndex, bool isNewSubPass) AddRenderPass(string name, int index, ResizableArray<RenderTargetInfo> targets, List<TextureHandle> resources, List<TextureHandle> outputs, List<TextureHandle> inputs)
+	public (int nativePassIndex, bool isNewSubPass) AddRenderPass(string name, int index, List<TextureHandle> resources, List<TextureHandle> outputs, List<TextureHandle> inputs, TextureHandle depthStencil)
 	{
-		var isNativePass = outputs.Count > 0;
+		var isNativePass = outputs.Count > 0 || depthStencil.index != -1;
 		var canMergeWithExistingPass = isNativePass && subPasses.Length < 8;
 
-		// If any current attachments are read as regualr resources, we need to start a new render pass
-		foreach (var attachment in attachments)
-		{
-			if (!resources.Contains(attachment))
-				continue;
-
+		// If depth stencil is set, we can only merge if it is equal
+		if (depthStencilIndex != -1 && depthStencil.index != -1 && depthStencil.index != depthStencilIndex)
 			canMergeWithExistingPass = false;
-			break;
+
+		// If any current attachments are read as regualr resources, we need to start a new render pass
+		if (canMergeWithExistingPass)
+		{
+			foreach (var attachment in attachments)
+			{
+				if (!resources.Contains(attachment))
+					continue;
+
+				canMergeWithExistingPass = false;
+				break;
+			}
 		}
 
-		// If we have a current pass in progress we can't merge with, end it
-		var isInNativePass = attachments.Length > 0;
-		if (!canMergeWithExistingPass && isInNativePass)
+		void EndSubPass()
 		{
-			// End current sub pass
 			subPasses.Add(new() { inputs = new(inputIndices.AsArray()), colorOutputs = new(outputIndices.AsArray()), flags = flags });
 			outputIndices.Clear();
 			inputIndices.Clear();
 			flags = SubPassFlags.None;
+		}
 
-			// Start new renderpass?
+		void EndRenderPass()
+		{
+			// TODO: Should this just call end subpass?
 			var passEndIndex = index - 1; // Since this is called from the first pass that is not the render pass index, the previous pass is the end index
-			nativePassDescriptors.Add(new(new(attachments.AsArray(), Allocator.Temp), new(subPasses.AsArray(), Allocator.Temp), depthIndex, passEndIndex, passNameBuilder.ToString()));
+			nativePassDescriptors.Add(new(new(attachments.AsArray(), Allocator.Temp), new(subPasses.AsArray(), Allocator.Temp), depthStencilAttachmentIndex, passEndIndex, passNameBuilder.ToString()));
 			attachments.Clear();
 			subPasses.Clear();
 			_ = passNameBuilder.Clear();
-			depthIndex = -1;
+			depthStencilAttachmentIndex = -1;
+			depthStencilIndex = -1;
+		}
+
+		// If we have a current pass in progress we can't merge with, end it
+		var isInNativePass = attachments.Length > 0 || depthStencilIndex != -1;
+		if (isInNativePass && !canMergeWithExistingPass)
+		{
+			EndSubPass();
+			EndRenderPass();
 		}
 
 		var isNewSubPass = false;
@@ -68,46 +84,32 @@ public class NativeRenderPassSystem : IDisposable
 			_ = passNameBuilder.Append(name);
 
 			// Check if we can merge with an existing subpass
-			var canMergeSubPass = canMergeWithExistingPass && subPasses.Length < 8;
+			var canMergeSubPass = canMergeWithExistingPass;
 			if (canMergeSubPass)
 			{
-				// Depth must always be first, if assigned
-				if (depthHandleIndex != -1)
+				// Check if all input indices are equal to existing ones. We don't check more than this, because this allows subpasses with no inputs to be merged with subpasses with inputs.
+				for (var i = 0; i < Min(inputs.Count, inputIndices.Length); i++)
 				{
-					if (outputs[0].index != depthHandleIndex || outputs.Count - 1 != outputIndices.Length)
-						canMergeSubPass = false;
-				}
-				else if (outputs.Count != outputIndices.Length)
-				{
-					// Otherwise we can compare the output length and indices directly
+					var input = inputs[i];
+					var currentInput = attachments[inputIndices[i]];
+					if (currentInput.index == input.index)
+						continue;
+
 					canMergeSubPass = false;
+					break;
 				}
 
+				// Check outputs
 				if (canMergeSubPass)
 				{
-					// Check if all input indices are equal to existing ones. We don't check more than this, because this allows subpasses with no inputs to be merged with subpasses with inputs.
-					// It also allows a subpass with input 0 to be merged with a subpass with inputs 0 and 1, since this doesn't break the indexing.
-					for (var i = 0; i < inputs.Count; i++)
-					{
-						var input = inputs[i];
-						var currentInput = attachments[inputIndices[i]];
-						if (currentInput.index == input.index)
-							continue;
-
+					if (outputs.Count != outputIndices.Length)
 						canMergeSubPass = false;
-						break;
-					}
-
-					// Check outputs
-					if (canMergeSubPass)
+					else
 					{
-						// If a depth index is assigned and equal, it will be at zero, so skip it as we already compared
-						var start = depthIndex != -1 ? 1 : 0;
-						var offset = depthIndex != -1 ? 1 : 0;
-						for (var i = start; i < outputs.Count; i++)
+						for (var i = 0; i < outputs.Count; i++)
 						{
 							var output = outputs[i];
-							var currentInput = attachments[outputIndices[i - offset]];
+							var currentInput = attachments[outputIndices[i]];
 							if (currentInput.index == output.index)
 								continue;
 
@@ -122,13 +124,10 @@ public class NativeRenderPassSystem : IDisposable
 			if (!canMergeSubPass || !isInNativePass)
 			{
 				// If there is already a subpass, end it
-				var isInSubPass = outputIndices.Length > 0;
+				var isInSubPass = outputIndices.Length > 0 || depthStencilIndex != -1;
 				if (isInSubPass)
 				{
-					subPasses.Add(new() { inputs = new(inputIndices.AsArray()), colorOutputs = new(outputIndices.AsArray()), flags = flags });
-					outputIndices.Clear();
-					inputIndices.Clear();
-					flags = SubPassFlags.None;
+					EndSubPass();
 					isNewSubPass = true;
 				}
 
@@ -145,24 +144,19 @@ public class NativeRenderPassSystem : IDisposable
 					return attachments.Length - 1;
 				}
 
+				// Depth Stencil (TODO: This is unneccessarily repeated for non-first passes)
+				if (depthStencil.index != -1)
+				{
+					var attachmentIndex = GetAttachmentIndexOrAdd(depthStencil);
+					depthStencilAttachmentIndex = attachmentIndex;
+					depthStencilIndex = depthStencil.index;
+				}
+
 				// Outputs
 				foreach (var output in outputs)
 				{
 					var attachmentIndex = GetAttachmentIndexOrAdd(output);
-					var target = targets[output.index];
-					var isColor = target.descriptor.format switch
-					{
-						GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
-						_ => true,
-					};
-
-					if (isColor)
-						outputIndices.Add(attachmentIndex);
-					else
-					{
-						depthIndex = attachmentIndex;
-						depthHandleIndex = output.index;
-					}
+					outputIndices.Add(attachmentIndex);
 				}
 
 				// Input attachments
@@ -171,7 +165,7 @@ public class NativeRenderPassSystem : IDisposable
 				{
 					var attachmentIndex = GetAttachmentIndexOrAdd(input);
 					inputIndices.Add(attachmentIndex);
-					if (attachmentIndex == depthIndex)
+					if (input.index == depthStencilIndex)
 						flags |= SubPassFlags.ReadOnlyDepth;
 				}
 			}

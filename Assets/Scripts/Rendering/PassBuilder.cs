@@ -14,6 +14,7 @@ public class PassBuilder : IDisposable
 	public List<TextureHandle> Inputs { get; } = new();
 	public List<TextureHandle> Outputs { get; } = new();
 	public List<GlobalKeyword> Keywords { get; } = new();
+	public TextureHandle DepthStencil { get; set; }
 
 	public PassBuilder(RenderGraph renderGraph)
 	{
@@ -60,6 +61,7 @@ public class PassBuilder : IDisposable
 		Name = default;
 		ViewHandle = new(-1);
 		Index = -1;
+		DepthStencil = new(-1);
 		RenderPass = null;
 		Resources.Clear();
 		Outputs.Clear();
