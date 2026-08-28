@@ -24,7 +24,7 @@ public class NativeRenderPassSystem : IDisposable
 		nativePassDescriptors.Clear();
 	}
 
-	public (int nativePassIndex, bool isNewSubPass) AddRenderPass(string name, int index, List<RenderTargetInfo> targets, ReadOnlySpan<TextureHandle> resources = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> inputs = default)
+	public (int nativePassIndex, bool isNewSubPass) AddRenderPass(string name, int index, ResizableArray<RenderTargetInfo> targets, ReadOnlySpan<TextureHandle> resources = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> inputs = default)
 	{
 		// Native render pass logic
 		var isNativePass = outputs.Length > 0;

@@ -6,21 +6,16 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using Unmath;
-using Math = Unmath.Math;
 
 public partial class RenderGraph : IDisposable
 {
-	private readonly List<RenderTargetInfo> targets = new();
+	private readonly ResizableArray<RenderTargetInfo> targets = new();
 	private readonly List<IRenderPass> renderPasses = new();
 	private readonly List<RenderTargetIdentifier> resources = new();
 	private readonly List<ViewInfo> viewInfos = new();
 
-	// Resources
-	private TextureHandle[] resourceHandles = new TextureHandle[8];
-	private int resourceHandleCount;
-
-	private RenderPassData[] renderPassDatas = new RenderPassData[8];
-	private int renderPassDataCount;
+	private readonly ResizableArray<TextureHandle> resourceHandles = new();
+	private readonly ResizableArray<RenderPassData> renderPassDatas = new();
 
 	private NativeList<TextureHandle> inputs = new(4, Allocator.Persistent), outputs = new(4, Allocator.Persistent);
 
@@ -40,14 +35,7 @@ public partial class RenderGraph : IDisposable
 	public RenderPassBulider AddRenderPass(string name)
 	{
 		var index = renderPasses.Count;
-
-		// Ensure capacity (Expand or reset the render pass data for this index)
-		if (renderPassDataCount == renderPassDatas.Length - 1)
-			Array.Resize(ref renderPassDatas, renderPassDatas.Length * 2);
-		else
-			renderPassDatas[index] = default;
-
-		renderPassDataCount++;
+		renderPassDatas.Add(default);
 		return new RenderPassBulider(this, name, index);
 	}
 
@@ -76,32 +64,21 @@ public partial class RenderGraph : IDisposable
 
 	private void SetResources(ReadOnlySpan<TextureHandle> resources, int index)
 	{
-		// Ensure capacity and add the input indices to the array
-		var newCount = resourceHandleCount + resources.Length;
-		if (resourceHandles.Length < newCount)
-			Array.Resize(ref resourceHandles, Math.Max(newCount, resourceHandles.Length * 2));
-		resources.CopyTo(resourceHandles.AsSpan(resourceHandleCount, resources.Length));
-
-		var inputStart = resourceHandleCount;
-		resourceHandleCount += resources.Length;
-
-		// Set resource use markers
+		var inputStart = resourceHandles.Count;
 		foreach (var resource in resources)
 		{
-			// Mark each resource as read by this pass
-			var target = targets[resource.index];
-			target.lastReadIndex = index;
-			targets[resource.index] = target;
+			targets[resource.index].lastReadIndex = index;
+			resourceHandles.Add(resource);
 		}
 
-		renderPassDatas[index].resourceRange = inputStart..resourceHandleCount;
+		renderPassDatas[index].resourceRange = inputStart..resourceHandles.Count;
 	}
 
 	private void SetRenderPass<T>(string name, ViewHandle viewHandle, int index)
 	{
 		var resourceRange = renderPassDatas[index].resourceRange;
 
-		var resources = resourceHandles.AsSpan(resourceRange);
+		var resources = resourceHandles[resourceRange];
 		var outputs = this.outputs.AsArray().AsReadOnlySpan();
 		var inputs = this.inputs.AsArray().AsReadOnlySpan();
 
@@ -143,10 +120,8 @@ public partial class RenderGraph : IDisposable
 		var resourceIndex = resources.Count;
 		resources.Add(id);
 
-		var target = targets[handle.index];
-		target.resourceIndex = resourceIndex;
-		target.isExported = true;
-		targets[handle.index] = target;
+		targets[handle.index].resourceIndex = resourceIndex;
+		targets[handle.index].isExported = true;
 	}
 
 	public ViewHandle AddViewInfo(Int2 size, int samples = 1)
@@ -318,7 +293,7 @@ public partial class RenderGraph : IDisposable
 		resources.Clear();
 		viewInfos.Clear();
 		nativeRenderPassSystem.Clear();
-		resourceHandleCount = 0;
-		renderPassDataCount = 0;
+		renderPassDatas.Clear();
+		resourceHandles.Clear();
 	}
 }
