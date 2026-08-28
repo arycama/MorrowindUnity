@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
@@ -13,13 +12,16 @@ public partial class RenderGraph : IDisposable
 	private readonly List<IRenderPass> renderPasses = new();
 	private readonly List<RenderTargetIdentifier> resources = new();
 	private readonly List<ViewInfo> viewInfos = new();
-
 	private readonly ResizableArray<TextureHandle> resourceHandles = new();
 	private readonly ResizableArray<RenderPassData> renderPassDatas = new();
-
-	private NativeList<TextureHandle> inputs = new(4, Allocator.Persistent), outputs = new(4, Allocator.Persistent);
-
 	public NativeRenderPassSystem nativeRenderPassSystem = new();
+
+	private readonly PassBuilder builder;
+
+	public RenderGraph()
+	{
+		builder = new(this);
+	}
 
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, int propertyId)
 	{
@@ -32,11 +34,12 @@ public partial class RenderGraph : IDisposable
 		nativeRenderPassSystem.Dispose();
 	}
 
-	public RenderPassBulider AddRenderPass(string name)
+	public PassBuilder AddRenderPass(string name)
 	{
-		var index = renderPasses.Count;
+		builder.Name = name;
+		builder.Index = renderPasses.Count;
 		renderPassDatas.Add(default);
-		return new RenderPassBulider(this, name, index);
+		return builder;
 	}
 
 	private void AddRenderPass(IRenderPass renderPass)
@@ -44,26 +47,9 @@ public partial class RenderGraph : IDisposable
 		renderPasses.Add(renderPass);
 	}
 
-	private void AddInputs(ReadOnlySpan<TextureHandle> inputs, int index)
+	private void SetRenderPass(string name, ViewHandle viewHandle, int index, List<TextureHandle> resources, List<TextureHandle> outputs, List<TextureHandle> inputs)
 	{
-		foreach (var input in inputs)
-		{
-			this.inputs.Add(input);
-			SetResourceWriteIndex(input, index);
-		}
-	}
-
-	private void AddOutputs(ReadOnlySpan<TextureHandle> outputs, int index)
-	{
-		foreach (var output in outputs)
-		{
-			this.outputs.Add(output);
-			SetResourceWriteIndex(output, index);
-		}
-	}
-
-	private void SetResources(ReadOnlySpan<TextureHandle> resources, int index)
-	{
+		// Set resources
 		var inputStart = resourceHandles.Count;
 		foreach (var resource in resources)
 		{
@@ -72,15 +58,14 @@ public partial class RenderGraph : IDisposable
 		}
 
 		renderPassDatas[index].resourceRange = inputStart..resourceHandles.Count;
-	}
 
-	private void SetRenderPass<T>(string name, ViewHandle viewHandle, int index)
-	{
-		var resourceRange = renderPassDatas[index].resourceRange;
+		// Set outputs
+		foreach (var output in outputs)
+			SetResourceWriteIndex(output, index);
 
-		var resources = resourceHandles[resourceRange];
-		var outputs = this.outputs.AsArray().AsReadOnlySpan();
-		var inputs = this.inputs.AsArray().AsReadOnlySpan();
+		// Set inputs
+		foreach (var input in inputs)
+			SetResourceWriteIndex(input, index);
 
 		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(name, index, targets, resources, outputs, inputs);
 
@@ -89,9 +74,6 @@ public partial class RenderGraph : IDisposable
 		passData.viewHandle = viewHandle;
 		passData.name = name;
 		passData.nativePassIndex = nativePassIndex;
-
-		this.inputs.Clear();
-		this.outputs.Clear();
 	}
 
 	public bool IsResourceWritten(TextureHandle resource)

@@ -1,4 +1,3 @@
-using System;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -48,8 +47,8 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("Terrain"))
 		{
-			pass.SetViewInfo(viewInfo);
-			pass.SetOutputs(stackalloc[] { cameraDepth, albedoNormal, cameraColor });
+			pass.ViewInfo = viewInfo;
+			pass.AddOutputs(stackalloc[] { cameraDepth, albedoNormal, cameraColor });
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Terrain"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all, sortingCriteria = SortingCriteria.QuantizedFrontToBack });
 			pass.SetRenderFunction((rendererList, viewData, environmentData), static (command, data) =>
@@ -62,8 +61,8 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("GBuffer"))
 		{
-			pass.SetViewInfo(viewInfo);
-			pass.SetOutputs(stackalloc[] { cameraDepth, albedoNormal, cameraColor });
+			pass.ViewInfo = viewInfo;
+			pass.AddOutputs(stackalloc[] { cameraDepth, albedoNormal, cameraColor });
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 			var rendererList = context.CreateRendererList(ref rendererParams);
@@ -77,9 +76,9 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("Deferred"))
 		{
-			pass.SetViewInfo(viewInfo);
-			pass.SetOutputs(stackalloc[] { cameraDepth, cameraColor });
-			pass.SetInputs(stackalloc[] { cameraDepth, albedoNormal });
+			pass.ViewInfo = viewInfo;
+			pass.AddOutputs(stackalloc[] { cameraDepth, cameraColor });
+			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
 
 			var hasShadow = renderGraph.IsResourceWritten(sunShadow);
 			if (hasShadow)
@@ -109,8 +108,8 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("Sky"))
 		{
-			pass.SetViewInfo(viewInfo);
-			pass.SetOutputs(stackalloc[] { cameraDepth, cameraColor });
+			pass.ViewInfo = viewInfo;
+			pass.AddOutputs(stackalloc[] { cameraDepth, cameraColor });
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Sky"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all });
 			pass.SetRenderFunction((rendererList, viewData, environmentData), static (command, data) =>
@@ -123,8 +122,8 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("Forward Transparent"))
 		{
-			pass.SetViewInfo(viewInfo);
-			pass.SetOutputs(stackalloc[] { cameraDepth, cameraColor });
+			pass.ViewInfo = viewInfo;
+			pass.AddOutputs(stackalloc[] { cameraDepth, cameraColor });
 
 			var hasShadow = renderGraph.IsResourceWritten(sunShadow);
 			if (hasShadow)
@@ -151,8 +150,7 @@ public class NewPipeline : RenderPipelineBase
 		{
 			// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 			// TODO: Check for hardware msaa backbuffer resolve support
-			var backbufferInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight));
-			pass.SetViewInfo(backbufferInfo);
+			pass.ViewInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight));
 
 			// Final blit/resolve if needed
 			// TODO: This should also account for HDR
@@ -180,12 +178,12 @@ public class NewPipeline : RenderPipelineBase
 					pass.SetResources(stackalloc[] { cameraColor });
 			}
 			else
-				pass.SetInputs(stackalloc[] { cameraColor });
+				pass.AddInputs(stackalloc[] { cameraColor });
 
 			if (requiresSceneDepth)
-				pass.SetOutputs(stackalloc[] { sceneDepth, sceneColor });
+				pass.AddOutputs(stackalloc[] { sceneDepth, sceneColor });
 			else
-				pass.SetOutputs(stackalloc[] { sceneColor });
+				pass.AddOutputs(stackalloc[] { sceneColor });
 
 			var requiresFlip = camera.targetTexture == null;
 			pass.SetRenderFunction((blitMaterial, requiresFlip, asset, requiresSceneDepth, viewData, renderToBackbuffer), static (command, data) =>
@@ -239,8 +237,9 @@ public class NewPipeline : RenderPipelineBase
 		// Render wireframe
 		if (camera.cameraType == CameraType.SceneView)
 		{
-			using var pass = renderGraph.AddRenderPass("Wireframe");
 			viewData = setupView.Render(camera, true);
+
+			using var pass = renderGraph.AddRenderPass("Wireframe");
 			var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
 			pass.SetRenderFunction((camera, wireframeRendererList, context, viewData), static (command, data) =>
 			{

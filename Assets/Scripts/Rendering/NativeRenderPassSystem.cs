@@ -24,10 +24,10 @@ public class NativeRenderPassSystem : IDisposable
 		nativePassDescriptors.Clear();
 	}
 
-	public (int nativePassIndex, bool isNewSubPass) AddRenderPass(string name, int index, ResizableArray<RenderTargetInfo> targets, ReadOnlySpan<TextureHandle> resources = default, ReadOnlySpan<TextureHandle> outputs = default, ReadOnlySpan<TextureHandle> inputs = default)
+	public (int nativePassIndex, bool isNewSubPass) AddRenderPass(string name, int index, ResizableArray<RenderTargetInfo> targets, List<TextureHandle> resources, List<TextureHandle> outputs, List<TextureHandle> inputs)
 	{
 		// Native render pass logic
-		var isNativePass = outputs.Length > 0;
+		var isNativePass = outputs.Count > 0;
 		var canMergeWithExistingPass = isNativePass && subPasses.Length < 8;
 		foreach (var resource in resources)
 		{
@@ -77,10 +77,10 @@ public class NativeRenderPassSystem : IDisposable
 				// Depth must always be first, if assigned
 				if (depthHandleIndex != -1)
 				{
-					if (outputs[0].index != depthHandleIndex || outputs.Length - 1 != outputIndices.Length)
+					if (outputs[0].index != depthHandleIndex || outputs.Count - 1 != outputIndices.Length)
 						canMergeSubPass = false;
 				}
-				else if (outputs.Length != outputIndices.Length)
+				else if (outputs.Count != outputIndices.Length)
 				{
 					// Otherwise we can compare the output length and indices directly
 					canMergeSubPass = false;
@@ -90,7 +90,7 @@ public class NativeRenderPassSystem : IDisposable
 				{
 					// Check if all input indices are equal to existing ones. We don't check more than this, because this allows subpasses with no inputs to be merged with subpasses with inputs.
 					// It also allows a subpass with input 0 to be merged with a subpass with inputs 0 and 1, since this doesn't break the indexing.
-					for (var i = 0; i < inputs.Length; i++)
+					for (var i = 0; i < inputs.Count; i++)
 					{
 						var input = inputs[i];
 						var currentInput = attachments[inputIndices[i]];
@@ -107,7 +107,7 @@ public class NativeRenderPassSystem : IDisposable
 						// If a depth index is assigned and equal, it will be at zero, so skip it as we already compared
 						var start = depthIndex != -1 ? 1 : 0;
 						var offset = depthIndex != -1 ? 1 : 0;
-						for (var i = start; i < outputs.Length; i++)
+						for (var i = start; i < outputs.Count; i++)
 						{
 							var output = outputs[i];
 							var currentInput = attachments[outputIndices[i - offset]];

@@ -82,8 +82,8 @@ public class SetupLighting : IDisposable
 					var rendererList = context.CreateShadowRendererList(ref shadowDrawingSettings);
 
 					using var pass = renderGraph.AddRenderPass("Directional Shadows");
-
-					pass.SetOutputs(stackalloc[] { sunShadow });
+					pass.ViewInfo = shadowView;
+					pass.AddOutputs(stackalloc[] { sunShadow });
 					pass.SetRenderFunction((rendererList, worldToLightClip, lighting, viewDataBuffer), (command, data) =>
 					{
 						command.SetGlobalDepthBias(data.lighting.DirectionalShadowBias, data.lighting.DirectionalShadowSlopeBias);
