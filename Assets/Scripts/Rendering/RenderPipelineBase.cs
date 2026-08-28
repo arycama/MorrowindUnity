@@ -17,6 +17,8 @@ public abstract class RenderPipelineBase : RenderPipeline
 		renderGraph.Dispose();
 	}
 
+	protected virtual void RenderFrame(ScriptableRenderContext context, List<Camera> cameras) { }
+
 	protected abstract void RenderCamera(Camera camera, ScriptableCullingParameters cullingParameters, ScriptableRenderContext context);
 
 	protected override void Render(ScriptableRenderContext context, List<Camera> cameras)
@@ -25,6 +27,8 @@ public abstract class RenderPipelineBase : RenderPipeline
 		renderGraph.Clear();
 
 		//BeginContextRendering(context, cameras);
+
+		RenderFrame(context, cameras);
 		foreach (var camera in cameras)
 		{
 			if (!camera.TryGetCullingParameters(out var cullingParameters))

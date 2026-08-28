@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -14,6 +15,8 @@ public class NewPipeline : RenderPipelineBase
 	private readonly MaterialPropertyBlock propertyBlock;
 	private readonly SetupView setupView;
 	private readonly SetupLighting setupLighting;
+	private readonly RayTracingAccelerationStructure rtas = new();
+	private readonly RayTracingShader shadowRaytracingShader, diffuseRaytracingShader, occlusionRaytracingShader;
 
 	public NewPipeline(NewPipelineAsset asset)
 	{
@@ -23,12 +26,28 @@ public class NewPipeline : RenderPipelineBase
 		propertyBlock = new();
 		setupView = new(renderGraph);
 		setupLighting = new(renderGraph, asset.Lighting);
+
+		shadowRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindShadow");
+		diffuseRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindDiffuse");
+		occlusionRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindOcclusion");
 	}
 
 	protected override void Dispose(bool disposing)
 	{
 		base.Dispose(disposing);
 		setupLighting.Dispose();
+		rtas.Release();
+	}
+
+	protected override void RenderFrame(ScriptableRenderContext context, List<Camera> cameras)
+	{
+		using (var pass = renderGraph.AddRenderPass("Raytracing Update"))
+		{
+			pass.SetRenderFunction(rtas, static (command, data) =>
+			{
+				command.BuildRayTracingAccelerationStructure(data);
+			});
+		}
 	}
 
 	protected override void RenderCamera(Camera camera, ScriptableCullingParameters cullingParameters, ScriptableRenderContext context)
@@ -73,6 +92,17 @@ public class NewPipeline : RenderPipelineBase
 				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
 				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 				command.DrawRendererList(data.rendererList);
+			});
+		}
+
+		var raytracedShadows = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceShadows"));
+
+		using (var pass = renderGraph.AddRenderPass("Raytraced Shadow"))
+		{
+			pass.SetRenderFunction((rtas, shadowRaytracingShader), static (command, data) =>
+			{
+				//command.SetRayTracingShaderPass();
+				//command.DispatchRays(data.shadowRaytracingShader, "RayGeneration", )
 			});
 		}
 
