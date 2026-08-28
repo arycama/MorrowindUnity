@@ -6,13 +6,13 @@ public class TextureHandleSystem
 {
 	public HashSet<int> activeTargets = new();
 
-	public void GetTemporaryRT(CommandBuffer command, int nameID, RenderTargetDescriptor descriptor, ViewInfo viewInfo, int samples = 1)
+	public void GetTemporaryRT(CommandBuffer command, int nameID, RenderTargetDescriptor descriptor, ViewInfo viewInfo, int samples = 1, bool isUav = false)
 	{
 		var wasAdded = activeTargets.Add(nameID);
 		if (!wasAdded)
 			Debug.LogError($"Adding an already active texture {nameID} {descriptor}");
 
-		command.GetTemporaryRT(nameID, descriptor.GetRenderTextureDescriptor(samples, viewInfo));
+		command.GetTemporaryRT(nameID, descriptor.GetRenderTextureDescriptor(viewInfo, samples, isUav));
 	}
 
 	public void ReleaseTemporaryRT(CommandBuffer command, int nameID)

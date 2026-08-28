@@ -37,26 +37,26 @@ Shader "Terrain"
 			ENDHLSL
 		}
 
-		// Pass
-  //       {
-  //           Name "RaytracedTransmittance"
-  //           Tags{ "LightMode" = "RaytracedTransmittance" }
+		Pass
+        {
+            Name "RaytracedTransmittance"
+            Tags{ "LightMode" = "RaytracedTransmittance" }
 
-  //           HLSLPROGRAM
-  //           #pragma raytracing Raytracing
-  //           #include "TerrainRaytracing.hlsl"
-  //           ENDHLSL
-  //       }
+            HLSLPROGRAM
+            #pragma raytracing Raytracing
+            #include "TerrainRaytracing.hlsl"
+            ENDHLSL
+        }
 
-		// Pass
-  //       {
-  //           Name "RaytracedDiffuse"
-  //           Tags{ "LightMode" = "RaytracedDiffuse" }
+		Pass
+        {
+            Name "RaytracedLuminance"
+            Tags{ "LightMode" = "RaytracedLuminance" }
 
-  //           HLSLPROGRAM
-  //           #pragma raytracing Raytracing
-  //           #include "TerrainRaytracingLuminance.hlsl"
-  //           ENDHLSL
-  //       }
+            HLSLPROGRAM
+            #pragma raytracing Raytracing
+            #include "TerrainRaytracingLuminance.hlsl"
+            ENDHLSL
+        }
 	}
 }

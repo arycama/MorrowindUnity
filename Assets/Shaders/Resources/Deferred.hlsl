@@ -1,9 +1,6 @@
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/GBuffer.hlsl"
 #include "Assets/Shaders/Common.hlsl"
 
-Texture2D<float> ScreenSpaceOcclusion;
-Texture2D<float3> ScreenSpaceDiffuse;
-
 #ifdef MSAA_ON
 	Texture2DMS<float4, 8> _UnityFBInput0;
 	Texture2DMS<float4, 8> _UnityFBInput1;
@@ -54,11 +51,12 @@ float4 Fragment(FragmentInput input) : SV_Target
 	N = -FromToRotationZ(-V, N, false);
 	
 	float3 result = GetLuminanceAndFog(float4(albedo, 1.0), 0.0, N, input.position.xy, viewPosition).rgb;
+	float occlusion = 1.0;
 	
-	#ifdef RAYTRACING_ON
-		//float occlusion = ScreenSpaceOcclusion[input.position.xy];
-		//result += ScreenSpaceDiffuse[input.position.xy] * albedoMetallic.rgb;
+	#ifdef SCREEN_SPACE_SHADOWS
+		occlusion = ScreenSpaceOcclusion[input.position.xy];
+		result += ScreenSpaceDiffuse[input.position.xy] * albedo;
 	#endif
 	
-	return float4(result, FogFactor(viewPosition));
+	return float4(result, 1.0 - (occlusion * (1.0 - FogFactor(viewPosition))));
 }

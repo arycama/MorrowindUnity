@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using Unmath;
@@ -16,6 +15,7 @@ public class RenderGraph : IDisposable
 	private readonly TextureHandleSystem textureHandleSystem = new();
 	private readonly NativeRenderPassSystem nativeRenderPassSystem = new();
 	private readonly PassBuilder builder;
+	public int FrameIndex { get; private set; }
 
 	public RenderGraph()
 	{
@@ -42,7 +42,6 @@ public class RenderGraph : IDisposable
 
 	public void SetRenderPass(PassBuilder builder)
 	{
-		// Set resources
 		var inputStart = handles.Count;
 		foreach (var resource in builder.Resources)
 		{
@@ -50,21 +49,32 @@ public class RenderGraph : IDisposable
 			handles.Add(resource);
 		}
 
+		var resourceRange = inputStart..handles.Count;
+
 		if (builder.DepthStencil.index != -1)
 			SetResourceWriteIndex(builder.DepthStencil, builder.Index);
 
-		// Set outputs
 		foreach (var output in builder.Outputs)
 			SetResourceWriteIndex(output, builder.Index);
 
-		// Set inputs
 		foreach (var input in builder.Inputs)
 			SetResourceWriteIndex(input, builder.Index);
+
+		// UAV resources are handled specially
+		var uavStart = handles.Count;
+		foreach (var resource in builder.UavOutputs)
+		{
+			handles.Add(resource);
+			SetResourceWriteIndex(resource, builder.Index);
+		}
+
+		var uavResourceRange = uavStart..handles.Count;
 
 		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(builder);
 
 		var renderPass = builder.RenderPass;
-		renderPass.ResourceRange = inputStart..handles.Count;
+		renderPass.ResourceRange = resourceRange;
+		renderPass.UavResourceRange = uavResourceRange;
 		renderPass.IsNewSubPass = isNewSubPass;
 		renderPass.ViewHandle = builder.ViewHandle;
 		renderPass.Name = builder.Name;
@@ -81,7 +91,7 @@ public class RenderGraph : IDisposable
 
 	private void SetResourceWriteIndex(TextureHandle handle, int index)
 	{
-		var target = targets[handle];
+		ref var target = ref targets[handle];
 
 		// Track the first pass this target is written to so we know when to clear. This also allows allocation to be skipped for textures that are never written to
 		if (target.firstWriteIndex == -1)
@@ -93,7 +103,6 @@ public class RenderGraph : IDisposable
 		// Writes are also treataed as reads for the purposes of resource tracking, this stops a texture from being discarded as a future write (Eg a 2nd pass to the same RT) would not be treated as a read otherwise, and would cause the texture to be discarded after the first pass
 		// TODO: This might not be neccessary and might make culling passes not possible?
 		target.lastReadIndex = index;
-		targets[handle] = target;
 	}
 
 	public void ExportResource(TextureHandle handle, RenderTargetIdentifier id)
@@ -113,6 +122,122 @@ public class RenderGraph : IDisposable
 		return new(index);
 	}
 
+	private void AllocateResource(CommandBuffer command, ref RenderTargetInfo target, ViewInfo viewInfo, bool isUav = false, int samples = 1)
+	{
+		target.resourceIndex = resources.Count;
+		textureHandleSystem.GetTemporaryRT(command, target.propertyId, target.descriptor, viewInfo, samples, isUav);
+		resources.Add(target.propertyId);
+	}
+
+	private void BeginNativeRenderPass(CommandBuffer command, int renderPassIndex, IRenderPass renderPass)
+	{
+		var nativePassDesc = nativeRenderPassSystem.GetDescriptor(renderPass.NativePassIndex);
+		var viewInfo = viewInfos[renderPass.ViewHandle.index];
+
+		// Resolve the attachments to their final values
+		var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
+		foreach (var attachment in nativePassDesc.attachments)
+		{
+			ref var target = ref targets[attachment];
+			var attachmentDesc = new AttachmentDescriptor
+			{
+				graphicsFormat = target.descriptor.format
+			};
+
+			// Load the target if it has been written to before this renderpass, otherwise clear it if required
+			var isFirstWrite = target.firstWriteIndex >= renderPassIndex;
+			if (isFirstWrite)
+			{
+				if (target.descriptor.clear)
+				{
+					attachmentDesc.loadAction = RenderBufferLoadAction.Clear;
+					attachmentDesc.clearColor = target.descriptor.clearColor;
+					attachmentDesc.clearDepth = target.descriptor.clearDepth;
+					attachmentDesc.clearStencil = target.descriptor.clearStencil;
+				}
+				else
+					attachmentDesc.loadAction = RenderBufferLoadAction.DontCare;
+			}
+			else
+			{
+				// If this target has been written previously, it must be loaded
+				attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
+			}
+
+			var isColor = target.descriptor.format switch
+			{
+				GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
+				_ => true,
+			};
+
+			// If this is the last pass, it needs to be resolved
+			var requiresResolve = viewInfo.samples > 1 && nativePassDesc.passEndIndex == target.lastWriteIndex && isColor;
+			var requiresMsaaStore = viewInfo.samples > 1 && (nativePassDesc.passEndIndex < target.lastWriteIndex || nativePassDesc.passEndIndex == target.lastWriteIndex) && !isColor;
+			var requiresStore = target.lastReadIndex > nativePassDesc.passEndIndex || target.isExported;
+
+			if (requiresResolve)
+			{
+				AllocateResource(command, ref target, viewInfo);
+				attachmentDesc.resolveTarget = resources[target.resourceIndex];
+				attachmentDesc.storeAction = RenderBufferStoreAction.Resolve;
+			}
+			else if (requiresMsaaStore)
+			{
+				// Depth targets can't be msaa resolved so we need to store the msaa version.
+				if (isFirstWrite)
+					AllocateResource(command, ref target, viewInfo, false, viewInfo.samples);
+
+				attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
+			}
+			else if (requiresStore)
+			{
+				// A store is required if the target is read outside of this nativePass, or it is exported
+				if (!target.isExported && isFirstWrite)
+					AllocateResource(command, ref target, viewInfo, false, 1);
+
+				attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
+			}
+			else
+			{
+				attachmentDesc.storeAction = RenderBufferStoreAction.DontCare;
+			}
+
+			_ = attachments.Add(attachmentDesc);
+		}
+
+		Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(nativePassDesc.debugName)];
+		_ = Encoding.UTF8.GetBytes(nativePassDesc.debugName, debugNameUtf8);
+
+		command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, 1, viewInfo.samples, attachments.Span.AsArray(), nativePassDesc.depthIndex, -1, nativePassDesc.subpasses, debugNameUtf8);
+	}
+
+	private void EndNativeRenderPass(CommandBuffer command, int lastNativePass, int passIndex)
+	{
+		command.EndRenderPass();
+
+		// Free any resources from the previous pass if possible
+		var nativePassDesc = nativeRenderPassSystem.GetDescriptor(lastNativePass);
+		foreach (var attachment in nativePassDesc.attachments)
+		{
+			ref var target = ref targets[attachment];
+
+			// Exported targets should never be released
+			if (target.isExported)
+				continue;
+
+			// If the target needs to be read later, it can't be released yet
+			if (target.lastReadIndex > passIndex)
+				continue;
+
+			// Don't release targets that were never assigned
+			if (target.resourceIndex == -1)
+				continue;
+
+			textureHandleSystem.ReleaseTemporaryRT(command, target.propertyId);
+			target.resourceIndex = -1;
+		}
+	}
+
 	public void Execute(CommandBuffer command)
 	{
 		nativeRenderPassSystem.CloseIfNeeded(renderPasses.Count);
@@ -126,141 +251,48 @@ public class RenderGraph : IDisposable
 				// End current pass if needed
 				if (lastNativePass != -1)
 				{
-					command.EndRenderPass();
+					EndNativeRenderPass(command, lastNativePass, i - 1);
 					lastNativePass = -1;
 				}
 
 				if (renderPass.NativePassIndex > -1)
 				{
-					var nativePassDesc = nativeRenderPassSystem.GetDescriptor(renderPass.NativePassIndex);
-					var attachmentHandles = nativePassDesc.attachments;
-					var viewInfo = viewInfos[renderPass.ViewHandle.index];
-
-					// Resolve the attachments to their final values
-					var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
-					foreach (var attachment in attachmentHandles)
-					{
-						ref var target = ref targets[attachment];
-						var attachmentDesc = new AttachmentDescriptor
-						{
-							graphicsFormat = target.descriptor.format
-						};
-
-						// Load the target if it has been written to before this renderpass, otherwise clear it if required
-						var isFirstWrite = target.firstWriteIndex >= i && target.firstWriteIndex <= nativePassDesc.passEndIndex;
-						if (isFirstWrite)
-						{
-							if (target.descriptor.clear)
-							{
-								attachmentDesc.loadAction = RenderBufferLoadAction.Clear;
-								attachmentDesc.clearColor = target.descriptor.clearColor;
-								attachmentDesc.clearDepth = target.descriptor.clearDepth;
-								attachmentDesc.clearStencil = target.descriptor.clearStencil;
-							}
-							else
-								attachmentDesc.loadAction = RenderBufferLoadAction.DontCare;
-						}
-						else
-						{
-							// If this target has been written previously, it must be loaded
-							attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
-						}
-
-						var isColor = target.descriptor.format switch
-						{
-							GraphicsFormat.D16_UNorm or GraphicsFormat.D24_UNorm or GraphicsFormat.D32_SFloat or GraphicsFormat.D16_UNorm_S8_UInt or GraphicsFormat.D24_UNorm_S8_UInt or GraphicsFormat.D32_SFloat_S8_UInt or GraphicsFormat.S8_UInt => false,
-							_ => true,
-						};
-
-						// If this is the last pass, it needs to be resolved
-						var requiresResolve = viewInfo.samples > 1 && nativePassDesc.passEndIndex == target.lastWriteIndex && isColor;
-						if (requiresResolve)
-						{
-							target.resourceIndex = resources.Count;
-							textureHandleSystem.GetTemporaryRT(command, target.propertyId, target.descriptor, viewInfo, 1);
-							resources.Add(target.propertyId);
-							attachmentDesc.resolveTarget = resources[target.resourceIndex];
-							attachmentDesc.storeAction = RenderBufferStoreAction.Resolve;
-						}
-						else
-						{
-							// Depth targets can't be msaa resolved so we need to store the msaa version.
-							var requiresMsaaStore = viewInfo.samples > 1 && (nativePassDesc.passEndIndex < target.lastWriteIndex || nativePassDesc.passEndIndex == target.lastWriteIndex && !isColor);
-							if (requiresMsaaStore)
-							{
-								if (isFirstWrite)
-								{
-									target.resourceIndex = resources.Count;
-									textureHandleSystem.GetTemporaryRT(command, target.propertyId, target.descriptor, viewInfo, viewInfo.samples);
-									resources.Add(target.propertyId);
-								}
-
-								attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
-							}
-							else
-							{
-								// A store is required if the target is read outside of this nativePass, or it is exported
-								var requiresStore = target.lastReadIndex > nativePassDesc.passEndIndex || target.isExported;
-								if (requiresStore)
-								{
-									if (target.isExported)
-									{
-										attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
-									}
-									else
-									{
-										if (isFirstWrite)
-										{
-											target.resourceIndex = resources.Count;
-											textureHandleSystem.GetTemporaryRT(command, target.propertyId, target.descriptor, viewInfo, 1);
-											resources.Add(target.propertyId);
-										}
-
-										attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
-									}
-								}
-								else
-								{
-									attachmentDesc.storeAction = RenderBufferStoreAction.DontCare;
-								}
-							}
-						}
-
-						_ = attachments.Add(attachmentDesc);
-
-						// If this attachment is loaded and does not need to be read outside of this pass, it can be released
-						if (!isFirstWrite && target.lastReadIndex <= nativePassDesc.passEndIndex)
-						{
-							textureHandleSystem.ReleaseTemporaryRT(command, target.propertyId);
-						}
-					}
-
-					Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(nativePassDesc.debugName)];
-					_ = Encoding.UTF8.GetBytes(nativePassDesc.debugName, debugNameUtf8);
-
-					command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, 1, viewInfo.samples, attachments.Span.AsArray(), nativePassDesc.depthIndex, -1, nativePassDesc.subpasses, debugNameUtf8);
+					BeginNativeRenderPass(command, i, renderPass);
 					lastNativePass = renderPass.NativePassIndex;
 				}
 			}
 			else if (renderPass.IsNewSubPass)
 				command.NextSubPass();
 
+			// UAV resources are handled seperately so we need to write them here
+			foreach (var input in handles[renderPass.UavResourceRange])
+			{
+				ref var target = ref targets[input];
+
+				// If this is the first time it is written, we need to allocate a texture
+				if (i == target.firstWriteIndex)
+				{
+					var viewInfo = viewInfos[renderPass.ViewHandle.index];
+					AllocateResource(command, ref target, viewInfo, true, 1);
+				}
+
+				var resource = resources[target.resourceIndex];
+				command.SetGlobalTexture(target.propertyId, resource);
+			}
+
 			// Set resources. Note this needs to happen after allocation, since we free any resources after this, and we don't want to accidentally free a resource that is being read
 			foreach (var input in handles[renderPass.ResourceRange])
 			{
-				var target = targets[input];
-				if (target.resourceIndex == -1)
-				{
-					Debug.LogError($"Pass {renderPass.Name} couldn't find resource for descriptor {target.descriptor}");
-					return;
-				}
-
+				ref var target = ref targets[input];
 				var resource = resources[target.resourceIndex];
 				command.SetGlobalTexture(target.propertyId, resource);
 
 				// If this is the last time a resource is read, it can be freed for the next pass
 				if (i == target.lastReadIndex && !target.isExported)
+				{
 					textureHandleSystem.ReleaseTemporaryRT(command, target.propertyId);
+					target.resourceIndex = -1;
+				}
 			}
 
 			foreach (var keyword in renderPass.Keywords)
@@ -272,9 +304,27 @@ public class RenderGraph : IDisposable
 
 			foreach (var keyword in renderPass.Keywords)
 				command.DisableKeyword(keyword);
+
+			// Free any UAVs. This needs to be done after the pass, otherwise we might allocate and free a texture before the pass starts, allowing another UAV to be assigned to the same texture
+			foreach (var input in handles[renderPass.UavResourceRange])
+			{
+				ref var target = ref targets[input];
+
+				// If this is the last time a resource is read, it can be freed for the next pass
+				if (i == target.lastReadIndex && !target.isExported)
+				{
+					textureHandleSystem.ReleaseTemporaryRT(command, target.propertyId);
+					target.resourceIndex = -1;
+				}
+			}
 		}
 
+		if (lastNativePass != -1)
+			EndNativeRenderPass(command, lastNativePass, renderPasses.Count - 1);
+
 		textureHandleSystem.ReleaseRemainingTargets(command);
+
+		FrameIndex++;
 	}
 
 	public void Clear()

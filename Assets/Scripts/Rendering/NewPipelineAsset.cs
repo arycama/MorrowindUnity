@@ -5,6 +5,7 @@ using UnityEngine.Rendering;
 public class NewPipelineAsset : RenderPipelineAsset<NewPipeline>
 {
 	[field: SerializeField, Pow2(8)] public int Samples { get; private set; } = 1;
+	[field: SerializeField] public LayerMask RayTracingLayerMask { get; private set; } = ~0;
 	[field: SerializeField] public LightingSettings Lighting { get; private set; }
 
 	[SerializeField] private DefaultPipelineMaterials defaultMaterials = new();

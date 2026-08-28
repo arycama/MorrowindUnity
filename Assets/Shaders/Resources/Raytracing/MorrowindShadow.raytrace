@@ -3,7 +3,7 @@
 
 #pragma max_recursion_depth 1
 
-RWTexture2D<float> HitResult;
+RWTexture2D<float> ScreenSpaceShadows;
 
 [shader("miss")]
 void MissShader(inout RayTransmittancePayload payload : SV_RayPayload)
@@ -51,5 +51,5 @@ void RayGeneration()
 		TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 0, ray, payload);
 	}
 	
-	HitResult[position] = payload.transmittance;
+	ScreenSpaceShadows[position] = payload.transmittance;
 }

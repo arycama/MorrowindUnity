@@ -31,15 +31,44 @@ public class SetupView : IDisposable
 			{
 				var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
 				var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
-				var viewToWorld = Float4x4.Rotate(data.camera.transform.WorldRotation());
-				var worldToView = Float4x4.Rotate(data.camera.transform.WorldRotation().Inverse);
-				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, data.camera.nearClipPlane, data.camera.farClipPlane, 0, data.isFlipped);
-				var worldToClip = viewToClip.Mul(worldToView);
-				var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
-
 				var viewSize = new Int2(data.camera.pixelWidth, data.camera.pixelHeight);
 				var near = data.camera.nearClipPlane;
 				var far = data.camera.farClipPlane;
+
+				// Screen
+				var screenToPixel = Float4x4.Scale(new Float3((Float2)viewSize, 1));
+				var pixelToScreen = Float4x4.Scale(new Float3(1 / (Float2)viewSize, 1));
+
+				// Clip
+				var clipToScreen = Float4x4.ScaleOffset(new Float3(0.5f, -0.5f, 1), new Float2(0.5f, 0).xxy);
+				var screenToClip = Float4x4.ScaleOffset(new Float3(2, -2, 1), new Float3(-1, 1, 0));
+				var clipToPixel = screenToPixel.Mul(clipToScreen);
+				var pixelToClip = screenToClip.Mul(pixelToScreen);
+
+				// View
+				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, near, far);
+				var clipToView = Float4x4.PerspectiveReverseZInverse(tanHalfFov, near, far);
+
+				var viewToScreen = clipToScreen.Mul(viewToClip);
+				var screenToView = clipToView.Mul(screenToClip);
+
+				var viewToPixel = screenToPixel.Mul(viewToScreen);
+				var pixelToView = clipToView.Mul(pixelToClip);
+
+				var viewToWorld = Float4x4.Rotate(data.camera.transform.WorldRotation());
+				var worldToView = Float4x4.Rotate(data.camera.transform.WorldRotation().Inverse);
+
+				// World
+				var worldToClip = viewToClip.Mul(worldToView);
+				var clipToWorld = viewToWorld.Mul(clipToView);
+
+				var worldToScreen = clipToScreen.Mul(worldToClip);
+				var screenToWorld = viewToWorld.Mul(screenToView);
+
+				var worldToPixel = screenToPixel.Mul(worldToScreen);
+				var pixelToWorld = viewToWorld.Mul(pixelToView);
+
+				var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
 
 				command.SetBufferData(data.viewDataBuffer, stackalloc[]
 				{(
@@ -47,6 +76,7 @@ public class SetupView : IDisposable
 					viewToClip,
 					worldToView,
 					viewToWorld,
+					pixelToWorld,
 					overlayMatrix,
 					(far - near) * Rcp(near * far), Rcp(far), near, far,
 					(Float2)viewSize, 1.0f / (Float2)viewSize,
@@ -65,6 +95,7 @@ public class SetupView : IDisposable
 		public Float4x4 viewToClip;
 		public Float4x4 worldToView;
 		public Float4x4 viewToWorld;
+		public Float4x4 pixelToWorld;
 		public Float4x4 overlayMatrix;
 		public float Item5;
 		public float Item6;

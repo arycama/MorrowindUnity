@@ -78,6 +78,7 @@ cbuffer ViewData
 	matrix ViewToClip;
 	matrix WorldToView;
 	matrix ViewToWorld;
+	matrix PixelToWorld;
 	matrix UiOverlayMatrix;
 	float LinearDepthScale, LinearDepthOffset, Near, Far;
 	float2 ViewSize;
@@ -90,7 +91,6 @@ cbuffer ViewData
 
 matrix ScreenToWorld;
 matrix WorldToPreviousScreen;
-matrix PixelToWorld;
 
 //cbuffer CascadeData
 //{
@@ -131,8 +131,13 @@ Texture2D<float> SunShadow;
 Texture2DArray<uint> VisibleLightBits;
 Texture2DArray<float> PointShadows;
 Texture3D<float4> VolumetricLighting;
-Texture2D<float> ScreenShadows;
 Texture2D<float3> CameraColor;
+
+#ifdef SCREEN_SPACE_SHADOWS
+	Texture2D<float> ScreenSpaceShadows;
+	Texture2D<float> ScreenSpaceOcclusion;
+	Texture2D<float3> ScreenSpaceDiffuse;
+#endif
 
 #ifdef MSAA
 	Texture2DMS<float, 8> CameraDepth;
@@ -264,7 +269,7 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, o
 	
 	// Shadow
 	#ifdef SCREEN_SPACE_SHADOWS
-		illuminance *= ScreenShadows[screenPosition.xy];
+		illuminance *= ScreenSpaceShadows[screenPosition.xy];
 	#else
 		#ifdef SHADOWS_ON
 			float fade = saturate(viewPosition.z * SunShadowFadeScale + SunShadowFadeOffset);

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine.Rendering;
 
+[DebuggerDisplay("{Name}, resources({ResourceRange}), uavs({UavResourceRange}), viewHandle({ViewHandle}), nativePass({NativePassIndex}), isNewSubPass({IsNewSubPass}), keywords({Keywords})")]
 public class RenderPass<T> : IRenderPass
 {
 	private readonly T data;
@@ -15,6 +17,7 @@ public class RenderPass<T> : IRenderPass
 
 	public string Name { get; set; }
 	public Range ResourceRange { get; set; }
+	public Range UavResourceRange { get; set; }
 	public ViewHandle ViewHandle { get; set; }
 	public int NativePassIndex { get; set; }
 	public bool IsNewSubPass { get; set; }

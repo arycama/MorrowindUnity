@@ -28,7 +28,7 @@ public readonly struct RenderTargetDescriptor
 		return $"{viewHandle} {format}, clear: ({clear}, color: {clearColor}, depth: {clearDepth}, stencil {clearStencil})";
 	}
 
-	public RenderTextureDescriptor GetRenderTextureDescriptor(int samples, ViewInfo viewInfo)
+	public RenderTextureDescriptor GetRenderTextureDescriptor(ViewInfo viewInfo, int samples = 1, bool isUav = false)
 	{
 		// Otherwise we need to create a new resource
 		var descriptor = new RenderTextureDescriptor
@@ -71,6 +71,9 @@ public readonly struct RenderTargetDescriptor
 
 		descriptor.msaaSamples = samples;
 		descriptor.bindMS = samples > 1;
+
+		if (isUav)
+			descriptor.enableRandomWrite = true;
 
 		return descriptor;
 	}

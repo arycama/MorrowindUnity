@@ -3,7 +3,7 @@
 
 #pragma max_recursion_depth 1
 
-RWTexture2D<float> HitResult;
+RWTexture2D<float> ScreenSpaceOcclusion;
 
 [shader("miss")]
 void MissShader(inout RayTransmittancePayload payload : SV_RayPayload)
@@ -46,8 +46,8 @@ void RayGeneration()
 		RayDesc ray;
 		ray.Origin = worldPosition;
 		ray.Direction = L;
-		ray.TMin = 0.001;
-		ray.TMax = 64;
+		ray.TMin = 0.1;
+		ray.TMax = 5.0 * 69.99104;
 		
 		uint flags = RAY_FLAG_CULL_BACK_FACING_TRIANGLES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
 		TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 0, ray, payload);
@@ -55,5 +55,5 @@ void RayGeneration()
 		visibility += payload.transmittance;
 	}
 	
-	HitResult[position] = visibility / samples;
+	ScreenSpaceOcclusion[position] = visibility / samples;
 }

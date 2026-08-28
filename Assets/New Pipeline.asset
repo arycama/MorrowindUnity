@@ -13,6 +13,9 @@ MonoBehaviour:
   m_Name: New Pipeline
   m_EditorClassIdentifier: Rendering::NewPipelineAsset
   <Samples>k__BackingField: 1
+  <RayTracingLayerMask>k__BackingField:
+    serializedVersion: 2
+    m_Bits: 7681
   <Lighting>k__BackingField:
     <MicroShadows>k__BackingField: 1
     <SunAngularDiameter>k__BackingField: 0.52

@@ -18,9 +18,9 @@ Shader "Hidden/Morrowind Deferred"
             #pragma multi_compile _ RAYTRACING_ON
             #pragma multi_compile _ MSAA_ON
 
-            #ifdef RAYTRACING_ON
+            //#ifdef RAYTRACING_ON
                 #define SCREEN_SPACE_SHADOWS
-            #endif
+            //#endif
 
             #include "Deferred.hlsl"
             ENDHLSL

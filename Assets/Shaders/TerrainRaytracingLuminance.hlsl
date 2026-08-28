@@ -11,6 +11,13 @@ cbuffer UnityPerMaterial
 
 float4 _Control_TexelSize;
 
+float4 BilinearWeights(float2 uv, float2 textureSize)
+{
+	float2 localUv = frac(uv * textureSize - 0.5 + rcp(512.0));
+	float4 weights = localUv.xxyy * float4(-1, 1, 1, -1) + float4(1, 0, 0, 1);
+	return weights.zzww * weights.xyyx;
+}
+
 [shader("closesthit")]
 void Raytracing(inout RayColorPayload payload : SV_RayPayload, AttributeData attribs : SV_IntersectionAttributes)
 {

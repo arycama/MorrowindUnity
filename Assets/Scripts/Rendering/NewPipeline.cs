@@ -6,6 +6,9 @@ using UnityEngine.Rendering;
 
 public class NewPipeline : RenderPipelineBase
 {
+	private static readonly IndexedString blueNoise2DIds = new("STBN/stbn_vec2_2Dx1D_128x128x64_", 64);
+	private static readonly int BlueNoise2DId = Shader.PropertyToID("BlueNoise2D");
+
 	private static readonly int
 		viewDataId = Shader.PropertyToID("ViewData"),
 		environmentDataId = Shader.PropertyToID("EnvironmentData");
@@ -15,7 +18,7 @@ public class NewPipeline : RenderPipelineBase
 	private readonly MaterialPropertyBlock propertyBlock;
 	private readonly SetupView setupView;
 	private readonly SetupLighting setupLighting;
-	private readonly RayTracingAccelerationStructure rtas = new();
+	private readonly RayTracingAccelerationStructure rtas;
 	private readonly RayTracingShader shadowRaytracingShader, diffuseRaytracingShader, occlusionRaytracingShader;
 
 	public NewPipeline(NewPipelineAsset asset)
@@ -30,6 +33,9 @@ public class NewPipeline : RenderPipelineBase
 		shadowRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindShadow");
 		diffuseRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindDiffuse");
 		occlusionRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindOcclusion");
+
+		var rasSettings = new RayTracingAccelerationStructure.Settings(RayTracingAccelerationStructure.ManagementMode.Automatic, RayTracingAccelerationStructure.RayTracingModeMask.Everything, asset.RayTracingLayerMask);
+		rtas = new RayTracingAccelerationStructure(rasSettings);
 	}
 
 	protected override void Dispose(bool disposing)
@@ -59,14 +65,14 @@ public class NewPipeline : RenderPipelineBase
 		var viewData = setupView.Render(camera);
 		var (environmentData, sunShadow) = setupLighting.Render(camera, cullingResults, context, viewData);
 
-		var viewInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
-		var cameraDepth = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.D32_SFloat_S8_UInt, true), Shader.PropertyToID("CameraDepth"));
-		var albedoNormal = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"));
-		var cameraColor = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.B10G11R11_UFloatPack32, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
+		var viewHandle = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
+		var cameraDepth = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt, true), Shader.PropertyToID("CameraDepth"));
+		var albedoNormal = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"));
+		var cameraColor = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
 
 		using (var pass = renderGraph.AddRenderPass("Terrain"))
 		{
-			pass.ViewHandle = viewInfo;
+			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutputs(stackalloc[] { albedoNormal, cameraColor });
 
@@ -81,7 +87,7 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("GBuffer"))
 		{
-			pass.ViewHandle = viewInfo;
+			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutputs(stackalloc[] { albedoNormal, cameraColor });
 
@@ -95,20 +101,66 @@ public class NewPipeline : RenderPipelineBase
 			});
 		}
 
-		var raytracedShadows = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceShadows"));
+		var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
+		using (var pass = renderGraph.AddRenderPass("Raytraced Occlusion"))
+		{
+			pass.ViewHandle = viewHandle;
+			pass.AddUavOutput(raytracedOcclusion);
+			pass.AddResources(stackalloc[] { cameraDepth });
 
+			var noiseIndex = renderGraph.FrameIndex % 64;
+			var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
+
+			pass.SetRenderFunction((rtas, occlusionRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
+			{
+				command.SetRayTracingTextureParam(data.occlusionRaytracingShader, "BlueNoise2D", data.blueNoise2D);
+				command.SetRayTracingShaderPass(data.occlusionRaytracingShader, "RaytracedTransmittance");
+				command.SetRayTracingAccelerationStructure(data.occlusionRaytracingShader, "SceneRaytracingAccelerationStructure", data.rtas);
+				command.DispatchRays(data.occlusionRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
+			});
+		}
+
+		var raytracedShadows = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceShadows"));
 		using (var pass = renderGraph.AddRenderPass("Raytraced Shadow"))
 		{
-			pass.SetRenderFunction((rtas, shadowRaytracingShader), static (command, data) =>
+			pass.ViewHandle = viewHandle;
+			pass.AddUavOutput(raytracedShadows);
+			pass.AddResources(stackalloc[] { cameraDepth, albedoNormal });
+
+			var noiseIndex = renderGraph.FrameIndex % 64;
+			var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
+
+			pass.SetRenderFunction((rtas, shadowRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{
-				//command.SetRayTracingShaderPass();
-				//command.DispatchRays(data.shadowRaytracingShader, "RayGeneration", )
+				command.SetRayTracingTextureParam(data.shadowRaytracingShader, "BlueNoise2D", data.blueNoise2D);
+				command.SetRayTracingShaderPass(data.shadowRaytracingShader, "RaytracedTransmittance");
+				command.SetRayTracingAccelerationStructure(data.shadowRaytracingShader, "SceneRaytracingAccelerationStructure", data.rtas);
+				command.DispatchRays(data.shadowRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
+			});
+		}
+
+		var raytracedDiffuse = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("ScreenSpaceDiffuse"));
+		using (var pass = renderGraph.AddRenderPass("Raytraced Diffuse"))
+		{
+			pass.ViewHandle = viewHandle;
+			pass.AddUavOutput(raytracedDiffuse);
+			pass.AddResources(stackalloc[] { cameraDepth, albedoNormal });
+
+			var noiseIndex = renderGraph.FrameIndex % 64;
+			var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
+
+			pass.SetRenderFunction((rtas, diffuseRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
+			{
+				command.SetRayTracingTextureParam(data.diffuseRaytracingShader, "BlueNoise2D", data.blueNoise2D);
+				command.SetRayTracingShaderPass(data.diffuseRaytracingShader, "RaytracedLuminance");
+				command.SetRayTracingAccelerationStructure(data.diffuseRaytracingShader, "SceneRaytracingAccelerationStructure", data.rtas);
+				command.DispatchRays(data.diffuseRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
 		}
 
 		using (var pass = renderGraph.AddRenderPass("Deferred"))
 		{
-			pass.ViewHandle = viewInfo;
+			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
 			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
@@ -123,6 +175,10 @@ public class NewPipeline : RenderPipelineBase
 			if (asset.Samples > 1)
 				pass.AddKeyword("MSAA_ON");
 
+			pass.AddResource(raytracedOcclusion);
+			pass.AddResource(raytracedShadows);
+			pass.AddResource(raytracedDiffuse);
+
 			pass.SetRenderFunction((deferredMaterial, viewData, environmentData, propertyBlock), static (command, data) =>
 			{
 				data.propertyBlock.Clear();
@@ -134,7 +190,7 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("Sky"))
 		{
-			pass.ViewHandle = viewInfo;
+			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
 
@@ -149,7 +205,7 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("Forward Transparent"))
 		{
-			pass.ViewHandle = viewInfo;
+			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
 
@@ -180,17 +236,21 @@ public class NewPipeline : RenderPipelineBase
 			// TODO: This should also account for HDR
 			var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 			var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
-			var sceneColor = renderGraph.GetTexture(new(viewInfo, targetFormat), Shader.PropertyToID("SceneColor"));
+			var sceneColor = renderGraph.GetTexture(new(viewHandle, targetFormat), Shader.PropertyToID("SceneColor"));
 			renderGraph.ExportResource(sceneColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
 
 			// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 			TextureHandle sceneDepth = default;
-			var requiresSceneDepth = camera.cameraType == CameraType.SceneView;
+			var requiresSceneDepth = false;
+
+#if UNITY_EDITOR
+			requiresSceneDepth = camera.cameraType == CameraType.SceneView || Handles.ShouldRenderGizmos();
 			if (requiresSceneDepth)
 			{
-				sceneDepth = renderGraph.GetTexture(new(viewInfo, GraphicsFormat.D32_SFloat_S8_UInt), Shader.PropertyToID("SceneDepth"));
+				sceneDepth = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt), Shader.PropertyToID("SceneDepth"));
 				renderGraph.ExportResource(sceneDepth, camera.targetTexture);
 			}
+#endif
 
 			var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
 			if (renderToBackbuffer)

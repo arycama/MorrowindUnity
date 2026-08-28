@@ -3,12 +3,12 @@
 
 #pragma max_recursion_depth 1
 
-RWTexture2D<float3> HitResult;
+RWTexture2D<float3> ScreenSpaceDiffuse;
 
 [shader("miss")]
 void MissShader(inout RayColorPayload payload : SV_RayPayload)
 {
-	payload.color += FogColor * payload.transmittance;
+	payload.color = 0;// += FogColor * payload.transmittance;
 }
 
 [shader("raygeneration")]
@@ -47,7 +47,7 @@ void RayGeneration()
 		RayDesc ray;
 		ray.Origin = worldPosition;
 		ray.Direction = L;
-		ray.TMin = 0.1;
+		ray.TMin = 0.01;
 		ray.TMax = 8192;
 		
 		uint flags = 0;
@@ -56,5 +56,5 @@ void RayGeneration()
 		luminance += payload.color;
 	}
 	
-	HitResult[position] = luminance / samples;
+	ScreenSpaceDiffuse[position] = luminance / samples;
 }

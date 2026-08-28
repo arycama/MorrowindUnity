@@ -77,28 +77,28 @@
 			ENDHLSL
 		}
 
-		// Pass
-  //       {
-  //           Name "RaytracedTransmittance"
-  //           Tags{ "LightMode" = "RaytracedTransmittance" }
+		Pass
+        {
+            Name "RaytracedTransmittance"
+            Tags{ "LightMode" = "RaytracedTransmittance" }
 
-  //           HLSLPROGRAM
-  //           #pragma raytracing Raytracing
-		// 	#pragma multi_compile _ _ALPHABLEND_ON
-  //           #include "SurfaceRaytracing.hlsl"
-  //           ENDHLSL
-  //       }
+            HLSLPROGRAM
+            #pragma raytracing Raytracing
+			#pragma multi_compile _ _ALPHABLEND_ON
+            #include "SurfaceRaytracing.hlsl"
+            ENDHLSL
+        }
 
-		// Pass
-  //       {
-  //           Name "RaytracedDiffuse"
-  //           Tags{ "LightMode" = "RaytracedDiffuse" }
+		Pass
+        {
+            Name "RaytracedLuminance"
+            Tags{ "LightMode" = "RaytracedLuminance" }
 
-  //           HLSLPROGRAM
-  //           #pragma raytracing Raytracing
-		// 	#pragma multi_compile _ _ALPHABLEND_ON
-  //           #include "SurfaceRaytracingLuminance.hlsl"
-  //           ENDHLSL
-  //       }
+            HLSLPROGRAM
+            #pragma raytracing Raytracing
+			#pragma multi_compile _ _ALPHABLEND_ON
+            #include "SurfaceRaytracingLuminance.hlsl"
+            ENDHLSL
+        }
 	}
 }
