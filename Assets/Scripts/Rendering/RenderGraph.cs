@@ -46,7 +46,7 @@ public class RenderGraph : IDisposable
 		var inputStart = handles.Count;
 		foreach (var resource in builder.Resources)
 		{
-			targets[resource.index].lastReadIndex = builder.Index;
+			targets[resource].lastReadIndex = builder.Index;
 			handles.Add(resource);
 		}
 
@@ -61,7 +61,7 @@ public class RenderGraph : IDisposable
 		foreach (var input in builder.Inputs)
 			SetResourceWriteIndex(input, builder.Index);
 
-		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(builder.Name, builder.Index, builder.Resources, builder.Outputs, builder.Inputs, builder.DepthStencil);
+		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(builder);
 
 		var renderPass = builder.RenderPass;
 		renderPass.ResourceRange = inputStart..handles.Count;
@@ -76,12 +76,12 @@ public class RenderGraph : IDisposable
 
 	public bool IsResourceWritten(TextureHandle resource)
 	{
-		return targets[resource.index].lastWriteIndex != -1;
+		return targets[resource].lastWriteIndex != -1;
 	}
 
 	private void SetResourceWriteIndex(TextureHandle handle, int index)
 	{
-		var target = targets[handle.index];
+		var target = targets[handle];
 
 		// Track the first pass this target is written to so we know when to clear. This also allows allocation to be skipped for textures that are never written to
 		if (target.firstWriteIndex == -1)
@@ -93,7 +93,7 @@ public class RenderGraph : IDisposable
 		// Writes are also treataed as reads for the purposes of resource tracking, this stops a texture from being discarded as a future write (Eg a 2nd pass to the same RT) would not be treated as a read otherwise, and would cause the texture to be discarded after the first pass
 		// TODO: This might not be neccessary and might make culling passes not possible?
 		target.lastReadIndex = index;
-		targets[handle.index] = target;
+		targets[handle] = target;
 	}
 
 	public void ExportResource(TextureHandle handle, RenderTargetIdentifier id)
@@ -101,7 +101,7 @@ public class RenderGraph : IDisposable
 		var resourceIndex = resources.Count;
 		resources.Add(id);
 
-		ref var target = ref targets[handle.index];
+		ref var target = ref targets[handle];
 		target.resourceIndex = resourceIndex;
 		target.isExported = true;
 	}
@@ -139,7 +139,7 @@ public class RenderGraph : IDisposable
 					var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
 					foreach (var attachment in attachmentHandles)
 					{
-						ref var target = ref targets[attachment.index];
+						ref var target = ref targets[attachment];
 						var attachmentDesc = new AttachmentDescriptor
 						{
 							graphicsFormat = target.descriptor.format
@@ -245,7 +245,7 @@ public class RenderGraph : IDisposable
 			// Set resources. Note this needs to happen after allocation, since we free any resources after this, and we don't want to accidentally free a resource that is being read
 			foreach (var input in handles[renderPass.ResourceRange])
 			{
-				var target = targets[input.index];
+				var target = targets[input];
 				if (target.resourceIndex == -1)
 				{
 					Debug.LogError($"Pass {renderPass.Name} couldn't find resource for descriptor {target.descriptor}");
