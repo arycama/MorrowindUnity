@@ -1,0 +1,54 @@
+#include "../../Common.hlsl"
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Random.hlsl"
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Raytracing.hlsl"
+
+RWTexture2D<float3> DepthOfField;
+float ApertureRadius, FocusDistance;
+matrix PixelToViewDir;
+
+[shader("miss")]
+void MissShader(inout RayColorPayload payload : SV_RayPayload)
+{
+	payload.color += FogColor * payload.transmittance;
+}
+
+[shader("raygeneration")]
+void RayGeneration()
+{
+	uint2 position = DispatchRaysIndex().xy;
+		
+	float3 worldPosition = MultiplyPointProj(PixelToWorld, float3(position + 0.5, 1.0)).xyz;
+	worldPosition += ViewPosition;
+	
+	float3 worldDir = MultiplyVector(ViewToWorld, MultiplyVector(PixelToViewDir, float3(position + 0.5, 1.0)));
+	worldPosition = FocusDistance * worldDir + ViewPosition;
+	
+	float offset = Noise1D(position.xy);
+	float phi = offset * TwoPi;
+	
+	float3 luminance = 0.0;
+	uint samples = 4;
+	for (uint i = 0; i < samples; i++)
+	{
+		float2 uv = VogelDiskSample(i, samples, phi) * ApertureRadius;
+		float3 rayOrigin = ViewPosition + MultiplyPoint3x4(ViewToWorld, float3(uv, 0));
+		float3 rayDirection = normalize(worldPosition - rayOrigin);
+		
+		RayDesc ray;
+		ray.Origin = rayOrigin;
+		ray.Direction = rayDirection;
+		ray.TMin = 0.1;
+		ray.TMax = 32768;
+		
+		RayColorPayload payload;
+		payload.color = 0.0;
+		payload.transmittance = 1.0;
+		
+		uint flags = 0;
+		TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 0, ray, payload);
+		
+		luminance += payload.color;
+	}
+	
+	DepthOfField[position] = luminance / samples;
+}

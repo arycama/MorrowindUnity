@@ -1,8 +1,6 @@
 #include "../../Common.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Raytracing.hlsl"
 
-#pragma max_recursion_depth 1
-
 RWTexture2D<float> ScreenSpaceShadows;
 
 [shader("miss")]
@@ -45,7 +43,7 @@ void RayGeneration()
 		ray.Origin = worldPosition;
 		ray.Direction = L;
 		ray.TMin = 0.1;
-		ray.TMax = 1e10f;
+		ray.TMax = 8192.0;
 		
 		uint flags = RAY_FLAG_CULL_BACK_FACING_TRIANGLES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
 		TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 0, ray, payload);

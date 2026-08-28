@@ -1,8 +1,6 @@
 #include "../../Common.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Raytracing.hlsl"
 
-#pragma max_recursion_depth 1
-
 RWTexture2D<float> ScreenSpaceOcclusion;
 
 [shader("miss")]

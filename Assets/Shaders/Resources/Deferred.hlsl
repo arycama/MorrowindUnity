@@ -9,6 +9,9 @@
 	Texture2D<float4> _UnityFBInput1;
 #endif
 
+Texture2D<float> ScreenSpaceOcclusion;
+Texture2D<float3> ScreenSpaceDiffuse;
+
 struct FragmentInput
 {
 	float4 position : SV_Position;
@@ -53,8 +56,11 @@ float4 Fragment(FragmentInput input) : SV_Target
 	float3 result = GetLuminanceAndFog(float4(albedo, 1.0), 0.0, N, input.position.xy, viewPosition).rgb;
 	float occlusion = 1.0;
 	
-	#ifdef SCREEN_SPACE_SHADOWS
+	#ifdef RAYTRACED_OCCLUSION
 		occlusion = ScreenSpaceOcclusion[input.position.xy];
+	#endif
+		
+	#ifdef RAYTRACED_DIFFUSE
 		result += ScreenSpaceDiffuse[input.position.xy] * albedo;
 	#endif
 	

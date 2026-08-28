@@ -3,11 +3,12 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
+using Unmath;
 
 public class NewPipeline : RenderPipelineBase
 {
+	private static readonly IndexedString blueNoise1DIds = new("STBN/stbn_vec1_2Dx1D_128x128x64_", 64);
 	private static readonly IndexedString blueNoise2DIds = new("STBN/stbn_vec2_2Dx1D_128x128x64_", 64);
-	private static readonly int BlueNoise2DId = Shader.PropertyToID("BlueNoise2D");
 
 	private static readonly int
 		viewDataId = Shader.PropertyToID("ViewData"),
@@ -19,7 +20,7 @@ public class NewPipeline : RenderPipelineBase
 	private readonly SetupView setupView;
 	private readonly SetupLighting setupLighting;
 	private readonly RayTracingAccelerationStructure rtas;
-	private readonly RayTracingShader shadowRaytracingShader, diffuseRaytracingShader, occlusionRaytracingShader;
+	private readonly RayTracingShader occlusionRaytracingShader, shadowRaytracingShader, diffuseRaytracingShader, depthOfFieldRaytracingShader;
 
 	public NewPipeline(NewPipelineAsset asset)
 	{
@@ -30,9 +31,10 @@ public class NewPipeline : RenderPipelineBase
 		setupView = new(renderGraph);
 		setupLighting = new(renderGraph, asset.Lighting);
 
+		occlusionRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindOcclusion");
 		shadowRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindShadow");
 		diffuseRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindDiffuse");
-		occlusionRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindOcclusion");
+		depthOfFieldRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindDepthOfField");
 
 		var rasSettings = new RayTracingAccelerationStructure.Settings(RayTracingAccelerationStructure.ManagementMode.Automatic, RayTracingAccelerationStructure.RayTracingModeMask.Everything, asset.RayTracingLayerMask);
 		rtas = new RayTracingAccelerationStructure(rasSettings);
@@ -102,8 +104,9 @@ public class NewPipeline : RenderPipelineBase
 		}
 
 		var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
-		using (var pass = renderGraph.AddRenderPass("Raytraced Occlusion"))
+		if (asset.RaytracedOcclusion)
 		{
+			using var pass = renderGraph.AddRenderPass("Raytraced Occlusion");
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedOcclusion);
 			pass.AddResources(stackalloc[] { cameraDepth });
@@ -121,8 +124,9 @@ public class NewPipeline : RenderPipelineBase
 		}
 
 		var raytracedShadows = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceShadows"));
-		using (var pass = renderGraph.AddRenderPass("Raytraced Shadow"))
+		if (asset.RaytracedShadows)
 		{
+			using var pass = renderGraph.AddRenderPass("Raytraced Shadow");
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedShadows);
 			pass.AddResources(stackalloc[] { cameraDepth, albedoNormal });
@@ -140,8 +144,9 @@ public class NewPipeline : RenderPipelineBase
 		}
 
 		var raytracedDiffuse = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("ScreenSpaceDiffuse"));
-		using (var pass = renderGraph.AddRenderPass("Raytraced Diffuse"))
+		if (asset.RaytracedDiffuse)
 		{
+			using var pass = renderGraph.AddRenderPass("Raytraced Diffuse");
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedDiffuse);
 			pass.AddResources(stackalloc[] { cameraDepth, albedoNormal });
@@ -175,9 +180,23 @@ public class NewPipeline : RenderPipelineBase
 			if (asset.Samples > 1)
 				pass.AddKeyword("MSAA_ON");
 
-			pass.AddResource(raytracedOcclusion);
-			pass.AddResource(raytracedShadows);
-			pass.AddResource(raytracedDiffuse);
+			if (renderGraph.IsResourceWritten(raytracedOcclusion))
+			{
+				pass.AddResource(raytracedOcclusion);
+				pass.AddKeyword("RAYTRACED_OCCLUSION");
+			}
+
+			if (renderGraph.IsResourceWritten(raytracedShadows))
+			{
+				pass.AddResource(raytracedShadows);
+				pass.AddKeyword("RAYTRACED_SHADOWS");
+			}
+
+			if (renderGraph.IsResourceWritten(raytracedDiffuse))
+			{
+				pass.AddResource(raytracedDiffuse);
+				pass.AddKeyword("RAYTRACED_DIFFUSE");
+			}
 
 			pass.SetRenderFunction((deferredMaterial, viewData, environmentData, propertyBlock), static (command, data) =>
 			{
@@ -223,6 +242,35 @@ public class NewPipeline : RenderPipelineBase
 				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
 				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 				command.DrawRendererList(data.rendererList);
+			});
+		}
+
+		var raytracedDepthOfField = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("DepthOfField"));
+		if (asset.RaytracedDepthOfField)
+		{
+			using var pass = renderGraph.AddRenderPass("Raytraced Depth of Field");
+			pass.ViewHandle = viewHandle;
+			pass.AddUavOutput(raytracedDepthOfField);
+
+			var noiseIndex = renderGraph.FrameIndex % 64;
+			var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds[noiseIndex]);
+			var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
+
+			var tanHalfFov = Geometry.TanHalfFovDegrees(camera.fieldOfView);
+			var focalLength = 0.5f * (asset.SensorSize / 1000.0f) / tanHalfFov;
+			var apertureRadius = 0.5f * focalLength / asset.Aperture;
+			var pixelToViewDir = Float4x4.PixelToNearClip(new(camera.pixelWidth, camera.pixelHeight), 0f, new(tanHalfFov * camera.aspect, tanHalfFov), true, false);
+
+			pass.SetRenderFunction((rtas, depthOfFieldRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise1D, blueNoise2D, apertureRadius, asset.FocusDistance, pixelToViewDir), static (command, data) =>
+			{
+				command.SetRayTracingTextureParam(data.depthOfFieldRaytracingShader, "BlueNoise1D", data.blueNoise1D);
+				command.SetRayTracingTextureParam(data.depthOfFieldRaytracingShader, "BlueNoise2D", data.blueNoise2D);
+				command.SetRayTracingFloatParam(data.depthOfFieldRaytracingShader, "ApertureRadius", data.apertureRadius);
+				command.SetRayTracingFloatParam(data.depthOfFieldRaytracingShader, "FocusDistance", data.FocusDistance);
+				command.SetRayTracingMatrixParam(data.depthOfFieldRaytracingShader, "PixelToViewDir", data.pixelToViewDir);
+				command.SetRayTracingShaderPass(data.depthOfFieldRaytracingShader, "RaytracedLuminance");
+				command.SetRayTracingAccelerationStructure(data.depthOfFieldRaytracingShader, "SceneRaytracingAccelerationStructure", data.rtas);
+				command.DispatchRays(data.depthOfFieldRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
 		}
 
@@ -282,6 +330,12 @@ public class NewPipeline : RenderPipelineBase
 
 			if (asset.Samples > 1)
 				pass.AddKeyword("MSAA");
+
+			if (renderGraph.IsResourceWritten(raytracedDepthOfField))
+			{
+				pass.AddResource(raytracedDepthOfField);
+				pass.AddKeyword("DEPTH_OF_FIELD");
+			}
 
 			pass.SetRenderFunction((blitMaterial, viewData), static (command, data) =>
 			{

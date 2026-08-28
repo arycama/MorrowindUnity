@@ -1,14 +1,11 @@
 #include "../../Common.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Raytracing.hlsl"
 
-#pragma max_recursion_depth 1
-
 RWTexture2D<float3> ScreenSpaceDiffuse;
 
 [shader("miss")]
 void MissShader(inout RayColorPayload payload : SV_RayPayload)
 {
-	payload.color = 0;// += FogColor * payload.transmittance;
 }
 
 [shader("raygeneration")]
@@ -32,7 +29,7 @@ void RayGeneration()
 	worldPosition += ViewPosition;
 	
 	float3 luminance = 0.0;
-	uint samples = 8;
+	uint samples = 4;
 	for (uint i = 0; i < samples; i++)
 	{
 		RayColorPayload payload;
@@ -47,8 +44,8 @@ void RayGeneration()
 		RayDesc ray;
 		ray.Origin = worldPosition;
 		ray.Direction = L;
-		ray.TMin = 0.01;
-		ray.TMax = 8192;
+		ray.TMin = 0.1;
+		ray.TMax = 8192.0;
 		
 		uint flags = 0;
 		TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 0, ray, payload);

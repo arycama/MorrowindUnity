@@ -5,7 +5,18 @@ using UnityEngine.Rendering;
 public class NewPipelineAsset : RenderPipelineAsset<NewPipeline>
 {
 	[field: SerializeField, Pow2(8)] public int Samples { get; private set; } = 1;
+
+	[field: SerializeField] public float FocusDistance { get; private set; } = 10.0f;
+	[field: SerializeField] public float SensorSize { get; private set; } = 24.0f;
+	[field: SerializeField] public float Aperture { get; private set; } = 1.0f / 16.0f;
+
 	[field: SerializeField] public LayerMask RayTracingLayerMask { get; private set; } = ~0;
+	[field: SerializeField] public bool RaytracedOcclusion { get; private set; }
+	[field: SerializeField] public bool RaytracedShadows { get; private set; }
+	[field: SerializeField] public bool RaytracedDiffuse { get; private set; }
+	[field: SerializeField] public bool RaytracedSpecular { get; private set; }
+	[field: SerializeField] public bool RaytracedDepthOfField { get; private set; }
+
 	[field: SerializeField] public LightingSettings Lighting { get; private set; }
 
 	[SerializeField] private DefaultPipelineMaterials defaultMaterials = new();
@@ -37,6 +48,10 @@ public class NewPipelineAsset : RenderPipelineAsset<NewPipeline>
 	protected override RenderPipeline CreatePipeline()
 	{
 		return new NewPipeline(this);
+	}
+
+	protected override void OnValidate()
+	{
 	}
 
 	public void ReloadRenderPipeline()

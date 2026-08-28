@@ -1,6 +1,7 @@
 #include "../Common.hlsl"
 
 Texture2D<float4> _UnityFBInput0;
+Texture2D<float3> DepthOfField;
 
 float4 Vertex(uint vertexId : SV_VertexID, out float2 uv : TEXCOORD) : SV_Position
 {
@@ -22,14 +23,20 @@ float4 Fragment(float4 position : SV_Position,
 #endif
 	float2 uv : TEXCOORD) : SV_Target
 {
+	float2 coord = position.xy;
+	coord.y = ViewSize.y - coord.y;
+	
 	#ifdef DEPTH
 		#ifdef MSAA
-			float2 coord = position.xy;
-			coord.y = ViewSize.y - coord.y;
+			
 			depth = CameraDepth.Load(coord, 0);
 		#else
 			depth = CameraDepth.Sample(PointClampSampler, uv);
 		#endif
+	#endif
+	
+	#ifdef DEPTH_OF_FIELD
+		return float4(DepthOfField[coord], 1.0);
 	#endif
 	
 	#ifdef DIRECT

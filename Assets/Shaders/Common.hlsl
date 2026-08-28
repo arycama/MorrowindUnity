@@ -135,8 +135,6 @@ Texture2D<float3> CameraColor;
 
 #ifdef SCREEN_SPACE_SHADOWS
 	Texture2D<float> ScreenSpaceShadows;
-	Texture2D<float> ScreenSpaceOcclusion;
-	Texture2D<float3> ScreenSpaceDiffuse;
 #endif
 
 #ifdef MSAA
