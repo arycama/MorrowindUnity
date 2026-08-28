@@ -7,14 +7,14 @@ public class PassBuilder : IDisposable
 	private readonly RenderGraph renderGraph;
 
 	public string Name { get; set; }
-	public int Index { get; set; }
-	public ViewHandle ViewHandle { get; set; }
+	public int Index { get; set; } = -1;
+	public ViewHandle ViewHandle { get; set; } = new(-1);
 	public IRenderPass RenderPass { get; private set; }
 	public List<TextureHandle> Resources { get; } = new();
 	public List<TextureHandle> Inputs { get; } = new();
 	public List<TextureHandle> Outputs { get; } = new();
 	public List<GlobalKeyword> Keywords { get; } = new();
-	public TextureHandle DepthStencil { get; set; }
+	public TextureHandle DepthStencil { get; set; } = new(-1);
 
 	public PassBuilder(RenderGraph renderGraph)
 	{

@@ -37,4 +37,10 @@ public class NewPipelineAsset : RenderPipelineAsset<NewPipeline>
 	{
 		return new NewPipeline(this);
 	}
+
+	public void ReloadRenderPipeline()
+	{
+		// This internally calls RenderPipelineManager.RecreateCurrentPipeline(this), which is internal so we can't call it directly..
+		base.OnValidate();
+	}
 }

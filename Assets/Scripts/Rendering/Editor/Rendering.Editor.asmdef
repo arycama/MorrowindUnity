@@ -1,0 +1,18 @@
+{
+    "name": "Rendering.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:8e1ff6efa79ae2544a781d90dd0390ff"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
