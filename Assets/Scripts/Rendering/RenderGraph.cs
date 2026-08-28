@@ -84,10 +84,11 @@ public partial class RenderGraph : IDisposable
 
 		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(name, index, targets, resources, outputs, inputs);
 
-		renderPassDatas[index].isNewSubPass = isNewSubPass;
-		renderPassDatas[index].viewHandle = viewHandle;
-		renderPassDatas[index].name = name;
-		renderPassDatas[index].nativePassIndex = nativePassIndex;
+		ref var passData = ref renderPassDatas[index];
+		passData.isNewSubPass = isNewSubPass;
+		passData.viewHandle = viewHandle;
+		passData.name = name;
+		passData.nativePassIndex = nativePassIndex;
 
 		this.inputs.Clear();
 		this.outputs.Clear();
@@ -120,8 +121,9 @@ public partial class RenderGraph : IDisposable
 		var resourceIndex = resources.Count;
 		resources.Add(id);
 
-		targets[handle.index].resourceIndex = resourceIndex;
-		targets[handle.index].isExported = true;
+		ref var target = ref targets[handle.index];
+		target.resourceIndex = resourceIndex;
+		target.isExported = true;
 	}
 
 	public ViewHandle AddViewInfo(Int2 size, int samples = 1)
