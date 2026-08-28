@@ -10,32 +10,32 @@ using UnityEngine.Rendering;
 
 public class TerrainFactory
 {
-    [Flags]
-    private enum Directions
-    {
-        None = 0x0,
-        SW = 0x1,
-        S = 0x2,
-        SE = 0x4,
-        W = 0x8,
-        E = 0x20,
-        NW = 0x40,
-        N = 0x80,
-        NE = 0x100
-    };
+	[Flags]
+	private enum Directions
+	{
+		None = 0x0,
+		SW = 0x1,
+		S = 0x2,
+		SE = 0x4,
+		W = 0x8,
+		E = 0x20,
+		NW = 0x40,
+		N = 0x80,
+		NE = 0x100
+	};
 
 	public static void Create(Vector2Int coordinates)
-    {
-        var record = LandRecord.Get(coordinates);
-        var gameObject = new GameObject(coordinates.ToString());
-        gameObject.transform.position = new Vector3(coordinates.x * 8192, 0, coordinates.y * 8192);
+	{
+		var record = LandRecord.Get(coordinates);
+		var gameObject = new GameObject(coordinates.ToString());
+		gameObject.transform.position = new Vector3(coordinates.x * 8192, 0, coordinates.y * 8192);
 
-        var meshFilter = gameObject.AddComponent<MeshFilter>();
+		var meshFilter = gameObject.AddComponent<MeshFilter>();
 
-        var meshRenderer = gameObject.AddComponent<MeshRenderer>();
-        meshRenderer.shadowCastingMode = ShadowCastingMode.TwoSided;
-        meshRenderer.staticShadowCaster = true;
-        meshRenderer.rayTracingMode = RayTracingMode.Static;
+		var meshRenderer = gameObject.AddComponent<MeshRenderer>();
+		meshRenderer.shadowCastingMode = ShadowCastingMode.TwoSided;
+		meshRenderer.staticShadowCaster = true;
+		meshRenderer.rayTracingMode = RayTracingMode.Static;
 
 		meshRenderer.sharedMaterial = new Material(MaterialManager.Instance.TerrainShader)
 		{
@@ -46,40 +46,40 @@ public class TerrainFactory
 		// Generate the mesh
 		int vertexStep = 8192 / 64;
 
-        // Generate vertices and appropriate heights
-        var nextColHeight = record.HeightData.ReferenceHeight;
-        var vertexCount = 65 * 65;
-        var positions = new NativeArray<Vector3>(vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-        var normals = new NativeArray<(sbyte, sbyte, sbyte, sbyte)>(vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-        var uvs = new NativeArray<(ushort, ushort, ushort, ushort)>(vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+		// Generate vertices and appropriate heights
+		var nextColHeight = record.HeightData.ReferenceHeight;
+		var vertexCount = 65 * 65;
+		var positions = new NativeArray<Vector3>(vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+		var normals = new NativeArray<(sbyte, sbyte, sbyte, sbyte)>(vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+		var uvs = new NativeArray<(ushort, ushort, ushort, ushort)>(vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 		var colors = new NativeArray<Color32>(vertexCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
 		// Create mesh with predefined bounds to avoid recalculation
 		var mesh = new Mesh();
 
-        // Create and assign triangle vertices
-        // Configure vertex buffer layout and allocate space
-        Span<VertexAttributeDescriptor> vertexAttributeDescriptors = stackalloc VertexAttributeDescriptor[4];
-        vertexAttributeDescriptors[0] = new(VertexAttribute.Position, VertexAttributeFormat.Float32, 3, 0);
-        vertexAttributeDescriptors[1] = new(VertexAttribute.Normal, VertexAttributeFormat.SNorm8, 4, 1);
-        vertexAttributeDescriptors[2] = new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float16, 4, 2);
-        vertexAttributeDescriptors[3] = new(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4, 3);
+		// Create and assign triangle vertices
+		// Configure vertex buffer layout and allocate space
+		Span<VertexAttributeDescriptor> vertexAttributeDescriptors = stackalloc VertexAttributeDescriptor[4];
+		vertexAttributeDescriptors[0] = new(VertexAttribute.Position, VertexAttributeFormat.Float32, 3, 0);
+		vertexAttributeDescriptors[1] = new(VertexAttribute.Normal, VertexAttributeFormat.SNorm8, 4, 1);
+		vertexAttributeDescriptors[2] = new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float16, 4, 2);
+		vertexAttributeDescriptors[3] = new(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4, 3);
 		mesh.SetVertexBufferParams(vertexCount, vertexAttributeDescriptors.AsNativeArray());
 
 		var recordColors = record.ColorData?.Colors;
 		for (int y = 0, i = 0; y < 65; y++)
-        {
-            var previousHeight = nextColHeight;
-            for (var x = 0; x < 65; x++, i++)
-            {
-                var height = previousHeight + record.HeightData.HeightPoints[i]; // this is the change in elevation from the previous (to the leftt) vertex, multiplied by 8
+		{
+			var previousHeight = nextColHeight;
+			for (var x = 0; x < 65; x++, i++)
+			{
+				var height = previousHeight + record.HeightData.HeightPoints[i]; // this is the change in elevation from the previous (to the leftt) vertex, multiplied by 8
 
-                if (x == 0)
-                {
-                    nextColHeight = height;
-                }
+				if (x == 0)
+				{
+					nextColHeight = height;
+				}
 
-                positions[i] = new Vector3(x * vertexStep, height * 8, y * vertexStep); // Each vertex is 128 game-units apart
+				positions[i] = new Vector3(x * vertexStep, height * 8, y * vertexStep); // Each vertex is 128 game-units apart
 
 				// Generate UV ( every 4 patches should be one UV)
 				var uvX = Mathf.Lerp(1f / 18f, 1 - 1f / 18f, x / 64f);
@@ -87,14 +87,14 @@ public class TerrainFactory
 				var uvZ = x / 64f;
 				var uvW = y / 64f;
 
-                var color = recordColors != null ? recordColors[i] : new Color32(255, 255, 255, 255);
+				var color = recordColors != null ? recordColors[i] : new Color32(255, 255, 255, 255);
 
-                normals[i] = new(record.NormalData.Normals[i * 3 + 0], record.NormalData.Normals[i * 3 + 2], record.NormalData.Normals[i * 3 + 1], 0);
-                uvs[i] = new(Mathf.FloatToHalf(uvX), Mathf.FloatToHalf(uvY), Mathf.FloatToHalf(uvZ), Mathf.FloatToHalf(uvW));
-                colors[i] = color;
-                previousHeight = height;
-            }
-        }
+				normals[i] = new(record.NormalData.Normals[i * 3 + 0], record.NormalData.Normals[i * 3 + 2], record.NormalData.Normals[i * 3 + 1], 0);
+				uvs[i] = new(Mathf.FloatToHalf(uvX), Mathf.FloatToHalf(uvY), Mathf.FloatToHalf(uvZ), Mathf.FloatToHalf(uvW));
+				colors[i] = color;
+				previousHeight = height;
+			}
+		}
 
 		// Assigns the generated vertices to the mesh
 		mesh.SetVertexBufferData(positions, 0, 0, vertexCount, 0);
@@ -107,15 +107,15 @@ public class TerrainFactory
 		mesh.SetIndexBufferParams(indexLength, IndexFormat.UInt16);
 		var indices = new ushort[indexLength];
 
-        var cellsPerRow = 64;
+		var cellsPerRow = 64;
 		for (int ti = 0, vi = 0, y = 0; y < cellsPerRow; y++, vi++)
-        {
-            for (int x = 0; x < cellsPerRow; x++, ti += 6, vi++)
-            {
+		{
+			for (int x = 0; x < cellsPerRow; x++, ti += 6, vi++)
+			{
 				var flip = (x & 1) == (y & 1);
 
-                if (flip)
-                {
+				if (!flip)
+				{
 					indices[ti + 0] = (ushort)(vi);
 					indices[ti + 1] = (ushort)(vi + cellsPerRow + 1);
 					indices[ti + 2] = (ushort)(vi + cellsPerRow + 2);
@@ -123,205 +123,205 @@ public class TerrainFactory
 					indices[ti + 4] = (ushort)(vi + 1);
 					indices[ti + 5] = (ushort)(vi);
 				}
-                else
-                {
-                    indices[ti + 0] = (ushort)(vi);
-                    indices[ti + 1] = (ushort)(vi + cellsPerRow + 1);
-                    indices[ti + 2] = (ushort)(vi + 1);
-                    indices[ti + 3] = (ushort)(vi + 1);
-                    indices[ti + 4] = (ushort)(vi + cellsPerRow + 1);
-                    indices[ti + 5] = (ushort)(vi + cellsPerRow + 2);
-                }
-            }
-        }
+				else
+				{
+					indices[ti + 0] = (ushort)(vi);
+					indices[ti + 1] = (ushort)(vi + cellsPerRow + 1);
+					indices[ti + 2] = (ushort)(vi + 1);
+					indices[ti + 3] = (ushort)(vi + 1);
+					indices[ti + 4] = (ushort)(vi + cellsPerRow + 1);
+					indices[ti + 5] = (ushort)(vi + cellsPerRow + 2);
+				}
+			}
+		}
 
 		// Assigns the generated indices to the mesh
 		mesh.SetIndexBufferData(indices, 0, 0, indices.Length);
 		mesh.SetSubMesh(0, new SubMeshDescriptor(0, indexLength));
-        mesh.RecalculateBounds();
+		mesh.RecalculateBounds();
 
 		gameObject.AddComponent<MeshCollider>().sharedMesh = mesh;
 
 		mesh.UploadMeshData(true);
-        meshFilter.sharedMesh = mesh;
+		meshFilter.sharedMesh = mesh;
 
-        // Remaining steps are for textures only
-        if (record.TextureData == null)
-        {
-            return;
-        }
+		// Remaining steps are for textures only
+		if (record.TextureData == null)
+		{
+			return;
+		}
 
-        // Get the texturedata, and surrounding cells
-        Directions cellDirections = 0;
-        var borderCells = new TextureData[3, 3];
-        for (var y = 0; y < 3; y++)
-        {
-            for (var x = 0; x < 3; x++)
-            {
-                var xCoord = coordinates.x + (x - 1);
-                var yCoord = coordinates.y + (y - 1);
-                var coordinate = new Vector2Int(xCoord, yCoord);
-                LandRecord landRecord;
-                if (LandRecord.Records.TryGetValue(coordinate, out landRecord))
-                {
-                    borderCells[x, y] = landRecord.TextureData;
-                    cellDirections |= (Directions)(Mathf.Pow(2, x + y * 3));
-                }
-            }
-        }
+		// Get the texturedata, and surrounding cells
+		Directions cellDirections = 0;
+		var borderCells = new TextureData[3, 3];
+		for (var y = 0; y < 3; y++)
+		{
+			for (var x = 0; x < 3; x++)
+			{
+				var xCoord = coordinates.x + (x - 1);
+				var yCoord = coordinates.y + (y - 1);
+				var coordinate = new Vector2Int(xCoord, yCoord);
+				LandRecord landRecord;
+				if (LandRecord.Records.TryGetValue(coordinate, out landRecord))
+				{
+					borderCells[x, y] = landRecord.TextureData;
+					cellDirections |= (Directions)(Mathf.Pow(2, x + y * 3));
+				}
+			}
+		}
 
-        // Don't do this inside the loop, silly
-        var borderIndices = GetBorderIndices(cellDirections, borderCells); // Get an 18x18 array, which includes the surrounding textures
+		// Don't do this inside the loop, silly
+		var borderIndices = GetBorderIndices(cellDirections, borderCells); // Get an 18x18 array, which includes the surrounding textures
 
-        var control = new Texture2D(18, 18, TextureFormat.R8, false, true)
-        {
-            filterMode = FilterMode.Point
-        };
+		var control = new Texture2D(18, 18, TextureFormat.R8, false, true)
+		{
+			filterMode = FilterMode.Point
+		};
 
-        for (var y = 0; y < control.height; y++)
-        {
-            for (var x = 0; x < control.width; x++)
-            {
-                var textureIndex = borderIndices[x, y];
-                var color = new Color32((byte)textureIndex, 0, 0, 0);
-                control.SetPixel(x, y, color);
-            }
-        }
+		for (var y = 0; y < control.height; y++)
+		{
+			for (var x = 0; x < control.width; x++)
+			{
+				var textureIndex = borderIndices[x, y];
+				var color = new Color32((byte)textureIndex, 0, 0, 0);
+				control.SetPixel(x, y, color);
+			}
+		}
 
-        control.Apply(false, true);
+		control.Apply(false, true);
 
-        meshRenderer.sharedMaterial.SetTexture("_MainTex", LandTextureRecord.GetTexture2DArray());
-        meshRenderer.sharedMaterial.SetTexture("_Control", control);
-    }
+		meshRenderer.sharedMaterial.SetTexture("_MainTex", LandTextureRecord.GetTexture2DArray());
+		meshRenderer.sharedMaterial.SetTexture("_Control", control);
+	}
 
-    private static int[,] GetBorderIndices(Directions cellDirections, TextureData[,] borderCells)
-    {
-        // Get the first row/column
-        var borderIndices = new int[18, 18];
-        var currentIndices = borderCells[1, 1].TextureIndices;
+	private static int[,] GetBorderIndices(Directions cellDirections, TextureData[,] borderCells)
+	{
+		// Get the first row/column
+		var borderIndices = new int[18, 18];
+		var currentIndices = borderCells[1, 1].TextureIndices;
 
-        // Copy the existing indices into a new array, starting at 1,1
-        for (var y = 0; y < 16; y++)
-        {
-            for (var x = 0; x < 16; x++)
-            {
-                borderIndices[x + 1, y + 1] = currentIndices[x, y];
-            }
-        }
+		// Copy the existing indices into a new array, starting at 1,1
+		for (var y = 0; y < 16; y++)
+		{
+			for (var x = 0; x < 16; x++)
+			{
+				borderIndices[x + 1, y + 1] = currentIndices[x, y];
+			}
+		}
 
-        // Now do each of the directions
-        // Try and figure out a way to reduce this code
-        // Southwest (Zero)
-        if (cellDirections.HasFlag(Directions.SW))
-        {
-            borderIndices[0, 0] = borderCells[0, 0].TextureIndices[15, 15];
-        }
-        else
-        {
-            // Technically, this should check the West and South cells too, and see if one of those has a texture, but eh. 
-            borderIndices[0, 0] = borderIndices[1, 1];
-        }
+		// Now do each of the directions
+		// Try and figure out a way to reduce this code
+		// Southwest (Zero)
+		if (cellDirections.HasFlag(Directions.SW))
+		{
+			borderIndices[0, 0] = borderCells[0, 0].TextureIndices[15, 15];
+		}
+		else
+		{
+			// Technically, this should check the West and South cells too, and see if one of those has a texture, but eh. 
+			borderIndices[0, 0] = borderIndices[1, 1];
+		}
 
-        // South (One)
-        if (cellDirections.HasFlag(Directions.S))
-        {
-            for (var i = 0; i < 16; i++)
-            {
-                borderIndices[i + 1, 0] = borderCells[1, 0].TextureIndices[i, 15];
-            }
-        }
-        else
-        {
-            // If no south cell, duplicate the bottom layer
-            for (var i = 0; i < 16; i++)
-            {
-                borderIndices[i + 1, 0] = borderIndices[i + 1, 1];
-            }
-        }
+		// South (One)
+		if (cellDirections.HasFlag(Directions.S))
+		{
+			for (var i = 0; i < 16; i++)
+			{
+				borderIndices[i + 1, 0] = borderCells[1, 0].TextureIndices[i, 15];
+			}
+		}
+		else
+		{
+			// If no south cell, duplicate the bottom layer
+			for (var i = 0; i < 16; i++)
+			{
+				borderIndices[i + 1, 0] = borderIndices[i + 1, 1];
+			}
+		}
 
-        // SouthEast (Two)
-        if (cellDirections.HasFlag(Directions.SE))
-        {
-            borderIndices[17, 0] = borderCells[2, 0].TextureIndices[0, 15];
-        }
-        else
-        {
-            borderIndices[17, 0] = borderIndices[16, 1];
-        }
+		// SouthEast (Two)
+		if (cellDirections.HasFlag(Directions.SE))
+		{
+			borderIndices[17, 0] = borderCells[2, 0].TextureIndices[0, 15];
+		}
+		else
+		{
+			borderIndices[17, 0] = borderIndices[16, 1];
+		}
 
-        // West (Three)
-        if (cellDirections.HasFlag(Directions.W))
-        {
-            for (var i = 0; i < 16; i++)
-            {
-                borderIndices[0, i + 1] = borderCells[0, 1].TextureIndices[15, i];
-            }
-        }
-        else
-        {
-            // If no west cell, duplicate the leftmost column
-            for (var i = 0; i < 16; i++)
-            {
-                borderIndices[0, i + 1] = borderIndices[1, i + 1];
-            }
-        }
+		// West (Three)
+		if (cellDirections.HasFlag(Directions.W))
+		{
+			for (var i = 0; i < 16; i++)
+			{
+				borderIndices[0, i + 1] = borderCells[0, 1].TextureIndices[15, i];
+			}
+		}
+		else
+		{
+			// If no west cell, duplicate the leftmost column
+			for (var i = 0; i < 16; i++)
+			{
+				borderIndices[0, i + 1] = borderIndices[1, i + 1];
+			}
+		}
 
-        // East (Four (or five?)
-        if (cellDirections.HasFlag(Directions.E))
-        {
-            for (var i = 0; i < 16; i++)
-            {
-                borderIndices[17, i + 1] = borderCells[2, 1].TextureIndices[0, i];
-            }
-        }
-        else
-        {
-            // If no east cell, duplicate the rightmost column
-            for (var i = 0; i < 16; i++)
-            {
-                borderIndices[17, i + 1] = borderIndices[16, i + 1];
-            }
-        }
+		// East (Four (or five?)
+		if (cellDirections.HasFlag(Directions.E))
+		{
+			for (var i = 0; i < 16; i++)
+			{
+				borderIndices[17, i + 1] = borderCells[2, 1].TextureIndices[0, i];
+			}
+		}
+		else
+		{
+			// If no east cell, duplicate the rightmost column
+			for (var i = 0; i < 16; i++)
+			{
+				borderIndices[17, i + 1] = borderIndices[16, i + 1];
+			}
+		}
 
-        // Northwest (Six?)
-        if (cellDirections.HasFlag(Directions.NW))
-        {
-            borderIndices[0, 17] = borderCells[0, 2].TextureIndices[15, 0];
-        }
-        else
-        {
-            // Technically, this should check the West and South cells too, and see if one of those has a texture, but eh. 
-            borderIndices[0, 17] = borderIndices[1, 16];
-        }
+		// Northwest (Six?)
+		if (cellDirections.HasFlag(Directions.NW))
+		{
+			borderIndices[0, 17] = borderCells[0, 2].TextureIndices[15, 0];
+		}
+		else
+		{
+			// Technically, this should check the West and South cells too, and see if one of those has a texture, but eh. 
+			borderIndices[0, 17] = borderIndices[1, 16];
+		}
 
-        // North (Seven?)
-        if (cellDirections.HasFlag(Directions.N))
-        {
-            for (var i = 0; i < 16; i++)
-            {
-                borderIndices[i + 1, 17] = borderCells[1, 2].TextureIndices[i, 0];
-            }
-        }
-        else
-        {
-            // If no North cell, duplicate the bottom layer
-            for (var i = 0; i < 16; i++)
-            {
+		// North (Seven?)
+		if (cellDirections.HasFlag(Directions.N))
+		{
+			for (var i = 0; i < 16; i++)
+			{
+				borderIndices[i + 1, 17] = borderCells[1, 2].TextureIndices[i, 0];
+			}
+		}
+		else
+		{
+			// If no North cell, duplicate the bottom layer
+			for (var i = 0; i < 16; i++)
+			{
 
-                borderIndices[i + 1, 17] = borderIndices[i + 1, 16];
-            }
-        }
+				borderIndices[i + 1, 17] = borderIndices[i + 1, 16];
+			}
+		}
 
-        // NorthEast (Eight)
-        if (cellDirections.HasFlag(Directions.NE))
-        {
-            borderIndices[17, 17] = borderCells[2, 2].TextureIndices[0, 0];
-        }
-        else
-        {
-            borderIndices[17, 17] = borderIndices[16, 16];
-        }
+		// NorthEast (Eight)
+		if (cellDirections.HasFlag(Directions.NE))
+		{
+			borderIndices[17, 17] = borderCells[2, 2].TextureIndices[0, 0];
+		}
+		else
+		{
+			borderIndices[17, 17] = borderIndices[16, 16];
+		}
 
-        return borderIndices;
-    }
+		return borderIndices;
+	}
 }

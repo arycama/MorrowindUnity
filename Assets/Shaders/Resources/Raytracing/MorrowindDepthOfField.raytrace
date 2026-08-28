@@ -17,11 +17,8 @@ void RayGeneration()
 {
 	uint2 position = DispatchRaysIndex().xy;
 		
-	float3 worldPosition = MultiplyPointProj(PixelToWorld, float3(position + 0.5, 1.0)).xyz;
-	worldPosition += ViewPosition;
-	
 	float3 worldDir = MultiplyVector(ViewToWorld, MultiplyVector(PixelToViewDir, float3(position + 0.5, 1.0)));
-	worldPosition = FocusDistance * worldDir + ViewPosition;
+	float3 worldPosition = FocusDistance * worldDir + ViewPosition;
 	
 	float offset = Noise1D(position.xy);
 	float phi = offset * TwoPi;

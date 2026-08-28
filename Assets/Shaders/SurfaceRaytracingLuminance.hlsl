@@ -78,8 +78,8 @@ void Raytracing(inout RayColorPayload payload : SV_RayPayload, AttributeData att
 		float3 normal = BarycentricInterpolate(normal0, normal1, normal2, attribs.barycentrics.x, attribs.barycentrics.y);
 		
 		float4 color0 = UnityRayTracingFetchVertexAttribute4(triangleIndices.x, kVertexAttributeColor);
-		float4 color1 = UnityRayTracingFetchVertexAttribute4(triangleIndices.x, kVertexAttributeColor);
-		float4 color2 = UnityRayTracingFetchVertexAttribute4(triangleIndices.x, kVertexAttributeColor);
+		float4 color1 = UnityRayTracingFetchVertexAttribute4(triangleIndices.y, kVertexAttributeColor);
+		float4 color2 = UnityRayTracingFetchVertexAttribute4(triangleIndices.z, kVertexAttributeColor);
 		float4 vertexColor = BarycentricInterpolate(color0, color1, color2, attribs.barycentrics.x, attribs.barycentrics.y);
 	
 		float3 worldNormal = MultiplyVector(ObjectToWorld3x4(), normal);

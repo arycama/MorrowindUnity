@@ -23,7 +23,7 @@ MonoBehaviour:
   <RaytracedShadows>k__BackingField: 0
   <RaytracedDiffuse>k__BackingField: 0
   <RaytracedSpecular>k__BackingField: 0
-  <RaytracedDepthOfField>k__BackingField: 0
+  <RaytracedDepthOfField>k__BackingField: 1
   <Lighting>k__BackingField:
     <MicroShadows>k__BackingField: 1
     <SunAngularDiameter>k__BackingField: 0.52
