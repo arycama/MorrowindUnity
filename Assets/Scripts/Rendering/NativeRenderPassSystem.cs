@@ -23,6 +23,77 @@ public class NativeRenderPassSystem : IDisposable
 		nativePassDescriptors.Clear();
 	}
 
+	private void EndSubPass()
+	{
+		// Resolve the attachment handles into attachment indiecs
+		var colorOutputs = new AttachmentIndexArray(outputs.Length);
+		for (var i = 0; i < outputs.Length; i++)
+		{
+			var outputHandle = outputs[i];
+			for (var j = 0; j < attachments.Length; j++)
+			{
+				if (outputHandle != attachments[j])
+					continue;
+
+				colorOutputs[i] = j;
+				break;
+			}
+		}
+
+		outputs.Clear();
+
+		var inputs = new AttachmentIndexArray(this.inputs.Length);
+		for (var i = 0; i < this.inputs.Length; i++)
+		{
+			var inputHandle = this.inputs[i];
+			for (var j = 0; j < attachments.Length; j++)
+			{
+				if (inputHandle != attachments[j])
+					continue;
+
+				inputs[i] = j;
+				break;
+			}
+		}
+
+		this.inputs.Clear();
+
+		subPasses.Add(new() { inputs = inputs, colorOutputs = colorOutputs, flags = flags });
+		flags = SubPassFlags.None;
+	}
+
+	private void EndRenderPass(int index)
+	{
+		// Resolve depthStencil index
+		var depthStencilAttachmentIndex = -1;
+		for (var i = 0; i < attachments.Length; i++)
+		{
+			if (attachments[i].index != depthStencil)
+				continue;
+
+			depthStencilAttachmentIndex = i;
+			break;
+		}
+
+		// TODO: Should this just call end subpass?
+		var passEndIndex = index - 1; // Since this is called from the first pass that is not the render pass index, the previous pass is the end index
+		nativePassDescriptors.Add(new(new(attachments.AsArray(), Allocator.Temp), new(subPasses.AsArray(), Allocator.Temp), depthStencilAttachmentIndex, passEndIndex, passNameBuilder.ToString()));
+		attachments.Clear();
+		subPasses.Clear();
+		_ = passNameBuilder.Clear();
+		depthStencil = default;
+	}
+
+	public void CloseIfNeeded(int index)
+	{
+		var isInNativePass = attachments.Length > 0 || depthStencil.HasValue;
+		if (isInNativePass)
+		{
+			EndSubPass();
+			EndRenderPass(index);
+		}
+	}
+
 	public (int nativePassIndex, bool isNewSubPass) AddRenderPass(PassBuilder builder)
 	{
 		var isNativePass = builder.Outputs.Count > 0 || builder.DepthStencil.index != -1;
@@ -45,73 +116,12 @@ public class NativeRenderPassSystem : IDisposable
 			}
 		}
 
-		void EndSubPass()
-		{
-			// Resolve the attachment handles into attachment indiecs
-			var colorOutputs = new AttachmentIndexArray(outputs.Length);
-			for (var i = 0; i < outputs.Length; i++)
-			{
-				var outputHandle = outputs[i];
-				for (var j = 0; j < attachments.Length; j++)
-				{
-					if (outputHandle != attachments[j])
-						continue;
-
-					colorOutputs[i] = j;
-					break;
-				}
-			}
-
-			outputs.Clear();
-
-			var inputs = new AttachmentIndexArray(this.inputs.Length);
-			for (var i = 0; i < this.inputs.Length; i++)
-			{
-				var inputHandle = this.inputs[i];
-				for (var j = 0; j < attachments.Length; j++)
-				{
-					if (inputHandle != attachments[j])
-						continue;
-
-					inputs[i] = j;
-					break;
-				}
-			}
-
-			this.inputs.Clear();
-
-			subPasses.Add(new() { inputs = inputs, colorOutputs = colorOutputs, flags = flags });
-			flags = SubPassFlags.None;
-		}
-
-		void EndRenderPass()
-		{
-			// Resolve depthStencil index
-			var depthStencilAttachmentIndex = -1;
-			for (var i = 0; i < attachments.Length; i++)
-			{
-				if (attachments[i].index != depthStencil)
-					continue;
-
-				depthStencilAttachmentIndex = i;
-				break;
-			}
-
-			// TODO: Should this just call end subpass?
-			var passEndIndex = builder.Index - 1; // Since this is called from the first pass that is not the render pass index, the previous pass is the end index
-			nativePassDescriptors.Add(new(new(attachments.AsArray(), Allocator.Temp), new(subPasses.AsArray(), Allocator.Temp), depthStencilAttachmentIndex, passEndIndex, passNameBuilder.ToString()));
-			attachments.Clear();
-			subPasses.Clear();
-			_ = passNameBuilder.Clear();
-			depthStencil = default;
-		}
-
 		// If we have a current pass in progress we can't merge with, end it
 		var isInNativePass = attachments.Length > 0 || depthStencil.HasValue;
 		if (isInNativePass && !canMergeWithExistingPass)
 		{
 			EndSubPass();
-			EndRenderPass();
+			EndRenderPass(builder.Index);
 		}
 
 		var isNewSubPass = false;

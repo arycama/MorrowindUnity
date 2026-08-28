@@ -115,8 +115,9 @@ public class RenderGraph : IDisposable
 
 	public void Execute(CommandBuffer command)
 	{
-		var lastNativePass = -1;
+		nativeRenderPassSystem.CloseIfNeeded(renderPasses.Count - 1);
 
+		var lastNativePass = -1;
 		for (var i = 0; i < renderPasses.Count; i++)
 		{
 			var renderPass = renderPasses[i];

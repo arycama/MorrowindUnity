@@ -80,7 +80,7 @@ public class NewPipeline : RenderPipelineBase
 		{
 			pass.ViewHandle = viewInfo;
 			pass.DepthStencil = cameraDepth;
-			pass.AddOutputs(stackalloc[] { cameraColor });
+			pass.AddOutput(cameraColor);
 			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
 
 			var hasShadow = renderGraph.IsResourceWritten(sunShadow);
