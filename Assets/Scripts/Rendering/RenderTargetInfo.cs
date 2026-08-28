@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-[DebuggerDisplay("Desc: {descriptor}, Resource: {resourceIndex}, FirstWrite: {firstWriteIndex}, LastRead: {lastReadIndex}")]
+[DebuggerDisplay("id({propertyId}), resource({resourceIndex}), writes({firstWriteIndex}:{lastWriteIndex}), lastRead({lastReadIndex}), desc({descriptor})")]
 public struct RenderTargetInfo
 {
 	public RenderTargetDescriptor descriptor;

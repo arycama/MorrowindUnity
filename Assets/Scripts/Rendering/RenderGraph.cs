@@ -13,7 +13,7 @@ public class RenderGraph : IDisposable
 	private readonly List<RenderTargetIdentifier> resources = new();
 	private readonly ResizableArray<RenderTargetInfo> targets = new();
 	private readonly ResizableArray<TextureHandle> handles = new();
-
+	private readonly TextureHandleSystem textureHandleSystem = new();
 	private readonly NativeRenderPassSystem nativeRenderPassSystem = new();
 	private readonly PassBuilder builder;
 
@@ -115,7 +115,7 @@ public class RenderGraph : IDisposable
 
 	public void Execute(CommandBuffer command)
 	{
-		nativeRenderPassSystem.CloseIfNeeded(renderPasses.Count - 1);
+		nativeRenderPassSystem.CloseIfNeeded(renderPasses.Count);
 
 		var lastNativePass = -1;
 		for (var i = 0; i < renderPasses.Count; i++)
@@ -177,9 +177,8 @@ public class RenderGraph : IDisposable
 						if (requiresResolve)
 						{
 							target.resourceIndex = resources.Count;
-							var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
-							command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfo));
-							resources.Add(resourceId);
+							textureHandleSystem.GetTemporaryRT(command, target.propertyId, target.descriptor, viewInfo, 1);
+							resources.Add(target.propertyId);
 							attachmentDesc.resolveTarget = resources[target.resourceIndex];
 							attachmentDesc.storeAction = RenderBufferStoreAction.Resolve;
 						}
@@ -192,9 +191,8 @@ public class RenderGraph : IDisposable
 								if (isFirstWrite)
 								{
 									target.resourceIndex = resources.Count;
-									var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
-									command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(viewInfo.samples, viewInfo));
-									resources.Add(resourceId);
+									textureHandleSystem.GetTemporaryRT(command, target.propertyId, target.descriptor, viewInfo, viewInfo.samples);
+									resources.Add(target.propertyId);
 								}
 
 								attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
@@ -214,9 +212,8 @@ public class RenderGraph : IDisposable
 										if (isFirstWrite)
 										{
 											target.resourceIndex = resources.Count;
-											var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
-											command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfo));
-											resources.Add(resourceId);
+											textureHandleSystem.GetTemporaryRT(command, target.propertyId, target.descriptor, viewInfo, 1);
+											resources.Add(target.propertyId);
 										}
 
 										attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
@@ -230,12 +227,17 @@ public class RenderGraph : IDisposable
 						}
 
 						_ = attachments.Add(attachmentDesc);
+
+						// If this attachment is loaded and does not need to be read outside of this pass, it can be released
+						if (!isFirstWrite && target.lastReadIndex <= nativePassDesc.passEndIndex)
+						{
+							textureHandleSystem.ReleaseTemporaryRT(command, target.propertyId);
+						}
 					}
 
 					Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(nativePassDesc.debugName)];
 					_ = Encoding.UTF8.GetBytes(nativePassDesc.debugName, debugNameUtf8);
 
-					//command.BeginSample(renderPass.NativePassIndex.ToString());
 					command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, 1, viewInfo.samples, attachments.Span.AsArray(), nativePassDesc.depthIndex, -1, nativePassDesc.subpasses, debugNameUtf8);
 					lastNativePass = renderPass.NativePassIndex;
 				}
@@ -258,9 +260,7 @@ public class RenderGraph : IDisposable
 
 				// If this is the last time a resource is read, it can be freed for the next pass
 				if (i == target.lastReadIndex && !target.isExported)
-				{
-					command.ReleaseTemporaryRT(target.propertyId);
-				}
+					textureHandleSystem.ReleaseTemporaryRT(command, target.propertyId);
 			}
 
 			foreach (var keyword in renderPass.Keywords)
@@ -273,6 +273,8 @@ public class RenderGraph : IDisposable
 			foreach (var keyword in renderPass.Keywords)
 				command.DisableKeyword(keyword);
 		}
+
+		textureHandleSystem.ReleaseRemainingTargets(command);
 	}
 
 	public void Clear()
