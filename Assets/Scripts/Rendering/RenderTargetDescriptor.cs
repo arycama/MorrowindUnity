@@ -2,9 +2,8 @@ using System.Diagnostics;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
-using Unmath;
 
-[DebuggerDisplay("{size} {samples}xAA {format}, clear: ({clear}, color: {clearColor}, depth: {clearDepth}, stencil {clearStencil})")]
+[DebuggerDisplay("{viewHandle} {format}, clear: ({clear}, color: {clearColor}, depth: {clearDepth}, stencil {clearStencil})")]
 public readonly struct RenderTargetDescriptor
 {
 	public readonly ViewHandle viewHandle;
@@ -22,6 +21,11 @@ public readonly struct RenderTargetDescriptor
 		this.clearColor = clearColor;
 		this.clearDepth = clearDepth;
 		this.clearStencil = clearStencil;
+	}
+
+	public override string ToString()
+	{
+		return $"{viewHandle} {format}, clear: ({clear}, color: {clearColor}, depth: {clearDepth}, stencil {clearStencil})";
 	}
 
 	public RenderTextureDescriptor GetRenderTextureDescriptor(int samples, ViewInfo viewInfo)
