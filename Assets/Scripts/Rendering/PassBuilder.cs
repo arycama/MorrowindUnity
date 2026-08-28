@@ -11,6 +11,8 @@ public partial class RenderGraph
 		public string Name { get; set; }
 		public int Index { get; set; }
 		public ViewHandle ViewInfo { get; set; }
+
+		private IRenderPass renderPass;
 		private readonly List<TextureHandle> resources = new(), inputs = new(), outputs = new();
 
 		public PassBuilder(RenderGraph renderGraph)
@@ -53,15 +55,16 @@ public partial class RenderGraph
 
 		public void SetRenderFunction<T>(T data, Action<CommandBuffer, T> render)
 		{
-			renderGraph.AddRenderPass(new RenderPass<T>(data, render));
+			renderPass = new RenderPass<T>(data, render);
 		}
 
 		public void Dispose()
 		{
-			renderGraph.SetRenderPass(Name, ViewInfo, Index, resources, outputs, inputs);
+			renderGraph.SetRenderPass(Name, ViewInfo, Index, renderPass, resources, outputs, inputs);
 			Name = default;
 			ViewInfo = new(-1);
 			Index = -1;
+			renderPass = null;
 			resources.Clear();
 			outputs.Clear();
 			inputs.Clear();

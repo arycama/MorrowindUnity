@@ -254,6 +254,7 @@ dotnet_diagnostic.IDE0003.severity = error
 dotnet_diagnostic.IDE0004.severity = error
 dotnet_diagnostic.IDE0005.severity = error
 dotnet_diagnostic.IDE0033.severity = error
+dotnet_diagnostic.IDE0040.severity = error
 dotnet_diagnostic.IDE0051.severity = error
 dotnet_diagnostic.IDE0052.severity = error
 dotnet_diagnostic.IDE0055.severity = error

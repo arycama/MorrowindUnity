@@ -12,6 +12,12 @@ public class RenderPass<T> : IRenderPass
 		this.render = render;
 	}
 
+	public string Name { get; set; }
+	public Range ResourceRange { get; set; }
+	public ViewHandle ViewHandle { get; set; }
+	public int NativePassIndex { get; set; }
+	public bool IsNewSubPass { get; set; }
+
 	void IRenderPass.Execute(CommandBuffer command)
 	{
 		render(command, data);

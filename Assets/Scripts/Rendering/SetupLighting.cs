@@ -170,7 +170,7 @@ public class SetupLighting : IDisposable
 		return shadowSplitData;
 	}
 
-	struct EnvironmentDataStruct
+	private struct EnvironmentDataStruct
 	{
 		public Float3 Item1;
 		public float fogScale;
