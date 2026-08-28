@@ -117,22 +117,6 @@ public class RenderGraph : IDisposable
 		for (var i = 0; i < renderPasses.Count; i++)
 		{
 			var renderPass = renderPasses[i];
-
-			// Set resources. TODO: Any other pass setup/initialization like cbuffers or render state (wireframe?) here, also mip generation etc.
-			foreach (var input in handles[renderPass.ResourceRange])
-			{
-				var target = targets[input.index];
-
-				if (target.resourceIndex == -1)
-				{
-					Debug.LogError($"Pass {renderPass.Name} couldn't find resource for descriptor {target.descriptor}");
-					return;
-				}
-
-				var resource = resources[target.resourceIndex];
-				command.SetGlobalTexture(target.propertyId, resource);
-			}
-
 			if (renderPass.NativePassIndex != lastNativePass)
 			{
 				// End current pass if needed
@@ -152,7 +136,7 @@ public class RenderGraph : IDisposable
 					var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
 					foreach (var attachment in attachmentHandles)
 					{
-						var target = targets[attachment.index];
+						ref var target = ref targets[attachment.index];
 						var attachmentDesc = new AttachmentDescriptor
 						{
 							graphicsFormat = target.descriptor.format
@@ -192,7 +176,6 @@ public class RenderGraph : IDisposable
 							var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
 							command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfo));
 							resources.Add(resourceId);
-							targets[attachment.index] = target;
 							attachmentDesc.resolveTarget = resources[target.resourceIndex];
 							attachmentDesc.storeAction = RenderBufferStoreAction.Resolve;
 						}
@@ -208,7 +191,6 @@ public class RenderGraph : IDisposable
 									var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
 									command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(viewInfo.samples, viewInfo));
 									resources.Add(resourceId);
-									targets[attachment.index] = target;
 								}
 
 								attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
@@ -231,7 +213,6 @@ public class RenderGraph : IDisposable
 											var resourceId = Shader.PropertyToID(target.resourceIndex.ToString());
 											command.GetTemporaryRT(resourceId, target.descriptor.GetRenderTextureDescriptor(1, viewInfo));
 											resources.Add(resourceId);
-											targets[attachment.index] = target;
 										}
 
 										attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
@@ -258,15 +239,35 @@ public class RenderGraph : IDisposable
 			else if (renderPass.IsNewSubPass)
 				command.NextSubPass();
 
+			// Set resources. Note this needs to happen after allocation, since we free any resources after this, and we don't want to accidentally free a resource that is being read
+			foreach (var input in handles[renderPass.ResourceRange])
+			{
+				var target = targets[input.index];
+				if (target.resourceIndex == -1)
+				{
+					Debug.LogError($"Pass {renderPass.Name} couldn't find resource for descriptor {target.descriptor}");
+					return;
+				}
+
+				var resource = resources[target.resourceIndex];
+				command.SetGlobalTexture(target.propertyId, resource);
+
+				// If this is the last time a resource is read, it can be freed for the next pass
+				if (i == target.lastReadIndex && !target.isExported)
+				{
+					command.ReleaseTemporaryRT(target.propertyId);
+				}
+			}
+
 			foreach (var keyword in renderPass.Keywords)
-				command.EnableShaderKeyword(keyword);
+				command.EnableKeyword(keyword);
 
 			command.BeginSample(renderPass.Name);
 			renderPass.Execute(command);
 			command.EndSample(renderPass.Name);
 
 			foreach (var keyword in renderPass.Keywords)
-				command.DisableShaderKeyword(keyword);
+				command.DisableKeyword(keyword);
 		}
 	}
 

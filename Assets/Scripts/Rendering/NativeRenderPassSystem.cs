@@ -26,20 +26,17 @@ public class NativeRenderPassSystem : IDisposable
 
 	public (int nativePassIndex, bool isNewSubPass) AddRenderPass(string name, int index, ResizableArray<RenderTargetInfo> targets, List<TextureHandle> resources, List<TextureHandle> outputs, List<TextureHandle> inputs)
 	{
-		// Native render pass logic
 		var isNativePass = outputs.Count > 0;
 		var canMergeWithExistingPass = isNativePass && subPasses.Length < 8;
-		foreach (var resource in resources)
-		{
-			// Check to see if any of the resources read are part of the current render pass
-			for (var i = 0; i < attachments.Length; i++)
-			{
-				if (attachments[i].index != resource.index)
-					continue;
 
-				canMergeWithExistingPass = false;
-				break;
-			}
+		// If any current attachments are read as regualr resources, we need to start a new render pass
+		foreach (var attachment in attachments)
+		{
+			if (!resources.Contains(attachment))
+				continue;
+
+			canMergeWithExistingPass = false;
+			break;
 		}
 
 		// If we have a current pass in progress we can't merge with, end it

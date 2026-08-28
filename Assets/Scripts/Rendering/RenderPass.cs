@@ -18,7 +18,7 @@ public class RenderPass<T> : IRenderPass
 	public ViewHandle ViewHandle { get; set; }
 	public int NativePassIndex { get; set; }
 	public bool IsNewSubPass { get; set; }
-	public List<string> Keywords { get; set; } = new();
+	public List<GlobalKeyword> Keywords { get; set; } = new();
 
 	void IRenderPass.Execute(CommandBuffer command)
 	{

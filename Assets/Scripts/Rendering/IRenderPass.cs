@@ -11,7 +11,7 @@ public interface IRenderPass
 	bool IsNewSubPass { get; set; }
 
 	// TODO: Replace
-	List<string> Keywords { get; set; }
+	List<GlobalKeyword> Keywords { get; set; }
 
 	void Execute(CommandBuffer command);
 }

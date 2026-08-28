@@ -13,7 +13,7 @@ public class PassBuilder : IDisposable
 	public List<TextureHandle> Resources { get; } = new();
 	public List<TextureHandle> Inputs { get; } = new();
 	public List<TextureHandle> Outputs { get; } = new();
-	public List<string> Keywords { get; } = new();
+	public List<GlobalKeyword> Keywords { get; } = new();
 
 	public PassBuilder(RenderGraph renderGraph)
 	{
@@ -44,7 +44,7 @@ public class PassBuilder : IDisposable
 			AddInput(input);
 	}
 
-	public void AddKeyword(string keyword) => Keywords.Add(keyword);
+	public void AddKeyword(string keyword) => Keywords.Add(GlobalKeyword.Create(keyword));
 
 	public void AddKeywords(ReadOnlySpan<string> keywords)
 	{
