@@ -47,7 +47,7 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("Terrain"))
 		{
-			pass.ViewInfo = viewInfo;
+			pass.ViewHandle = viewInfo;
 			pass.AddOutputs(stackalloc[] { cameraDepth, albedoNormal, cameraColor });
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Terrain"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all, sortingCriteria = SortingCriteria.QuantizedFrontToBack });
@@ -61,7 +61,7 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("GBuffer"))
 		{
-			pass.ViewInfo = viewInfo;
+			pass.ViewHandle = viewInfo;
 			pass.AddOutputs(stackalloc[] { cameraDepth, albedoNormal, cameraColor });
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.opaque));
@@ -76,39 +76,32 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("Deferred"))
 		{
-			pass.ViewInfo = viewInfo;
+			pass.ViewHandle = viewInfo;
 			pass.AddOutputs(stackalloc[] { cameraDepth, cameraColor });
 			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
 
 			var hasShadow = renderGraph.IsResourceWritten(sunShadow);
 			if (hasShadow)
-				pass.SetResources(stackalloc[] { sunShadow });
+			{
+				pass.AddResource(sunShadow);
+				pass.AddKeyword("SHADOWS_ON");
+			}
 
-			pass.SetRenderFunction((deferredMaterial, asset, viewData, environmentData, propertyBlock, hasShadow), static (command, data) =>
+			if (asset.Samples > 1)
+				pass.AddKeyword("MSAA_ON");
+
+			pass.SetRenderFunction((deferredMaterial, viewData, environmentData, propertyBlock), static (command, data) =>
 			{
 				data.propertyBlock.Clear();
 				data.propertyBlock.SetConstantBuffer(environmentDataId, data.environmentData, 0, data.environmentData.stride);
 				data.propertyBlock.SetConstantBuffer(viewDataId, data.viewData, 0, data.viewData.stride);
-
-				if (data.asset.Samples > 1)
-					command.EnableShaderKeyword("MSAA_ON");
-
-				if (data.hasShadow)
-					command.EnableShaderKeyword("SHADOWS_ON");
-
 				command.DrawProcedural(default, data.deferredMaterial, 0, MeshTopology.Triangles, 3, 1, data.propertyBlock);
-
-				if (data.asset.Samples > 1)
-					command.DisableShaderKeyword("MSAA_ON");
-
-				if (data.hasShadow)
-					command.DisableShaderKeyword("SHADOWS_ON");
 			});
 		}
 
 		using (var pass = renderGraph.AddRenderPass("Sky"))
 		{
-			pass.ViewInfo = viewInfo;
+			pass.ViewHandle = viewInfo;
 			pass.AddOutputs(stackalloc[] { cameraDepth, cameraColor });
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Sky"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all });
@@ -122,27 +115,23 @@ public class NewPipeline : RenderPipelineBase
 
 		using (var pass = renderGraph.AddRenderPass("Forward Transparent"))
 		{
-			pass.ViewInfo = viewInfo;
+			pass.ViewHandle = viewInfo;
 			pass.AddOutputs(stackalloc[] { cameraDepth, cameraColor });
 
 			var hasShadow = renderGraph.IsResourceWritten(sunShadow);
 			if (hasShadow)
-				pass.SetResources(stackalloc[] { sunShadow });
+			{
+				pass.AddResource(sunShadow);
+				pass.AddKeyword("SHADOWS_ON");
+			}
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 			var rendererList = context.CreateRendererList(ref rendererParams);
-			pass.SetRenderFunction((rendererList, viewData, environmentData, hasShadow), (command, data) =>
+			pass.SetRenderFunction((rendererList, viewData, environmentData), (command, data) =>
 			{
 				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
 				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
-
-				if (data.hasShadow)
-					command.EnableShaderKeyword("SHADOWS_ON");
-
 				command.DrawRendererList(data.rendererList);
-
-				if (data.hasShadow)
-					command.DisableShaderKeyword("SHADOWS_ON");
 			});
 		}
 
@@ -150,7 +139,7 @@ public class NewPipeline : RenderPipelineBase
 		{
 			// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 			// TODO: Check for hardware msaa backbuffer resolve support
-			pass.ViewInfo = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight));
+			pass.ViewHandle = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight));
 
 			// Final blit/resolve if needed
 			// TODO: This should also account for HDR
@@ -169,52 +158,40 @@ public class NewPipeline : RenderPipelineBase
 			}
 
 			var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
-
-			if (!renderToBackbuffer)
+			if (renderToBackbuffer)
 			{
-				if (requiresSceneDepth)
-					pass.SetResources(stackalloc[] { cameraDepth, cameraColor });
-				else
-					pass.SetResources(stackalloc[] { cameraColor });
+				pass.AddInput(cameraColor);
+				pass.AddKeyword("DIRECT");
 			}
 			else
-				pass.AddInputs(stackalloc[] { cameraColor });
+			{
+				pass.AddResource(cameraColor);
 
+				if (requiresSceneDepth)
+					pass.AddResource(cameraDepth);
+			}
+
+			// TODO: Currently we need to set depth as the first output if it exists. Once this is replaced with a set depth stencil function, this wont be neccessary
 			if (requiresSceneDepth)
+			{
 				pass.AddOutputs(stackalloc[] { sceneDepth, sceneColor });
+				pass.AddKeyword("DEPTH");
+			}
 			else
 				pass.AddOutputs(stackalloc[] { sceneColor });
 
 			var requiresFlip = camera.targetTexture == null;
-			pass.SetRenderFunction((blitMaterial, requiresFlip, asset, requiresSceneDepth, viewData, renderToBackbuffer), static (command, data) =>
+			if (requiresFlip)
+				pass.AddKeyword("FLIP");
+
+			if (asset.Samples > 1)
+				pass.AddKeyword("MSAA");
+
+			pass.SetRenderFunction((blitMaterial, viewData), static (command, data) =>
 			{
-				if (data.renderToBackbuffer)
-					command.EnableShaderKeyword("DIRECT");
-
-				if (data.requiresFlip)
-					command.EnableShaderKeyword("FLIP");
-
-				if (data.requiresSceneDepth)
-					command.EnableShaderKeyword("DEPTH");
-
-				if (data.asset.Samples > 1)
-					command.EnableShaderKeyword("MSAA");
-
 				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 				command.SetWireframe(false);
 				command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
-
-				if (data.requiresFlip)
-					command.DisableShaderKeyword("FLIP");
-
-				if (data.requiresSceneDepth)
-					command.DisableShaderKeyword("DEPTH");
-
-				if (data.asset.Samples > 1)
-					command.DisableShaderKeyword("MSAA");
-
-				if (data.renderToBackbuffer)
-					command.DisableShaderKeyword("DIRECT");
 			});
 		}
 

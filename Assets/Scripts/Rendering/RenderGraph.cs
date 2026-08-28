@@ -6,15 +6,15 @@ using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using Unmath;
 
-public partial class RenderGraph : IDisposable
+public class RenderGraph : IDisposable
 {
 	private readonly List<IRenderPass> renderPasses = new();
 	private readonly List<ViewInfo> viewInfos = new();
 	private readonly List<RenderTargetIdentifier> resources = new();
 	private readonly ResizableArray<RenderTargetInfo> targets = new();
 	private readonly ResizableArray<TextureHandle> handles = new();
-	public NativeRenderPassSystem nativeRenderPassSystem = new();
 
+	private readonly NativeRenderPassSystem nativeRenderPassSystem = new();
 	private readonly PassBuilder builder;
 
 	public RenderGraph()
@@ -40,31 +40,33 @@ public partial class RenderGraph : IDisposable
 		return builder;
 	}
 
-	private void SetRenderPass(string name, ViewHandle viewHandle, int index, IRenderPass renderPass, List<TextureHandle> resources, List<TextureHandle> outputs, List<TextureHandle> inputs)
+	public void SetRenderPass(PassBuilder builder)
 	{
 		// Set resources
 		var inputStart = handles.Count;
-		foreach (var resource in resources)
+		foreach (var resource in builder.Resources)
 		{
-			targets[resource.index].lastReadIndex = index;
+			targets[resource.index].lastReadIndex = builder.Index;
 			handles.Add(resource);
 		}
 
 		// Set outputs
-		foreach (var output in outputs)
-			SetResourceWriteIndex(output, index);
+		foreach (var output in builder.Outputs)
+			SetResourceWriteIndex(output, builder.Index);
 
 		// Set inputs
-		foreach (var input in inputs)
-			SetResourceWriteIndex(input, index);
+		foreach (var input in builder.Inputs)
+			SetResourceWriteIndex(input, builder.Index);
 
-		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(name, index, targets, resources, outputs, inputs);
+		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(builder.Name, builder.Index, targets, builder.Resources, builder.Outputs, builder.Inputs);
 
+		var renderPass = builder.RenderPass;
 		renderPass.ResourceRange = inputStart..handles.Count;
 		renderPass.IsNewSubPass = isNewSubPass;
-		renderPass.ViewHandle = viewHandle;
-		renderPass.Name = name;
+		renderPass.ViewHandle = builder.ViewHandle;
+		renderPass.Name = builder.Name;
 		renderPass.NativePassIndex = nativePassIndex;
+		renderPass.Keywords = new(builder.Keywords);
 
 		renderPasses.Add(renderPass);
 	}
@@ -256,9 +258,15 @@ public partial class RenderGraph : IDisposable
 			else if (renderPass.IsNewSubPass)
 				command.NextSubPass();
 
+			foreach (var keyword in renderPass.Keywords)
+				command.EnableShaderKeyword(keyword);
+
 			command.BeginSample(renderPass.Name);
-			renderPasses[i].Execute(command);
+			renderPass.Execute(command);
 			command.EndSample(renderPass.Name);
+
+			foreach (var keyword in renderPass.Keywords)
+				command.DisableShaderKeyword(keyword);
 		}
 	}
 

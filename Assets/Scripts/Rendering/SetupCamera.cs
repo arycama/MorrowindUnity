@@ -59,7 +59,7 @@ public class SetupView : IDisposable
 		return viewDataBuffer;
 	}
 
-	struct ViewDataStruct
+	private struct ViewDataStruct
 	{
 		public Float4x4 worldToClip;
 		public Float4x4 viewToClip;
