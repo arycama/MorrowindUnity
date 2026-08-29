@@ -12,8 +12,9 @@ public readonly struct RenderTargetDescriptor
 	public readonly Color clearColor;
 	public readonly float clearDepth;
 	public readonly uint clearStencil;
+	public readonly TextureDimension dimension;
 
-	public RenderTargetDescriptor(ViewHandle viewHandle, GraphicsFormat format, bool clear = false, Color clearColor = default, float clearDepth = 1f, uint clearStencil = default)
+	public RenderTargetDescriptor(ViewHandle viewHandle, GraphicsFormat format, bool clear = false, Color clearColor = default, float clearDepth = 1f, uint clearStencil = default, TextureDimension dimension = TextureDimension.Tex2D)
 	{
 		this.viewHandle = viewHandle;
 		this.format = format;
@@ -21,6 +22,7 @@ public readonly struct RenderTargetDescriptor
 		this.clearColor = clearColor;
 		this.clearDepth = clearDepth;
 		this.clearStencil = clearStencil;
+		this.dimension = dimension;
 	}
 
 	public override string ToString()
@@ -35,9 +37,9 @@ public readonly struct RenderTargetDescriptor
 		{
 			width = viewInfo.size.x,
 			height = viewInfo.size.y,
-			volumeDepth = 1,
+			volumeDepth = viewInfo.volumeDepth,
 			mipCount = 1,
-			dimension = TextureDimension.Tex2D,
+			dimension = dimension,
 			shadowSamplingMode = ShadowSamplingMode.None,
 		};
 

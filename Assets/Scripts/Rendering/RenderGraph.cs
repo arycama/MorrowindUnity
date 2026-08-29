@@ -115,10 +115,10 @@ public class RenderGraph : IDisposable
 		target.isExported = true;
 	}
 
-	public ViewHandle AddViewInfo(Int2 size, int samples = 1)
+	public ViewHandle AddViewInfo(Int2 size, int samples = 1, int volumeDepth = 1)
 	{
 		var index = viewInfos.Count;
-		viewInfos.Add(new(size, samples));
+		viewInfos.Add(new(size, samples, volumeDepth));
 		return new(index);
 	}
 

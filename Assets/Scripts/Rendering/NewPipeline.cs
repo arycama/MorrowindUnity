@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using Unmath;
+using static Unmath.Math;
 
 public class NewPipeline : RenderPipelineBase
 {
@@ -19,6 +20,7 @@ public class NewPipeline : RenderPipelineBase
 	private readonly MaterialPropertyBlock propertyBlock;
 	private readonly SetupView setupView;
 	private readonly SetupLighting setupLighting;
+	private readonly ComputeShader volumetricLightShader;
 	private readonly RayTracingAccelerationStructure rtas;
 	private readonly RayTracingShader occlusionRaytracingShader, shadowRaytracingShader, diffuseRaytracingShader, depthOfFieldRaytracingShader;
 
@@ -30,6 +32,8 @@ public class NewPipeline : RenderPipelineBase
 		propertyBlock = new();
 		setupView = new(renderGraph);
 		setupLighting = new(renderGraph, asset.Lighting);
+
+		volumetricLightShader = Resources.Load<ComputeShader>("VolumetricLight");
 
 		occlusionRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindOcclusion");
 		shadowRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindShadow");
@@ -66,8 +70,69 @@ public class NewPipeline : RenderPipelineBase
 
 		var viewData = setupView.Render(camera);
 		var (environmentData, sunShadow) = setupLighting.Render(camera, cullingResults, context, viewData);
+		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
+		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
+		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
 
-		var viewHandle = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight), asset.Samples);
+		var noiseIndex = renderGraph.FrameIndex % 64;
+		var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds[noiseIndex]);
+		var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
+
+		var volumeWidth = DivRoundUp(viewSize.x, asset.VolumetricTileSize);
+		var volumeHeight = DivRoundUp(viewSize.y, asset.VolumetricTileSize);
+		var volumetricViewHandle = renderGraph.AddViewInfo(new(volumeWidth, volumeHeight), 1, asset.VolumetricSlices);
+		var volumetricLight = renderGraph.GetTexture(new(volumetricViewHandle, GraphicsFormat.R16G16B16A16_SFloat, dimension: TextureDimension.Tex3D), Shader.PropertyToID("VolumetricLight"));
+
+		if (asset.VolumetricsEnabled)
+		{
+			var volumetricLightTemp = renderGraph.GetTexture(new(volumetricViewHandle, GraphicsFormat.R16G16B16A16_SFloat, dimension: TextureDimension.Tex3D), Shader.PropertyToID("VolumetricLightTemp"));
+			using (var pass = renderGraph.AddRenderPass("Volumetric Light Compute"))
+			{
+				pass.ViewHandle = volumetricViewHandle;
+				var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
+				pass.AddUavOutput(volumetricLightTemp);
+
+				if (renderGraph.IsResourceWritten(sunShadow))
+				{
+					pass.AddResource(sunShadow);
+					pass.AddKeyword("SHADOWS_ON");
+				}
+
+				var volumeSize = new Int3(volumeWidth, volumeHeight, asset.VolumetricSlices);
+				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance, viewData, environmentData, blueNoise1D), static (command, data) =>
+				{
+					command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
+					command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
+					command.SetComputeVectorParam(data.volumetricLightShader, "VolumeSize", new Float3(data.volumeSize.x, data.volumeSize.y, data.volumeSize.z));
+					command.SetComputeFloatParam(data.volumetricLightShader, "MaxDepth", data.VolumetricDistance);
+					command.SetComputeTextureParam(data.volumetricLightShader, 0, "BlueNoise1D", data.blueNoise1D);
+					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
+					command.DispatchCompute(data.volumetricLightShader, 0, data.volumeSize.x, data.volumeSize.y, data.volumeSize.z);
+				});
+			}
+
+			using (var pass = renderGraph.AddRenderPass("Volumetric Light Compute"))
+			{
+				pass.ViewHandle = volumetricViewHandle;
+				var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
+				pass.AddResource(volumetricLightTemp);
+				pass.AddUavOutput(volumetricLight);
+
+				var volumeSize = new Int3(volumeWidth, volumeHeight, asset.VolumetricSlices);
+
+				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance, viewData, environmentData), static (command, data) =>
+				{
+					command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
+					command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
+					command.SetComputeVectorParam(data.volumetricLightShader, "VolumeSize", new Float3(data.volumeSize.x, data.volumeSize.y, data.volumeSize.z));
+					command.SetComputeFloatParam(data.volumetricLightShader, "MaxDepth", data.VolumetricDistance);
+					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
+					command.DispatchCompute(data.volumetricLightShader, 1, data.volumeSize.x, data.volumeSize.y, 1);
+				});
+			}
+		}
+
+		var viewHandle = renderGraph.AddViewInfo(viewSize, asset.Samples);
 		var cameraDepth = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt, true), Shader.PropertyToID("CameraDepth"));
 		var albedoNormal = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"));
 		var cameraColor = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
@@ -111,9 +176,6 @@ public class NewPipeline : RenderPipelineBase
 			pass.AddUavOutput(raytracedOcclusion);
 			pass.AddResources(stackalloc[] { cameraDepth });
 
-			var noiseIndex = renderGraph.FrameIndex % 64;
-			var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
-
 			pass.SetRenderFunction((rtas, occlusionRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{
 				command.SetRayTracingTextureParam(data.occlusionRaytracingShader, "BlueNoise2D", data.blueNoise2D);
@@ -130,9 +192,6 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedShadows);
 			pass.AddResources(stackalloc[] { cameraDepth, albedoNormal });
-
-			var noiseIndex = renderGraph.FrameIndex % 64;
-			var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
 
 			pass.SetRenderFunction((rtas, shadowRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{
@@ -151,9 +210,6 @@ public class NewPipeline : RenderPipelineBase
 			pass.AddUavOutput(raytracedDiffuse);
 			pass.AddResources(stackalloc[] { cameraDepth, albedoNormal });
 
-			var noiseIndex = renderGraph.FrameIndex % 64;
-			var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
-
 			pass.SetRenderFunction((rtas, diffuseRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{
 				command.SetRayTracingTextureParam(data.diffuseRaytracingShader, "BlueNoise2D", data.blueNoise2D);
@@ -170,8 +226,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.AddOutput(cameraColor);
 			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
 
-			var hasShadow = renderGraph.IsResourceWritten(sunShadow);
-			if (hasShadow)
+			if (renderGraph.IsResourceWritten(sunShadow))
 			{
 				pass.AddResource(sunShadow);
 				pass.AddKeyword("SHADOWS_ON");
@@ -198,11 +253,18 @@ public class NewPipeline : RenderPipelineBase
 				pass.AddKeyword("RAYTRACED_DIFFUSE");
 			}
 
-			pass.SetRenderFunction((deferredMaterial, viewData, environmentData, propertyBlock), static (command, data) =>
+			if (renderGraph.IsResourceWritten(volumetricLight))
+			{
+				pass.AddResource(volumetricLight);
+				pass.AddKeyword("VOLUMETRIC_LIGHT_ON");
+			}
+
+			pass.SetRenderFunction((deferredMaterial, viewData, environmentData, propertyBlock, asset.VolumetricDistance), static (command, data) =>
 			{
 				data.propertyBlock.Clear();
 				data.propertyBlock.SetConstantBuffer(environmentDataId, data.environmentData, 0, data.environmentData.stride);
 				data.propertyBlock.SetConstantBuffer(viewDataId, data.viewData, 0, data.viewData.stride);
+				data.propertyBlock.SetFloat("MaxDepth", data.VolumetricDistance);
 				command.DrawProcedural(default, data.deferredMaterial, 0, MeshTopology.Triangles, 3, 1, data.propertyBlock);
 			});
 		}
@@ -228,8 +290,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
 
-			var hasShadow = renderGraph.IsResourceWritten(sunShadow);
-			if (hasShadow)
+			if (renderGraph.IsResourceWritten(sunShadow))
 			{
 				pass.AddResource(sunShadow);
 				pass.AddKeyword("SHADOWS_ON");
@@ -252,14 +313,9 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedDepthOfField);
 
-			var noiseIndex = renderGraph.FrameIndex % 64;
-			var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds[noiseIndex]);
-			var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
-
-			var tanHalfFov = Geometry.TanHalfFovDegrees(camera.fieldOfView);
-			var focalLength = 0.5f * (asset.SensorSize / 1000.0f) / tanHalfFov;
+			var focalLength = 0.5f * (asset.SensorSize / 1000.0f) / tanHalfFovY;
 			var apertureRadius = 0.5f * focalLength / asset.Aperture;
-			var pixelToViewDir = Float4x4.PixelToNearClip(new(camera.pixelWidth, camera.pixelHeight), 0f, new(tanHalfFov * camera.aspect, tanHalfFov), true, false);
+			var pixelToViewDir = Float4x4.PixelToNearClip(new(camera.pixelWidth, camera.pixelHeight), 0f, tanHalfFov, true, false);
 
 			pass.SetRenderFunction((rtas, depthOfFieldRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise1D, blueNoise2D, apertureRadius, asset.FocusDistance, pixelToViewDir), static (command, data) =>
 			{

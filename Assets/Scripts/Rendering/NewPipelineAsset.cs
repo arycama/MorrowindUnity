@@ -6,6 +6,12 @@ public class NewPipelineAsset : RenderPipelineAsset<NewPipeline>
 {
 	[field: SerializeField, Pow2(8)] public int Samples { get; private set; } = 1;
 
+	[Header("Volumetric Light")]
+	[field: SerializeField] public bool VolumetricsEnabled { get; private set; } = true;
+	[field: SerializeField] public int VolumetricTileSize { get; private set; } = 8;
+	[field: SerializeField] public int VolumetricSlices { get; private set; } = 64;
+	[field: SerializeField] public float VolumetricDistance { get; private set; } = 512.0f;
+
 	[field: SerializeField] public float FocusDistance { get; private set; } = 10.0f;
 	[field: SerializeField] public float SensorSize { get; private set; } = 24.0f;
 	[field: SerializeField] public float Aperture { get; private set; } = 1.0f / 16.0f;

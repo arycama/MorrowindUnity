@@ -130,8 +130,11 @@ StructuredBuffer<uint> LightDepthMinMax;
 Texture2D<float> SunShadow;
 Texture2DArray<uint> VisibleLightBits;
 Texture2DArray<float> PointShadows;
-Texture3D<float4> VolumetricLighting;
 Texture2D<float3> CameraColor;
+
+#ifdef VOLUMETRIC_LIGHT_ON
+	Texture3D<float4> VolumetricLight;
+#endif
 
 #ifdef SCREEN_SPACE_SHADOWS
 	Texture2D<float> ScreenSpaceShadows;
@@ -362,7 +365,7 @@ float4 GetLuminanceAndFog(float4 color, float3 ambient, float3 normal, float2 sc
 	// Fog
 	#ifdef VOLUMETRIC_LIGHT_ON
 		float3 volumetricUv = float3(screenPosition / ViewSize, viewPosition.z / MaxDepth);
-		float4 volumetricLight = VolumetricLighting.Sample(LinearClampSampler, volumetricUv);
+		float4 volumetricLight = VolumetricLight.Sample(LinearClampSampler, volumetricUv);
 		float3 fogLuminance = volumetricLight.rgb;
 		float fogTransmittance = volumetricLight.a;
 	#else

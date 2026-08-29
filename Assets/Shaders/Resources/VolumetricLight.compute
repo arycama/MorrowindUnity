@@ -1,15 +1,12 @@
 #include "../Common.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Random.hlsl"
 
-#pragma kernel Compute
-#pragma kernel Accumulate
+#pragma kernel Compute COMPUTE
+#pragma kernel Accumulate ACCUMULATE
 #pragma use_dxc
 #pragma require waveMath
 #pragma multi_compile _ SHADOWS_ON
 #pragma multi_compile _ POINT_LIGHTS_ON
-
-RWTexture3D<float4> Result;
-Texture3D<float4> Input;
 
 float4x4 PixelToViewDir;
 float IsFirst;
@@ -18,6 +15,9 @@ float SliceToLinearDepth(float slice)
 {
 	return slice / VolumeSize.z * MaxDepth;
 }
+
+#ifdef COMPUTE
+RWTexture3D<float4> VolumetricLightTemp;
 
 [numthreads(8, 8, 1)]
 void Compute(uint3 id : SV_DispatchThreadID)
@@ -46,15 +46,20 @@ void Compute(uint3 id : SV_DispatchThreadID)
 	float4 previousScreenPosition = MultiplyPoint(WorldToPreviousScreen, worldPosition);
 	previousScreenPosition.xy = PerspectiveDivide(previousScreenPosition).xy;
 	
-	float3 volumeUv = float3(previousScreenPosition.xy, previousScreenPosition.w / MaxDepth);
-	if (!IsFirst && all(saturate(volumeUv) == volumeUv))
-	{
-		float4 previousLuminanceExtinction = Input.SampleLevel(TrilinearClampSampler, volumeUv, 0.0);
-		luminanceExtinction = lerp(previousLuminanceExtinction, luminanceExtinction, 0.05);
-	}
+	//float3 volumeUv = float3(previousScreenPosition.xy, previousScreenPosition.w / MaxDepth);
+	//if (!IsFirst && all(saturate(volumeUv) == volumeUv))
+	//{
+	//	float4 previousLuminanceExtinction = VolumetricLight.SampleLevel(TrilinearClampSampler, volumeUv, 0.0);
+	//	luminanceExtinction = lerp(previousLuminanceExtinction, luminanceExtinction, 0.05);
+	//}
 	
-	Result[id] = luminanceExtinction;
+	VolumetricLightTemp[id] = luminanceExtinction;
 }
+#endif
+
+#ifdef ACCUMULATE
+RWTexture3D<float4> VolumetricLight;
+Texture3D<float4> VolumetricLightTemp;
 
 [numthreads(8, 8, 1)]
 void Accumulate(uint2 id : SV_DispatchThreadID)
@@ -67,10 +72,11 @@ void Accumulate(uint2 id : SV_DispatchThreadID)
 	float4 result = float4(initialLuminance, initialTransmittance);
 	for (uint i = 0; i < VolumeSize.z; i++)
 	{
-		float4 luminanceExtinction = Input[uint3(id, i)];
+		float4 luminanceExtinction = VolumetricLightTemp[uint3(id, i)];
 		float transmittance = exp(-luminanceExtinction.a * ds);
 		result.rgb += result.a * luminanceExtinction.rgb * (1.0 - transmittance);
 		result.a *= transmittance;
-		Result[uint3(id, i)] = result;
+		VolumetricLight[uint3(id, i)] = result;
 	}
 }
+#endif
