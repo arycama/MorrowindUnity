@@ -61,7 +61,7 @@ float4 Fragment(FragmentInput input) : SV_Target
 	#endif
 		
 	#ifdef RAYTRACED_DIFFUSE
-		result += ScreenSpaceDiffuse[input.position.xy] * albedo;
+		result += ScreenSpaceDiffuse[input.position.xy] * albedo / Pi;
 	#endif
 	
 	return float4(result, 1.0 - (occlusion * (1.0 - FogFactor(viewPosition))));

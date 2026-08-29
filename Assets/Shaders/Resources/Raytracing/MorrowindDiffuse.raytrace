@@ -1,11 +1,19 @@
 #include "../../Common.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Raytracing.hlsl"
 
+#pragma max_recursion_depth 2
+
 RWTexture2D<float3> ScreenSpaceDiffuse;
 
 [shader("miss")]
-void MissShader(inout RayColorPayload payload : SV_RayPayload)
+void LuminanceMiss(inout RayColorPayload payload : SV_RayPayload)
 {
+}
+
+[shader("miss")]
+void TransmittanceMiss(inout RayTransmittancePayload payload : SV_RayPayload)
+{
+	payload.transmittance = 1.0;
 }
 
 [shader("raygeneration")]

@@ -2,14 +2,22 @@
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Random.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Raytracing.hlsl"
 
+#pragma max_recursion_depth 2
+
 RWTexture2D<float3> DepthOfField;
 float ApertureRadius, FocusDistance;
 matrix PixelToViewDir;
 
 [shader("miss")]
-void MissShader(inout RayColorPayload payload : SV_RayPayload)
+void LuminanceMiss(inout RayColorPayload payload : SV_RayPayload)
 {
 	payload.color += FogColor * payload.transmittance;
+}
+
+[shader("miss")]
+void TransmittanceMiss(inout RayTransmittancePayload payload : SV_RayPayload)
+{
+	payload.transmittance = 1.0;
 }
 
 [shader("raygeneration")]
@@ -24,7 +32,7 @@ void RayGeneration()
 	float phi = offset * TwoPi;
 	
 	float3 luminance = 0.0;
-	uint samples = 4;
+	uint samples = 8;
 	for (uint i = 0; i < samples; i++)
 	{
 		float2 uv = VogelDiskSample(i, samples, phi) * ApertureRadius;

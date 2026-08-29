@@ -79,25 +79,25 @@
 
 		Pass
         {
-            Name "RaytracedTransmittance"
-            Tags{ "LightMode" = "RaytracedTransmittance" }
+            Name "RaytracedLuminance"
 
             HLSLPROGRAM
             #pragma raytracing Raytracing
 			#pragma multi_compile _ _ALPHABLEND_ON
-            #include "SurfaceRaytracing.hlsl"
+			#pragma max_recursion_depth 2
+            #include "SurfaceRaytracingLuminance.hlsl"
             ENDHLSL
         }
 
 		Pass
         {
-            Name "RaytracedLuminance"
-            Tags{ "LightMode" = "RaytracedLuminance" }
+            Name "RaytracedTransmittance"
 
             HLSLPROGRAM
             #pragma raytracing Raytracing
 			#pragma multi_compile _ _ALPHABLEND_ON
-            #include "SurfaceRaytracingLuminance.hlsl"
+			#pragma max_recursion_depth 2
+            #include "SurfaceRaytracing.hlsl"
             ENDHLSL
         }
 	}

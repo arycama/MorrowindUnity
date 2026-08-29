@@ -118,7 +118,7 @@ public class NewPipeline : RenderPipelineBase
 			{
 				command.SetRayTracingTextureParam(data.occlusionRaytracingShader, "BlueNoise2D", data.blueNoise2D);
 				command.SetRayTracingShaderPass(data.occlusionRaytracingShader, "RaytracedTransmittance");
-				command.SetRayTracingAccelerationStructure(data.occlusionRaytracingShader, "SceneRaytracingAccelerationStructure", data.rtas);
+				command.SetGlobalRayTracingAccelerationStructure("SceneRaytracingAccelerationStructure", data.rtas);
 				command.DispatchRays(data.occlusionRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
 		}
@@ -138,7 +138,7 @@ public class NewPipeline : RenderPipelineBase
 			{
 				command.SetRayTracingTextureParam(data.shadowRaytracingShader, "BlueNoise2D", data.blueNoise2D);
 				command.SetRayTracingShaderPass(data.shadowRaytracingShader, "RaytracedTransmittance");
-				command.SetRayTracingAccelerationStructure(data.shadowRaytracingShader, "SceneRaytracingAccelerationStructure", data.rtas);
+				command.SetGlobalRayTracingAccelerationStructure("SceneRaytracingAccelerationStructure", data.rtas);
 				command.DispatchRays(data.shadowRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
 		}
@@ -158,7 +158,7 @@ public class NewPipeline : RenderPipelineBase
 			{
 				command.SetRayTracingTextureParam(data.diffuseRaytracingShader, "BlueNoise2D", data.blueNoise2D);
 				command.SetRayTracingShaderPass(data.diffuseRaytracingShader, "RaytracedLuminance");
-				command.SetRayTracingAccelerationStructure(data.diffuseRaytracingShader, "SceneRaytracingAccelerationStructure", data.rtas);
+				command.SetGlobalRayTracingAccelerationStructure("SceneRaytracingAccelerationStructure", data.rtas);
 				command.DispatchRays(data.diffuseRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
 		}
@@ -269,7 +269,7 @@ public class NewPipeline : RenderPipelineBase
 				command.SetRayTracingFloatParam(data.depthOfFieldRaytracingShader, "FocusDistance", data.FocusDistance);
 				command.SetRayTracingMatrixParam(data.depthOfFieldRaytracingShader, "PixelToViewDir", data.pixelToViewDir);
 				command.SetRayTracingShaderPass(data.depthOfFieldRaytracingShader, "RaytracedLuminance");
-				command.SetRayTracingAccelerationStructure(data.depthOfFieldRaytracingShader, "SceneRaytracingAccelerationStructure", data.rtas);
+				command.SetGlobalRayTracingAccelerationStructure("SceneRaytracingAccelerationStructure", data.rtas);
 				command.DispatchRays(data.depthOfFieldRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
 		}

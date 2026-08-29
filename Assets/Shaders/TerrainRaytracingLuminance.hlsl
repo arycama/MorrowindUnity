@@ -18,74 +18,64 @@ float4 BilinearWeights(float2 uv, float2 textureSize)
 	return weights.zzww * weights.xyyx;
 }
 
-uint3 FetchTriangleIndices(uint primitiveIndex)
+uint3 GetTriangleIndices(uint primitiveIndex)
 {
-	uint offsetInBytes = (primitiveIndex * 3) << 1;
-	uint dwordAlignedOffset = offsetInBytes & ~3;
-	uint2 fourIndices = unity_MeshIndexBuffer_RT.Load2(dwordAlignedOffset);
+	uint byteOffset = (primitiveIndex * 3) << 1;
+	uint index = byteOffset >> 2;
 
-	uint3 indices;
-	if (dwordAlignedOffset == offsetInBytes)
-	{
-		indices.x = fourIndices.x & 0xffff;
-		indices.y = (fourIndices.x >> 16) & 0xffff;
-		indices.z = fourIndices.y & 0xffff;
-	}
-	else
-	{
-		indices.x = (fourIndices.x >> 16) & 0xffff;
-		indices.y = fourIndices.y & 0xffff;
-		indices.z = (fourIndices.y >> 16) & 0xffff;
-	}
+	uint2 data;
+	data.x = unity_MeshIndexBuffer_RT[index + 0u];
+	data.y = unity_MeshIndexBuffer_RT[index + 1u];
 
-	return indices;
+	bool isOdd = primitiveIndex & 1u;
+	uint3 raw = uint3(data, isOdd ? data.y : data.x).xzy;
+	uint3 shift = uint2(isOdd, !isOdd).xyx << 4;
+	return (raw >> shift) & 0xffff;
 }
 
-float4 FetchUv(uint vertexIndex)
+float3 GetNormal(uint vertexIndex)
 {
-	uint2 fourHalfs = unity_MeshVertexBuffers_RT[2].Load2(vertexIndex * 8);
-	return f16tof32(fourHalfs.xxyy >> uint4(0, 16, 0, 16));
-}
-
-float4 FetchColor(uint vertexIndex)
-{
-	uint data = unity_MeshVertexBuffers_RT[3].Load(vertexIndex * 4);
-	return ((data >> uint4(0, 8, 16, 24)) & 255) / 255.0;
-}
-
-float3 FetchNormal(uint vertexIndex)
-{
-	uint data = unity_MeshVertexBuffers_RT[1].Load(vertexIndex * 4);
+	uint data = unity_MeshVertexBuffers_RT[1].Load(vertexIndex);
 	uint4 bytes = (data >> uint4(0, 8, 16, 24)) & 255;
 	int4 signedByte = (int4) (bytes << 24) >> 24;
-	return signedByte / 127.0f;
+	return signedByte.xyz / 127.0;
+}
+
+float4 GetUv(uint vertexIndex)
+{
+	uint2 data;
+	data.x = unity_MeshVertexBuffers_RT[2].Load(vertexIndex * 2 + 0);
+	data.y = unity_MeshVertexBuffers_RT[2].Load(vertexIndex * 2 + 1);
+	return f16tof32(data.xxyy >> uint2(0u, 16u).xyxy);
+}
+
+float4 GetColor(uint vertexIndex)
+{
+	uint data = unity_MeshVertexBuffers_RT[3].Load(vertexIndex);
+	return ((data >> uint4(0, 8, 16, 24)) & 255) / 255.0;
 }
 
 [shader("closesthit")]
 void Raytracing(inout RayColorPayload payload : SV_RayPayload, AttributeData attribs : SV_IntersectionAttributes)
 {
 	uint index = PrimitiveIndex();
-	uint3 triangleIndices = FetchTriangleIndices(index);
+	uint3 triangleIndices = GetTriangleIndices(index);
 	
-	float4 uv0 = FetchUv(triangleIndices.x);
-	float4 uv1 = FetchUv(triangleIndices.y);
-	float4 uv2 = FetchUv(triangleIndices.z);
-	float4 uv = BarycentricInterpolate(uv0, uv1, uv2, attribs.barycentrics.x, attribs.barycentrics.y);
+	float3 normal0 = GetNormal(triangleIndices.x);
+	float3 normal1 = GetNormal(triangleIndices.y);
+	float3 normal2 = GetNormal(triangleIndices.z);
+	float3 normal = BarycentricInterpolate(normal0, normal1, normal2, attribs.barycentrics);
 	
-	float3 normal0 = FetchNormal(triangleIndices.x);
-	float3 normal1 = FetchNormal(triangleIndices.y);
-	float3 normal2 = FetchNormal(triangleIndices.z);
-	float3 normal = BarycentricInterpolate(normal0, normal1, normal2, attribs.barycentrics.x, attribs.barycentrics.y);
+	float4 uv0 = GetUv(triangleIndices.x);
+	float4 uv1 = GetUv(triangleIndices.y);
+	float4 uv2 = GetUv(triangleIndices.z);
+	float4 uv = BarycentricInterpolate(uv0, uv1, uv2, attribs.barycentrics);
 	
-	float4 color0 = FetchColor(triangleIndices.x);
-	float4 color1 = FetchColor(triangleIndices.y);
-	float4 color2 = FetchColor(triangleIndices.z);
+	float3 color0 = GammaToLinear(GetColor(triangleIndices.x).rgb);
+	float3 color1 = GammaToLinear(GetColor(triangleIndices.y).rgb);
+	float3 color2 = GammaToLinear(GetColor(triangleIndices.z).rgb);
 	
-	color0 = GammaToLinear(color0);
-	color1 = GammaToLinear(color1);
-	color2 = GammaToLinear(color2);
-	
-	float4 vertexColor = BarycentricInterpolate(color0, color1, color2, attribs.barycentrics.x, attribs.barycentrics.y);
+	float3 vertexColor = BarycentricInterpolate(color0, color1, color2, attribs.barycentrics);
 	
 	float3 viewNormal = WorldToViewNormal(normal);
 	
@@ -98,8 +88,23 @@ void Raytracing(inout RayColorPayload payload : SV_RayPayload, AttributeData att
 	color += _MainTex.SampleLevel(LinearRepeatSampler, float3(uv.zw, terrainData.y), 0.0) * weights.y;
 	color += _MainTex.SampleLevel(LinearRepeatSampler, float3(uv.zw, terrainData.z), 0.0) * weights.z;
 	color += _MainTex.SampleLevel(LinearRepeatSampler, float3(uv.zw, terrainData.w), 0.0) * weights.w;
-	color *= vertexColor.rgb;
+	color *= vertexColor;
 	
-	color *= AmbientLight + saturate(dot(viewNormal, SunDirection)) * SunColor;
+	float3 L = MultiplyVector(ViewToWorld, SunDirection);
+	//L = SampleConeUniform(u.x, u.y, SunCosAngle, L);
+	
+	RayTransmittancePayload shadowPayload;
+	shadowPayload.transmittance = 0.0;
+	
+	RayDesc shadowRay;
+	shadowRay.Origin = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+	shadowRay.Direction = L;
+	shadowRay.TMin = 0.1;
+	shadowRay.TMax = 8192.0;
+		
+	uint flags = RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER | RAY_FLAG_CULL_BACK_FACING_TRIANGLES;
+	TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 1, shadowRay, shadowPayload);
+	
+	color *= AmbientLight + saturate(dot(viewNormal, SunDirection)) * SunColor * shadowPayload.transmittance;
 	payload.color = color;
 }

@@ -39,23 +39,25 @@ Shader "Terrain"
 
 		Pass
         {
-            Name "RaytracedTransmittance"
-            Tags{ "LightMode" = "RaytracedTransmittance" }
-
-            HLSLPROGRAM
-            #pragma raytracing Raytracing
-            #include "TerrainRaytracing.hlsl"
-            ENDHLSL
-        }
-
-		Pass
-        {
             Name "RaytracedLuminance"
             Tags{ "LightMode" = "RaytracedLuminance" }
 
             HLSLPROGRAM
             #pragma raytracing Raytracing
+			#pragma max_recursion_depth 2
             #include "TerrainRaytracingLuminance.hlsl"
+            ENDHLSL
+        }
+
+		Pass
+        {
+            Name "RaytracedTransmittance"
+            Tags{ "LightMode" = "RaytracedTransmittance" }
+
+            HLSLPROGRAM
+            #pragma raytracing Raytracing
+			#pragma max_recursion_depth 2
+            #include "TerrainRaytracing.hlsl"
             ENDHLSL
         }
 	}

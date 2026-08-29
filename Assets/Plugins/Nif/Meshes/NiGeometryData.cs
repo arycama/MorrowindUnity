@@ -25,7 +25,7 @@ namespace Nif
 			{
 				vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.Position, VertexAttributeFormat.Float32, 3, attributeCount++);
 				vertexPosition = niFile.Reader.BaseStream.Position;
-				niFile.Reader.BaseStream.Position += vertexCount * 3 * sizeof(float); 
+				niFile.Reader.BaseStream.Position += vertexCount * 3 * sizeof(float);
 			}
 
 			// Read Normals
@@ -47,7 +47,7 @@ namespace Nif
 			{
 				vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4, attributeCount++);
 				colorPosition = niFile.Reader.BaseStream.Position;
-				niFile.Reader.BaseStream.Position += vertexCount * 4 * sizeof(float); 
+				niFile.Reader.BaseStream.Position += vertexCount * 4 * sizeof(float);
 			}
 
 			// Read UV Sets
@@ -59,28 +59,28 @@ namespace Nif
 				{
 					vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2, attributeCount++);
 					uv0Position = niFile.Reader.BaseStream.Position;
-					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float); 
+					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float);
 				}
 
 				if (uvSetCount > 1)
 				{
 					vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 2, attributeCount++);
 					uv1Position = niFile.Reader.BaseStream.Position;
-					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float); 
+					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float);
 				}
 
 				if (uvSetCount > 2)
 				{
 					vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.TexCoord2, VertexAttributeFormat.Float32, 2, attributeCount++);
 					uv2Position = niFile.Reader.BaseStream.Position;
-					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float); 
+					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float);
 				}
 
 				if (uvSetCount > 3)
 				{
 					vertexAttributeDescriptors[attributeCount] = new(VertexAttribute.TexCoord3, VertexAttributeFormat.Float32, 2, attributeCount++);
 					uv3Position = niFile.Reader.BaseStream.Position;
-					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float); 
+					niFile.Reader.BaseStream.Position += vertexCount * 2 * sizeof(float);
 				}
 			}
 
@@ -95,7 +95,7 @@ namespace Nif
 			{
 				niFile.Reader.BaseStream.Position = vertexPosition;
 				var vertices = MeshDataArray[0].GetVertexData<Vector3>(n++);
-				for(var i = 0; i < vertexCount; i++)
+				for (var i = 0; i < vertexCount; i++)
 					vertices[i] = niFile.Reader.ReadVector3();
 			}
 
@@ -153,7 +153,7 @@ namespace Nif
 			niFile.Reader.BaseStream.Position = endPosition;
 		}
 
-		public bool HasMeshData{ get; set; }
+		public bool HasMeshData { get; set; }
 		public Mesh.MeshDataArray MeshDataArray { get; protected set; }
 	}
 }
