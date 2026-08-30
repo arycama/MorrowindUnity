@@ -6,10 +6,17 @@ public abstract class RenderPipelineBase : RenderPipeline
 {
 	private readonly CommandBuffer command;
 	protected readonly RenderGraph renderGraph = new();
+	protected abstract SupportedRenderingFeatures SupportedRenderingFeatures { get; }
 
 	public RenderPipelineBase()
 	{
 		command = new() { name = "Render Frame" };
+
+		GraphicsSettings.lightsUseLinearIntensity = true;
+		GraphicsSettings.lightsUseColorTemperature = true;
+		GraphicsSettings.realtimeDirectRectangularAreaLights = true;
+		GraphicsSettings.disableBuiltinCustomRenderTextureUpdate = true;
+		LoadStoreActionDebugModeSettings.LoadStoreDebugModeEnabled = false;
 	}
 
 	protected override void Dispose(bool disposing)

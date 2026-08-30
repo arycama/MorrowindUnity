@@ -13,7 +13,11 @@ MonoBehaviour:
   m_Name: New Pipeline
   m_EditorClassIdentifier: Rendering::NewPipelineAsset
   <Samples>k__BackingField: 1
-  <FocusDistance>k__BackingField: 1000
+  <VolumetricsEnabled>k__BackingField: 1
+  <VolumetricTileSize>k__BackingField: 4
+  <VolumetricSlices>k__BackingField: 64
+  <VolumetricDistance>k__BackingField: 8192
+  <FocusDistance>k__BackingField: 10
   <SensorSize>k__BackingField: 24
   <Aperture>k__BackingField: 0.0625
   <RayTracingLayerMask>k__BackingField:

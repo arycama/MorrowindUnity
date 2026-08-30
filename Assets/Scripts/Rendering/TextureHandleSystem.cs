@@ -1,37 +1,49 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 public class TextureHandleSystem
 {
-	public HashSet<int> activeTargets = new();
+	private readonly RenderGraph renderGraph;
+	private readonly Dictionary<int, RenderTexture> targets = new();
 
-	public void GetTemporaryRT(CommandBuffer command, int nameID, RenderTargetDescriptor descriptor, ViewInfo viewInfo, int samples = 1, bool isUav = false)
+	public TextureHandleSystem(RenderGraph renderGraph)
 	{
-		var wasAdded = activeTargets.Add(nameID);
+		this.renderGraph = renderGraph;
+	}
+
+	public RenderTexture GetTemporaryRT(int nameID, RenderTargetDescriptor descriptor, ViewHandle viewHandle, int samples = 1, bool isUav = false)
+	{
+		var viewInfo = renderGraph.GetViewInfo(viewHandle);
+		var resource = RenderTexture.GetTemporary(descriptor.GetRenderTextureDescriptor(viewInfo, samples, isUav));
+		_ = resource.Create();
+
+		var wasAdded = targets.TryAdd(nameID, resource);
 		if (!wasAdded)
 			Debug.LogError($"Adding an already active texture {nameID} {descriptor}");
 
-		command.GetTemporaryRT(nameID, descriptor.GetRenderTextureDescriptor(viewInfo, samples, isUav));
+		return resource;
 	}
 
-	public void ReleaseTemporaryRT(CommandBuffer command, int nameID)
+	public void ReleaseTemporaryRT(int nameID)
 	{
-		var wasRemoved = activeTargets.Remove(nameID);
-		if (!wasRemoved)
-			Debug.LogError($"Removing a texture {nameID} that was not active");
-
-		command.ReleaseTemporaryRT(nameID);
-	}
-
-	public void ReleaseRemainingTargets(CommandBuffer command)
-	{
-		foreach (var target in activeTargets)
+		if (!targets.TryGetValue(nameID, out var resource))
 		{
-			Debug.LogError($"Texture {target} was not released during frame");
-			command.ReleaseTemporaryRT(target);
+			Debug.LogError($"Removing a texture {nameID} that was not active");
+			return;
 		}
 
-		activeTargets.Clear();
+		RenderTexture.ReleaseTemporary(resource);
+		_ = targets.Remove(nameID);
+	}
+
+	public void ReleaseRemainingTargets()
+	{
+		foreach (var target in targets)
+		{
+			Debug.LogError($"Texture {target} was not released during frame");
+			RenderTexture.ReleaseTemporary(target.Value);
+		}
+
+		targets.Clear();
 	}
 }

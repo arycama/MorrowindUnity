@@ -12,7 +12,7 @@ public class RenderGraph : IDisposable
 	private readonly List<RenderTargetIdentifier> resources = new();
 	private readonly ResizableArray<RenderTargetInfo> targets = new();
 	private readonly ResizableArray<TextureHandle> handles = new();
-	private readonly TextureHandleSystem textureHandleSystem = new();
+	private readonly TextureHandleSystem textureHandleSystem;
 	private readonly NativeRenderPassSystem nativeRenderPassSystem = new();
 	private readonly PassBuilder builder;
 	public int FrameIndex { get; private set; }
@@ -20,6 +20,7 @@ public class RenderGraph : IDisposable
 	public RenderGraph()
 	{
 		builder = new(this);
+		textureHandleSystem = new(this);
 	}
 
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, int propertyId)
@@ -39,6 +40,8 @@ public class RenderGraph : IDisposable
 		builder.Index = renderPasses.Count;
 		return builder;
 	}
+
+	public ViewInfo GetViewInfo(ViewHandle handle) => viewInfos[handle.index];
 
 	public void SetRenderPass(PassBuilder builder)
 	{
@@ -122,16 +125,17 @@ public class RenderGraph : IDisposable
 		return new(index);
 	}
 
-	private void AllocateResource(CommandBuffer command, ref RenderTargetInfo target, ViewInfo viewInfo, bool isUav = false, int samples = 1)
+	private void AllocateResource(ref RenderTargetInfo target, ViewHandle viewHandle, bool isUav = false, int samples = 1)
 	{
 		target.resourceIndex = resources.Count;
-		textureHandleSystem.GetTemporaryRT(command, target.propertyId, target.descriptor, viewInfo, samples, isUav);
-		resources.Add(target.propertyId);
+		var resource = textureHandleSystem.GetTemporaryRT(target.propertyId, target.descriptor, viewHandle, samples, isUav);
+		resources.Add(resource);
 	}
 
 	private void BeginNativeRenderPass(CommandBuffer command, int renderPassIndex, IRenderPass renderPass)
 	{
 		var nativePassDesc = nativeRenderPassSystem.GetDescriptor(renderPass.NativePassIndex);
+		var viewHandle = renderPass.ViewHandle;
 		var viewInfo = viewInfos[renderPass.ViewHandle.index];
 
 		// Resolve the attachments to their final values
@@ -177,7 +181,7 @@ public class RenderGraph : IDisposable
 
 			if (requiresResolve)
 			{
-				AllocateResource(command, ref target, viewInfo);
+				AllocateResource(ref target, viewHandle);
 				attachmentDesc.resolveTarget = resources[target.resourceIndex];
 				attachmentDesc.storeAction = RenderBufferStoreAction.Resolve;
 			}
@@ -185,7 +189,7 @@ public class RenderGraph : IDisposable
 			{
 				// Depth targets can't be msaa resolved so we need to store the msaa version.
 				if (isFirstWrite)
-					AllocateResource(command, ref target, viewInfo, false, viewInfo.samples);
+					AllocateResource(ref target, viewHandle, false, viewInfo.samples);
 
 				attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
 			}
@@ -193,7 +197,7 @@ public class RenderGraph : IDisposable
 			{
 				// A store is required if the target is read outside of this nativePass, or it is exported
 				if (!target.isExported && isFirstWrite)
-					AllocateResource(command, ref target, viewInfo, false, 1);
+					AllocateResource(ref target, viewHandle, false, 1);
 
 				attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
 			}
@@ -233,7 +237,7 @@ public class RenderGraph : IDisposable
 			if (target.resourceIndex == -1)
 				continue;
 
-			textureHandleSystem.ReleaseTemporaryRT(command, target.propertyId);
+			textureHandleSystem.ReleaseTemporaryRT(target.propertyId);
 			target.resourceIndex = -1;
 		}
 	}
@@ -271,10 +275,7 @@ public class RenderGraph : IDisposable
 
 				// If this is the first time it is written, we need to allocate a texture
 				if (i == target.firstWriteIndex)
-				{
-					var viewInfo = viewInfos[renderPass.ViewHandle.index];
-					AllocateResource(command, ref target, viewInfo, true, 1);
-				}
+					AllocateResource(ref target, renderPass.ViewHandle, true, 1);
 
 				var resource = resources[target.resourceIndex];
 				command.SetGlobalTexture(target.propertyId, resource);
@@ -290,7 +291,7 @@ public class RenderGraph : IDisposable
 				// If this is the last time a resource is read, it can be freed for the next pass
 				if (i == target.lastReadIndex && !target.isExported)
 				{
-					textureHandleSystem.ReleaseTemporaryRT(command, target.propertyId);
+					textureHandleSystem.ReleaseTemporaryRT(target.propertyId);
 					target.resourceIndex = -1;
 				}
 			}
@@ -313,7 +314,7 @@ public class RenderGraph : IDisposable
 				// If this is the last time a resource is read, it can be freed for the next pass
 				if (i == target.lastReadIndex && !target.isExported)
 				{
-					textureHandleSystem.ReleaseTemporaryRT(command, target.propertyId);
+					textureHandleSystem.ReleaseTemporaryRT(target.propertyId);
 					target.resourceIndex = -1;
 				}
 			}
@@ -322,7 +323,7 @@ public class RenderGraph : IDisposable
 		if (lastNativePass != -1)
 			EndNativeRenderPass(command, lastNativePass, renderPasses.Count - 1);
 
-		textureHandleSystem.ReleaseRemainingTargets(command);
+		textureHandleSystem.ReleaseRemainingTargets();
 
 		FrameIndex++;
 	}

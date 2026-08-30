@@ -51,6 +51,41 @@ public class NewPipelineAsset : RenderPipelineAsset<NewPipeline>
 
 	public override string renderPipelineShaderTag => "NewPipeline";
 
+	public SupportedRenderingFeatures SupportedRenderingFeatures => new()
+	{
+		ambientProbeBaking = false,
+		defaultReflectionProbeBaking = false,
+		defaultMixedLightingModes = SupportedRenderingFeatures.LightmapMixedBakeModes.None,
+		editableMaterialRenderQueue = false,
+		enlighten = false,
+		lightmapBakeTypes = LightmapBakeType.Realtime,
+		lightmapsModes = LightmapsMode.NonDirectional,
+		lightProbeProxyVolumes = false,
+		mixedLightingModes = SupportedRenderingFeatures.LightmapMixedBakeModes.None,
+		motionVectors = false,
+		overridesEnableLODCrossFade = true,
+		overridesEnvironmentLighting = false,
+		overridesFog = false,
+		overridesMaximumLODLevel = false,
+		overridesLightProbeSystem = true,
+		overridesLightProbeSystemWarningMessage = default,
+		overridesLODBias = false,
+		overridesOtherLightingSettings = true,
+		overridesRealtimeReflectionProbes = true,
+		overridesShadowmask = true,
+		particleSystemInstancing = true,
+		receiveShadows = true,
+		reflectionProbeModes = SupportedRenderingFeatures.ReflectionProbeModes.None,
+		reflectionProbes = false,
+		rendererPriority = false,
+		rendererProbes = false,
+		rendersUIOverlay = true,
+		reflectionProbesBlendDistance = false,
+		skyOcclusion = false,
+		supportsClouds = false,
+		supportsHDR = true
+	};
+
 	protected override RenderPipeline CreatePipeline()
 	{
 		return new NewPipeline(this);

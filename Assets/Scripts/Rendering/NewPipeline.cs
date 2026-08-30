@@ -15,6 +15,7 @@ public class NewPipeline : RenderPipelineBase
 		viewDataId = Shader.PropertyToID("ViewData"),
 		environmentDataId = Shader.PropertyToID("EnvironmentData");
 
+	protected override SupportedRenderingFeatures SupportedRenderingFeatures => asset.SupportedRenderingFeatures;
 	private readonly NewPipelineAsset asset;
 	private readonly Material blitMaterial, deferredMaterial;
 	private readonly MaterialPropertyBlock propertyBlock;
@@ -23,6 +24,7 @@ public class NewPipeline : RenderPipelineBase
 	private readonly ComputeShader volumetricLightShader;
 	private readonly RayTracingAccelerationStructure rtas;
 	private readonly RayTracingShader occlusionRaytracingShader, shadowRaytracingShader, diffuseRaytracingShader, depthOfFieldRaytracingShader;
+	private readonly Dictionary<Camera, RenderTexture> volumetricHistory = new();
 
 	public NewPipeline(NewPipelineAsset asset)
 	{
@@ -85,7 +87,9 @@ public class NewPipeline : RenderPipelineBase
 
 		if (asset.VolumetricsEnabled)
 		{
-			var volumetricLightTemp = renderGraph.GetTexture(new(volumetricViewHandle, GraphicsFormat.R16G16B16A16_SFloat, dimension: TextureDimension.Tex3D), Shader.PropertyToID("VolumetricLightTemp"));
+			var volumetricDescriptor = new RenderTargetDescriptor(volumetricViewHandle, GraphicsFormat.R16G16B16A16_SFloat, dimension: TextureDimension.Tex3D);
+			var volumetricLightTemp = renderGraph.GetTexture(volumetricDescriptor, Shader.PropertyToID("VolumetricLightTemp"));
+
 			using (var pass = renderGraph.AddRenderPass("Volumetric Light Compute"))
 			{
 				pass.ViewHandle = volumetricViewHandle;
@@ -109,6 +113,13 @@ public class NewPipeline : RenderPipelineBase
 					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
 					command.DispatchCompute(data.volumetricLightShader, 0, data.volumeSize.x, data.volumeSize.y, data.volumeSize.z);
 				});
+
+				//if (!volumetricHistory.TryGetValue(camera, out var target))
+				//{
+				//	target = RenderTexture.GetTemporary(volumetricDescriptor.GetRenderTextureDescriptor(volumetricViewHandle, 1, true));
+				//}
+
+				//renderGraph.ExportResource(volumetricLightTemp, )
 			}
 
 			using (var pass = renderGraph.AddRenderPass("Volumetric Light Compute"))
