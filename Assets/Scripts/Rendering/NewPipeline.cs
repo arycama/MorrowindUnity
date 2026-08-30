@@ -102,24 +102,32 @@ public class NewPipeline : RenderPipelineBase
 					pass.AddKeyword("SHADOWS_ON");
 				}
 
+				var hasHistory = volumetricHistory.TryGetValue(camera, out var history);
+				if (hasHistory)
+					pass.AddKeyword("HISTORY");
+
+				var viewInfo = renderGraph.GetViewInfo(volumetricViewHandle);
+				var target = RenderTexture.GetTemporary(volumetricDescriptor.GetRenderTextureDescriptor(viewInfo, 1, true));
+				target.Create();
+				volumetricHistory[camera] = target;
+
 				var volumeSize = new Int3(volumeWidth, volumeHeight, asset.VolumetricSlices);
-				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance, viewData, environmentData, blueNoise1D), static (command, data) =>
+				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance, viewData, environmentData, blueNoise1D, history), static (command, data) =>
 				{
 					command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
 					command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 					command.SetComputeVectorParam(data.volumetricLightShader, "VolumeSize", new Float3(data.volumeSize.x, data.volumeSize.y, data.volumeSize.z));
 					command.SetComputeFloatParam(data.volumetricLightShader, "MaxDepth", data.VolumetricDistance);
 					command.SetComputeTextureParam(data.volumetricLightShader, 0, "BlueNoise1D", data.blueNoise1D);
+					command.SetComputeTextureParam(data.volumetricLightShader, 0, "VolumetricLight", data.history);
 					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
 					command.DispatchCompute(data.volumetricLightShader, 0, data.volumeSize.x, data.volumeSize.y, data.volumeSize.z);
 				});
 
-				//if (!volumetricHistory.TryGetValue(camera, out var target))
-				//{
-				//	target = RenderTexture.GetTemporary(volumetricDescriptor.GetRenderTextureDescriptor(volumetricViewHandle, 1, true));
-				//}
+				if (hasHistory)
+					RenderTexture.ReleaseTemporary(history);
 
-				//renderGraph.ExportResource(volumetricLightTemp, )
+				renderGraph.ExportResource(volumetricLightTemp, target);
 			}
 
 			using (var pass = renderGraph.AddRenderPass("Volumetric Light Compute"))
@@ -185,7 +193,7 @@ public class NewPipeline : RenderPipelineBase
 			using var pass = renderGraph.AddRenderPass("Raytraced Occlusion");
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedOcclusion);
-			pass.AddResources(stackalloc[] { cameraDepth });
+			pass.AddResources(stackalloc[] { cameraDepth, albedoNormal });
 
 			pass.SetRenderFunction((rtas, occlusionRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{

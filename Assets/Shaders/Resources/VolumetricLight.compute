@@ -7,6 +7,7 @@
 #pragma require waveMath
 #pragma multi_compile _ SHADOWS_ON
 #pragma multi_compile _ POINT_LIGHTS_ON
+#pragma multi_compile _ HISTORY
 
 float4x4 PixelToViewDir;
 float IsFirst;
@@ -18,6 +19,7 @@ float SliceToLinearDepth(float slice)
 
 #ifdef COMPUTE
 RWTexture3D<float4> VolumetricLightTemp;
+Texture3D<float4> VolumetricLight;
 
 [numthreads(8, 8, 1)]
 void Compute(uint3 id : SV_DispatchThreadID)
@@ -40,18 +42,20 @@ void Compute(uint3 id : SV_DispatchThreadID)
 	float3 albedo = FogColor / (SunColor + AmbientLight);
 	float4 luminanceExtinction = float4(albedo * illuminance, extinction);
 	
+#ifdef HISTORY
 	// Reproject previous frame. Needs to use unjittered world position
 	float linearUnjitteredDepth = SliceToLinearDepth(id.z + 0.5);
 	float3 worldPosition = MultiplyPointProj(ScreenToWorld, float3(screenPosition, LinearToDeviceDepth(linearUnjitteredDepth))).xyz;
 	float4 previousScreenPosition = MultiplyPoint(WorldToPreviousScreen, worldPosition);
 	previousScreenPosition.xy = PerspectiveDivide(previousScreenPosition).xy;
 	
-	//float3 volumeUv = float3(previousScreenPosition.xy, previousScreenPosition.w / MaxDepth);
-	//if (!IsFirst && all(saturate(volumeUv) == volumeUv))
-	//{
-	//	float4 previousLuminanceExtinction = VolumetricLight.SampleLevel(TrilinearClampSampler, volumeUv, 0.0);
-	//	luminanceExtinction = lerp(previousLuminanceExtinction, luminanceExtinction, 0.05);
-	//}
+	float3 volumeUv = float3(previousScreenPosition.xy, previousScreenPosition.w / MaxDepth);
+	if (!IsFirst && all(saturate(volumeUv) == volumeUv))
+	{
+		float4 previousLuminanceExtinction = VolumetricLight.SampleLevel(TrilinearClampSampler, volumeUv, 0.0);
+		luminanceExtinction = lerp(previousLuminanceExtinction, luminanceExtinction, 0.05);
+	}
+#endif
 	
 	VolumetricLightTemp[id] = luminanceExtinction;
 }

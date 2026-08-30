@@ -10,7 +10,7 @@ public class SetupView : IDisposable
 {
 	private readonly RenderGraph renderGraph;
 	private readonly GraphicsBuffer viewDataBuffer;
-	private readonly Dictionary<int, (Float3, Quaternion, Float4x4)> previousCameraTransform = new();
+	private readonly Dictionary<Camera, (Float3, Quaternion, Float4x4)> previousCameraTransform = new();
 
 	public SetupView(RenderGraph renderGraph)
 	{
@@ -34,6 +34,8 @@ public class SetupView : IDisposable
 				var viewSize = new Int2(data.camera.pixelWidth, data.camera.pixelHeight);
 				var near = data.camera.nearClipPlane;
 				var far = data.camera.farClipPlane;
+				var viewPosition = data.camera.transform.WorldPosition();
+				var viewRotation = data.camera.transform.WorldRotation();
 
 				// Screen
 				var screenToPixel = Float4x4.Scale(new Float3((Float2)viewSize, 1));
@@ -55,8 +57,8 @@ public class SetupView : IDisposable
 				var viewToPixel = screenToPixel.Mul(viewToScreen);
 				var pixelToView = clipToView.Mul(pixelToClip);
 
-				var viewToWorld = Float4x4.Rotate(data.camera.transform.WorldRotation());
-				var worldToView = Float4x4.Rotate(data.camera.transform.WorldRotation().Inverse);
+				var viewToWorld = Float4x4.Rotate(viewRotation);
+				var worldToView = Float4x4.Rotate(viewRotation.Inverse);
 
 				// World
 				var worldToClip = viewToClip.Mul(worldToView);
@@ -70,6 +72,15 @@ public class SetupView : IDisposable
 
 				var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
 
+				var viewToNonJitteredScreen = clipToScreen.Mul(viewToClip);
+				if (!data.previousCameraTransform.TryGetValue(data.camera, out var previousTransform))
+					previousTransform = (viewPosition, viewRotation, viewToNonJitteredScreen);
+
+				data.previousCameraTransform[data.camera] = (viewPosition, viewRotation, viewToNonJitteredScreen);
+
+				var worldToPreviousView = Float4x4.WorldToLocal(previousTransform.Item1 - viewPosition, previousTransform.Item2);
+				var worldToPreviousScreen = previousTransform.Item3.Mul(worldToPreviousView);
+
 				command.SetBufferData(data.viewDataBuffer, stackalloc[]
 				{(
 					worldToClip,
@@ -77,6 +88,8 @@ public class SetupView : IDisposable
 					worldToView,
 					viewToWorld,
 					pixelToWorld,
+					screenToWorld,
+					worldToPreviousScreen,
 					overlayMatrix,
 					(far - near) * Rcp(near * far), Rcp(far), near, far,
 					(Float2)viewSize, 1.0f / (Float2)viewSize,
@@ -96,6 +109,8 @@ public class SetupView : IDisposable
 		public Float4x4 worldToView;
 		public Float4x4 viewToWorld;
 		public Float4x4 pixelToWorld;
+		public Float4x4 screenToWorld;
+		public Float4x4 worldToPreviousScreen;
 		public Float4x4 overlayMatrix;
 		public float Item5;
 		public float Item6;

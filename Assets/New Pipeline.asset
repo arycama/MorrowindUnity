@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Rendering::NewPipelineAsset
   <Samples>k__BackingField: 1
   <VolumetricsEnabled>k__BackingField: 1
-  <VolumetricTileSize>k__BackingField: 4
+  <VolumetricTileSize>k__BackingField: 8
   <VolumetricSlices>k__BackingField: 64
   <VolumetricDistance>k__BackingField: 8192
   <FocusDistance>k__BackingField: 10
