@@ -1,4 +1,8 @@
-﻿#include "Common.hlsl"
+﻿#ifdef __INTELLISENSE__
+	#define VOLUMETRIC_LIGHT_ON
+#endif
+
+#include "Common.hlsl"
 
 struct VertexInput
 {
@@ -10,34 +14,32 @@ struct VertexInput
 struct FragmentInput
 {
 	float4 position : SV_POSITION;
-	float3 worldPosition : POSITION1;
-	float2 uv : TEXCOORD0;
-	float3 color : COLOR;
+	float fogFactor : TEXCOORD;
 };
 
 float4 _SkyColor;
 
 FragmentInput Vertex(VertexInput input)
 {
-	float3 worldPosition = ObjectToWorldPosition(input.position * 6, 0);
-
 	FragmentInput output;
-	output.worldPosition = worldPosition;
-	output.position = WorldToClipPosition(worldPosition);
-	output.uv = input.uv;
+	output.position = ObjectToClipPosition(input.position * 6, 0);
 	output.position.z /= output.position.w;
 	
-	float alpha = (input.vertexId & 1) ? 0.0 : 1.0;
-	output.color = lerp(FogColor, _SkyColor.rgb, alpha);
+	output.fogFactor = (input.vertexId & 1) ? 0.0 : 1.0;
 	return output;
 }
 
 float3 Fragment(FragmentInput input) : SV_Target
 {
-	float3 color = input.color;
-	
-	//if (ViewPosition.y < WaterHeight)
-	//	color = lerp(color, UnderwaterColor, UnderwaterColorWeight);
-	
-	return color;
+	#ifdef VOLUMETRIC_LIGHT_ON
+		float3 volumetricUv = float3(input.position.xy / ViewSize, 1.0);
+		float4 volumetricLight = VolumetricLight.Sample(LinearClampSampler, volumetricUv);
+		float3 fogLuminance = volumetricLight.rgb;
+		float fogTransmittance = volumetricLight.a;
+		
+		return lerp(fogLuminance * (1.0 - fogTransmittance), _SkyColor.rgb, input.fogFactor);
+		
+	#else
+		return lerp(FogColor, _SkyColor.rgb, input.fogFactor);
+	#endif
 }

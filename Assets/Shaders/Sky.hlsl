@@ -47,6 +47,20 @@ float4 Fragment(FragmentInput input) : SV_Target
 {
 	float4 color = _MainTex.Sample(sampler_MainTex, input.uv) * input.color;
 	
+	#ifdef VOLUMETRIC_LIGHT_ON
+		float3 volumetricUv = float3(input.position.xy / ViewSize, 1.0);
+		float4 volumetricLight = VolumetricLight.Sample(LinearClampSampler, volumetricUv);
+		float3 fogLuminance = volumetricLight.rgb;
+		float fogTransmittance = volumetricLight.a;
+		
+		//color.rgb += fogLuminance * color.a;
+		
+		//return lerp(fogLuminance * (1.0 - fogTransmittance), _SkyColor.rgb, input.fogFactor);
+		
+	//#else
+		//return lerp(FogColor, _SkyColor.rgb, input.fogFactor);
+	#endif
+	
 	//if (ViewPosition.y < WaterHeight)
 	//	color.rgb = lerp(color.rgb, UnderwaterColor, UnderwaterColorWeight);
 	

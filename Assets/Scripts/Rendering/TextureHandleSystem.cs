@@ -4,36 +4,36 @@ using UnityEngine;
 public class TextureHandleSystem
 {
 	private readonly RenderGraph renderGraph;
-	private readonly Dictionary<int, RenderTexture> targets = new();
+	private readonly Dictionary<TextureHandle, RenderTexture> targets = new();
 
 	public TextureHandleSystem(RenderGraph renderGraph)
 	{
 		this.renderGraph = renderGraph;
 	}
 
-	public RenderTexture GetTemporaryRT(int nameID, RenderTargetDescriptor descriptor, ViewHandle viewHandle, int samples = 1, bool isUav = false)
+	public RenderTexture GetTemporaryRT(TextureHandle handle, RenderTargetDescriptor descriptor, ViewHandle viewHandle, int samples = 1, bool isUav = false)
 	{
 		var viewInfo = renderGraph.GetViewInfo(viewHandle);
 		var resource = RenderTexture.GetTemporary(descriptor.GetRenderTextureDescriptor(viewInfo, samples, isUav));
 		_ = resource.Create();
 
-		var wasAdded = targets.TryAdd(nameID, resource);
+		var wasAdded = targets.TryAdd(handle, resource);
 		if (!wasAdded)
-			Debug.LogError($"Adding an already active texture {nameID} {descriptor}");
+			Debug.LogError($"Adding an already active texture {handle} {descriptor}");
 
 		return resource;
 	}
 
-	public void ReleaseTemporaryRT(int nameID)
+	public void ReleaseTemporaryRT(TextureHandle handle)
 	{
-		if (!targets.TryGetValue(nameID, out var resource))
+		if (!targets.TryGetValue(handle, out var resource))
 		{
-			Debug.LogError($"Removing a texture {nameID} that was not active");
+			Debug.LogError($"Removing a texture {handle} that was not active");
 			return;
 		}
 
 		RenderTexture.ReleaseTemporary(resource);
-		_ = targets.Remove(nameID);
+		_ = targets.Remove(handle);
 	}
 
 	public void ReleaseRemainingTargets()

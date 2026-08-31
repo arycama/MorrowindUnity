@@ -17,7 +17,7 @@ public class NewPipeline : RenderPipelineBase
 
 	protected override SupportedRenderingFeatures SupportedRenderingFeatures => asset.SupportedRenderingFeatures;
 	private readonly NewPipelineAsset asset;
-	private readonly Material blitMaterial, deferredMaterial;
+	private readonly Material blitMaterial, deferredMaterial, backgroundMaterial;
 	private readonly MaterialPropertyBlock propertyBlock;
 	private readonly SetupView setupView;
 	private readonly SetupLighting setupLighting;
@@ -31,6 +31,7 @@ public class NewPipeline : RenderPipelineBase
 		this.asset = asset;
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
 		deferredMaterial = new Material(Shader.Find("Hidden/Morrowind Deferred")) { hideFlags = HideFlags.HideAndDontSave };
+		backgroundMaterial = new Material(Shader.Find("Hidden/Background")) { hideFlags = HideFlags.HideAndDontSave };
 		propertyBlock = new();
 		setupView = new(renderGraph);
 		setupLighting = new(renderGraph, asset.Lighting);
@@ -154,7 +155,7 @@ public class NewPipeline : RenderPipelineBase
 		var viewHandle = renderGraph.AddViewInfo(viewSize, asset.Samples);
 		var cameraDepth = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt, true), Shader.PropertyToID("CameraDepth"));
 		var albedoNormal = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"));
-		var cameraColor = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32, true, RenderSettings.fogColor.linear), Shader.PropertyToID("CameraColor"));
+		var cameraColor = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("CameraColor"));
 
 		using (var pass = renderGraph.AddRenderPass("Terrain"))
 		{
@@ -294,11 +295,24 @@ public class NewPipeline : RenderPipelineBase
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
 
+			if (renderGraph.IsResourceWritten(volumetricLight))
+			{
+				pass.AddResource(volumetricLight);
+				pass.AddKeyword("VOLUMETRIC_LIGHT_ON");
+			}
+
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Sky"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all });
-			pass.SetRenderFunction((rendererList, viewData, environmentData), static (command, data) =>
+			pass.SetRenderFunction((rendererList, viewData, environmentData, asset.VolumetricDistance, backgroundMaterial, propertyBlock), static (command, data) =>
 			{
 				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
 				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
+				command.SetGlobalFloat("MaxDepth", data.VolumetricDistance);
+
+				data.propertyBlock.Clear();
+				data.propertyBlock.SetConstantBuffer(environmentDataId, data.environmentData, 0, data.environmentData.stride);
+				data.propertyBlock.SetConstantBuffer(viewDataId, data.viewData, 0, data.viewData.stride);
+				command.DrawProcedural(default, data.backgroundMaterial, 0, MeshTopology.Triangles, 3, 1, data.propertyBlock);
+
 				command.DrawRendererList(data.rendererList);
 			});
 		}

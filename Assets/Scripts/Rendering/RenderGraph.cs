@@ -65,10 +65,10 @@ public class RenderGraph : IDisposable
 
 		// UAV resources are handled specially
 		var uavStart = handles.Count;
-		foreach (var resource in builder.UavOutputs)
+		foreach (var handle in builder.UavOutputs)
 		{
-			handles.Add(resource);
-			SetResourceWriteIndex(resource, builder.Index);
+			handles.Add(handle);
+			SetResourceWriteIndex(handle, builder.Index);
 		}
 
 		var uavResourceRange = uavStart..handles.Count;
@@ -125,10 +125,11 @@ public class RenderGraph : IDisposable
 		return new(index);
 	}
 
-	private void AllocateResource(ref RenderTargetInfo target, ViewHandle viewHandle, bool isUav = false, int samples = 1)
+	private void AllocateResource(TextureHandle handle, ViewHandle viewHandle, bool isUav = false, int samples = 1)
 	{
+		ref var target = ref targets[handle];
 		target.resourceIndex = resources.Count;
-		var resource = textureHandleSystem.GetTemporaryRT(target.propertyId, target.descriptor, viewHandle, samples, isUav);
+		var resource = textureHandleSystem.GetTemporaryRT(handle, target.descriptor, viewHandle, samples, isUav);
 		resources.Add(resource);
 	}
 
@@ -140,9 +141,9 @@ public class RenderGraph : IDisposable
 
 		// Resolve the attachments to their final values
 		var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
-		foreach (var attachment in nativePassDesc.attachments)
+		foreach (var texture in nativePassDesc.attachments)
 		{
-			ref var target = ref targets[attachment];
+			ref var target = ref targets[texture];
 			var attachmentDesc = new AttachmentDescriptor
 			{
 				graphicsFormat = target.descriptor.format
@@ -181,7 +182,7 @@ public class RenderGraph : IDisposable
 
 			if (requiresResolve)
 			{
-				AllocateResource(ref target, viewHandle);
+				AllocateResource(texture, viewHandle);
 				attachmentDesc.resolveTarget = resources[target.resourceIndex];
 				attachmentDesc.storeAction = RenderBufferStoreAction.Resolve;
 			}
@@ -189,7 +190,7 @@ public class RenderGraph : IDisposable
 			{
 				// Depth targets can't be msaa resolved so we need to store the msaa version.
 				if (isFirstWrite)
-					AllocateResource(ref target, viewHandle, false, viewInfo.samples);
+					AllocateResource(texture, viewHandle, false, viewInfo.samples);
 
 				attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
 			}
@@ -197,7 +198,7 @@ public class RenderGraph : IDisposable
 			{
 				// A store is required if the target is read outside of this nativePass, or it is exported
 				if (!target.isExported && isFirstWrite)
-					AllocateResource(ref target, viewHandle, false, 1);
+					AllocateResource(texture, viewHandle, false, 1);
 
 				attachmentDesc.loadStoreTarget = resources[target.resourceIndex];
 			}
@@ -237,7 +238,7 @@ public class RenderGraph : IDisposable
 			if (target.resourceIndex == -1)
 				continue;
 
-			textureHandleSystem.ReleaseTemporaryRT(target.propertyId);
+			textureHandleSystem.ReleaseTemporaryRT(attachment);
 			target.resourceIndex = -1;
 		}
 	}
@@ -269,29 +270,29 @@ public class RenderGraph : IDisposable
 				command.NextSubPass();
 
 			// UAV resources are handled seperately so we need to write them here
-			foreach (var input in handles[renderPass.UavResourceRange])
+			foreach (var handle in handles[renderPass.UavResourceRange])
 			{
-				ref var target = ref targets[input];
+				ref var target = ref targets[handle];
 
 				// If this is the first time it is written, we need to allocate a texture
 				if (i == target.firstWriteIndex && !target.isExported)
-					AllocateResource(ref target, renderPass.ViewHandle, true, 1);
+					AllocateResource(handle, renderPass.ViewHandle, true, 1);
 
 				var resource = resources[target.resourceIndex];
 				command.SetGlobalTexture(target.propertyId, resource);
 			}
 
 			// Set resources. Note this needs to happen after allocation, since we free any resources after this, and we don't want to accidentally free a resource that is being read
-			foreach (var input in handles[renderPass.ResourceRange])
+			foreach (var handle in handles[renderPass.ResourceRange])
 			{
-				ref var target = ref targets[input];
+				ref var target = ref targets[handle];
 				var resource = resources[target.resourceIndex];
 				command.SetGlobalTexture(target.propertyId, resource);
 
 				// If this is the last time a resource is read, it can be freed for the next pass
 				if (i == target.lastReadIndex && !target.isExported)
 				{
-					textureHandleSystem.ReleaseTemporaryRT(target.propertyId);
+					textureHandleSystem.ReleaseTemporaryRT(handle);
 					target.resourceIndex = -1;
 				}
 			}
@@ -307,14 +308,14 @@ public class RenderGraph : IDisposable
 				command.DisableKeyword(keyword);
 
 			// Free any UAVs. This needs to be done after the pass, otherwise we might allocate and free a texture before the pass starts, allowing another UAV to be assigned to the same texture
-			foreach (var input in handles[renderPass.UavResourceRange])
+			foreach (var handle in handles[renderPass.UavResourceRange])
 			{
-				ref var target = ref targets[input];
+				ref var target = ref targets[handle];
 
 				// If this is the last time a resource is read, it can be freed for the next pass
 				if (i == target.lastReadIndex && !target.isExported)
 				{
-					textureHandleSystem.ReleaseTemporaryRT(target.propertyId);
+					textureHandleSystem.ReleaseTemporaryRT(handle);
 					target.resourceIndex = -1;
 				}
 			}
