@@ -122,10 +122,10 @@ public class NewPipeline : RenderPipelineBase
 					command.SetComputeTextureParam(data.volumetricLightShader, 0, "VolumetricLight", data.history);
 					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
 					command.DispatchCompute(data.volumetricLightShader, 0, data.volumeSize.x, data.volumeSize.y, data.volumeSize.z);
-				});
 
-				if (hasHistory)
-					RenderTexture.ReleaseTemporary(history);
+					if (data.history != null)
+						RenderTexture.ReleaseTemporary(data.history);
+				});
 
 				renderGraph.ExportResource(volumetricLightTemp, target);
 			}
@@ -315,10 +315,17 @@ public class NewPipeline : RenderPipelineBase
 				pass.AddKeyword("SHADOWS_ON");
 			}
 
+			if (renderGraph.IsResourceWritten(volumetricLight))
+			{
+				pass.AddResource(volumetricLight);
+				pass.AddKeyword("VOLUMETRIC_LIGHT_ON");
+			}
+
 			var rendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 			var rendererList = context.CreateRendererList(ref rendererParams);
-			pass.SetRenderFunction((rendererList, viewData, environmentData), (command, data) =>
+			pass.SetRenderFunction((rendererList, viewData, environmentData, asset.VolumetricDistance), (command, data) =>
 			{
+				command.SetGlobalFloat("MaxDepth", data.VolumetricDistance);
 				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
 				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 				command.DrawRendererList(data.rendererList);

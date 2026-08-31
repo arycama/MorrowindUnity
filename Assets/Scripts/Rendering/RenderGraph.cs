@@ -274,7 +274,7 @@ public class RenderGraph : IDisposable
 				ref var target = ref targets[input];
 
 				// If this is the first time it is written, we need to allocate a texture
-				if (i == target.firstWriteIndex)
+				if (i == target.firstWriteIndex && !target.isExported)
 					AllocateResource(ref target, renderPass.ViewHandle, true, 1);
 
 				var resource = resources[target.resourceIndex];
