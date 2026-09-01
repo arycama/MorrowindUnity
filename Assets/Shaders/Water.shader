@@ -13,6 +13,7 @@
 
 	SubShader
 	{
+		Offset 1, 0
 		Tags { "Queue" = "Transparent" }
 
 		Pass

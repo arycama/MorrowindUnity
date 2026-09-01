@@ -12,7 +12,7 @@ public class NewPipeline : RenderPipelineBase
 
 	protected override SupportedRenderingFeatures SupportedRenderingFeatures => asset.SupportedRenderingFeatures;
 	private readonly NewPipelineAsset asset;
-	private readonly Material blitMaterial, deferredMaterial, backgroundMaterial;
+	private readonly Material blitMaterial, deferredMaterial, backgroundMaterial, pointLightMaterial;
 	private readonly SetupView setupView;
 	private readonly SetupLighting setupLighting;
 	private readonly VolumetricLight volumetricLight;
@@ -25,8 +25,9 @@ public class NewPipeline : RenderPipelineBase
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
 		deferredMaterial = new Material(Shader.Find("Hidden/Morrowind Deferred")) { hideFlags = HideFlags.HideAndDontSave };
 		backgroundMaterial = new Material(Shader.Find("Hidden/Background")) { hideFlags = HideFlags.HideAndDontSave };
+		pointLightMaterial = new Material(Shader.Find("Hidden/Morrowind Point Light")) { hideFlags = HideFlags.HideAndDontSave };
 		setupView = new(renderGraph);
-		setupLighting = new(renderGraph, asset.Lighting);
+		setupLighting = new(renderGraph, asset.Lighting, asset.LightCulling);
 		volumetricLight = new(renderGraph, asset);
 
 		occlusionRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindOcclusion");
@@ -65,7 +66,7 @@ public class NewPipeline : RenderPipelineBase
 
 		var viewData = setupView.Render(camera);
 		var viewDataFlipped = setupView.Render(camera, true, false);
-		var (environmentData, sunShadow) = setupLighting.Render(camera, cullingResults, context, viewData);
+		var (environmentData, sunShadow, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointLightCount, intersectingLightCount, pointShadows) = setupLighting.Render(camera, cullingResults, context, viewData);
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -107,6 +108,32 @@ public class NewPipeline : RenderPipelineBase
 			pass.SetRenderFunction(rendererList, static (command, rendererList) =>
 			{
 				command.DrawRendererList(rendererList);
+			});
+		}
+
+		using (var pass = renderGraph.AddRenderPass("Light Culling"))
+		{
+			pass.ViewHandle = viewHandle;
+			pass.DepthStencil = cameraDepth;
+			pass.AddUavOutput(visibleLightBits);
+			pass.AddResources(stackalloc ResourceHandle[] { viewData, pointLightData, pointLights });
+
+			pass.SetRenderFunction((visibleLightBits, renderGraph, asset.LightCulling, pointLightMaterial, pointLightCount, intersectingLightCount), static (command, data) =>
+			{
+				command.SetRandomWriteTarget(0, data.renderGraph.GetTextureResource(data.visibleLightBits));
+
+				if (data.intersectingLightCount > 0)
+				{
+					command.SetGlobalFloat("IndexOffset", 0);
+					command.DrawMeshInstancedProcedural(data.LightCulling.PointLightMesh, 0, data.pointLightMaterial, 0, data.intersectingLightCount);
+				}
+
+				var remainingPointLightCount = data.pointLightCount - data.intersectingLightCount;
+				if (remainingPointLightCount > 0)
+				{
+					command.SetGlobalFloat("IndexOffset", data.intersectingLightCount);
+					command.DrawMeshInstancedProcedural(data.LightCulling.PointLightMesh, 0, data.pointLightMaterial, 1, remainingPointLightCount);
+				}
 			});
 		}
 
@@ -167,7 +194,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
 			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
-			pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData });
+			pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
 
 			if (renderGraph.IsResourceWritten(sunShadow))
 			{
@@ -200,6 +227,11 @@ public class NewPipeline : RenderPipelineBase
 			{
 				pass.AddResource(volumetricLight);
 				pass.AddKeyword("VOLUMETRIC_LIGHT_ON");
+			}
+
+			if (renderGraph.IsResourceWritten(visibleLightBits))
+			{
+				pass.AddKeyword("POINT_LIGHTS_ON");
 			}
 
 			pass.SetRenderFunction((deferredMaterial, asset.VolumetricDistance), static (command, data) =>
@@ -236,7 +268,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
-			pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData });
+			pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
 
 			if (renderGraph.IsResourceWritten(sunShadow))
 			{
@@ -248,6 +280,11 @@ public class NewPipeline : RenderPipelineBase
 			{
 				pass.AddResource(volumetricLight);
 				pass.AddKeyword("VOLUMETRIC_LIGHT_ON");
+			}
+
+			if (renderGraph.IsResourceWritten(visibleLightBits))
+			{
+				pass.AddKeyword("POINT_LIGHTS_ON");
 			}
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));

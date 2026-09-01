@@ -1,3 +1,4 @@
+using CustomRenderPipeline;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -24,6 +25,7 @@ public class NewPipelineAsset : RenderPipelineAsset<NewPipeline>
 	[field: SerializeField] public bool RaytracedDepthOfField { get; private set; }
 
 	[field: SerializeField] public LightingSettings Lighting { get; private set; }
+	[field: SerializeField] public LightCulling.Settings LightCulling { get; private set; }
 
 	[SerializeField] private DefaultPipelineMaterials defaultMaterials = new();
 	[SerializeField] private DefaultPipelineShaders defaultShaders = new();

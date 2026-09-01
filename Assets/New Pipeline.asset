@@ -37,16 +37,23 @@ MonoBehaviour:
     <Use32Bit>k__BackingField: 0
     <CascadeUniformity>k__BackingField: 0.5
     <DirectionalCascadeCount>k__BackingField: 4
-    <DirectionalShadowDistance>k__BackingField: 8192
+    <DirectionalShadowDistance>k__BackingField: 7168
     <DirectionalShadowResolution>k__BackingField: 4096
-    <DirectionalShadowBias>k__BackingField: 5
-    <DirectionalShadowSlopeBias>k__BackingField: 1
+    <DirectionalShadowBias>k__BackingField: 10
+    <DirectionalShadowSlopeBias>k__BackingField: 2
     <PointShadowResolution>k__BackingField: 256
-    <PointShadowBias>k__BackingField: 0
-    <PointShadowSlopeBias>k__BackingField: 0
+    <PointShadowBias>k__BackingField: 10
+    <PointShadowSlopeBias>k__BackingField: 2
     <SpotShadowResolution>k__BackingField: 512
-    <SpotShadowBias>k__BackingField: 0
-    <SpotShadowSlopeBias>k__BackingField: 0
+    <SpotShadowBias>k__BackingField: 10
+    <SpotShadowSlopeBias>k__BackingField: 2
+  <LightCulling>k__BackingField:
+    <TileSize>k__BackingField: 16
+    <DepthSlices>k__BackingField: 8192
+    <PointLightMesh>k__BackingField: {fileID: -1732264862850525403, guid: 47996dfb8af93f44b8c55e697e3ea42e,
+      type: 3}
+    <SpotLightMesh>k__BackingField: {fileID: -8825038141534415262, guid: c7ee5e159e04fd64a88d11aff4cbe2c2,
+      type: 3}
   defaultMaterials:
     <DefaultMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,
       type: 2}

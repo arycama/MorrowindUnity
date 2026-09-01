@@ -170,7 +170,7 @@ public class RenderGraph : IDisposable
 			var descriptor = textureSystem.GetDescriptor(target.descriptorIndex);
 			var attachmentDesc = new AttachmentDescriptor
 			{
-				graphicsFormat = descriptor.format
+				graphicsFormat = descriptor.format,
 			};
 
 			// Load the target if it has been written to before this renderpass, otherwise clear it if required
@@ -190,7 +190,7 @@ public class RenderGraph : IDisposable
 			else
 			{
 				// If this target has been written previously, it must be loaded
-				attachmentDesc.loadStoreTarget = textureSystem.GetTexture(target.resourceIndex);
+				attachmentDesc.loadStoreTarget = new(textureSystem.GetTexture(target.resourceIndex), 0, CubemapFace.Unknown, nativePassDesc.depthSlice);
 			}
 
 			var isColor = descriptor.format switch
@@ -207,7 +207,7 @@ public class RenderGraph : IDisposable
 			if (requiresResolve)
 			{
 				AllocateTexture(texture, viewHandle);
-				attachmentDesc.resolveTarget = textureSystem.GetTexture(target.resourceIndex);
+				attachmentDesc.resolveTarget = new(textureSystem.GetTexture(target.resourceIndex), 0, CubemapFace.Unknown, nativePassDesc.depthSlice);
 				attachmentDesc.storeAction = RenderBufferStoreAction.Resolve;
 			}
 			else if (requiresMsaaStore)
@@ -216,7 +216,7 @@ public class RenderGraph : IDisposable
 				if (isFirstWrite)
 					AllocateTexture(texture, viewHandle, false, viewInfo.samples);
 
-				attachmentDesc.loadStoreTarget = textureSystem.GetTexture(target.resourceIndex);
+				attachmentDesc.loadStoreTarget = new(textureSystem.GetTexture(target.resourceIndex), 0, CubemapFace.Unknown, nativePassDesc.depthSlice);
 			}
 			else if (requiresStore)
 			{
@@ -224,7 +224,7 @@ public class RenderGraph : IDisposable
 				if (!target.isExported && isFirstWrite)
 					AllocateTexture(texture, viewHandle, false, 1);
 
-				attachmentDesc.loadStoreTarget = textureSystem.GetTexture(target.resourceIndex);
+				attachmentDesc.loadStoreTarget = new(textureSystem.GetTexture(target.resourceIndex), 0, CubemapFace.Unknown, nativePassDesc.depthSlice);
 			}
 			else
 			{
@@ -237,7 +237,7 @@ public class RenderGraph : IDisposable
 		Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(nativePassDesc.debugName)];
 		_ = Encoding.UTF8.GetBytes(nativePassDesc.debugName, debugNameUtf8);
 
-		command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, 1, viewInfo.samples, attachments.Span.AsArray(), nativePassDesc.depthIndex, -1, nativePassDesc.subpasses, debugNameUtf8);
+		command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, nativePassDesc.volumeDepth, viewInfo.samples, attachments.Span.AsArray(), nativePassDesc.depthIndex, -1, nativePassDesc.subpasses, debugNameUtf8);
 	}
 
 	private void EndNativeRenderPass(CommandBuffer command, int lastNativePass, int passIndex)

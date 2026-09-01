@@ -111,7 +111,7 @@ cbuffer LightingData
 cbuffer PointLightData
 {
 	float TileSize;
-	uint LightCount;
+	uint TileCount;
 	uint TileCountX;
 	uint LightIndexCount;
 	
@@ -265,6 +265,10 @@ uint3 GetClusterIndex(float3 screenPosition)
 	return float3(screenPosition.xy * RcpTileSize, screenPosition.z * RcpBinWidth);
 }
 
+#ifdef __INTELLISENSE__
+	#define POINT_LIGHTS_ON
+#endif
+
 float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, out float3 illuminance)
 {
 	// Directional light
@@ -300,9 +304,10 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, o
 	
 	#ifdef POINT_LIGHTS_ON
 		// Flat bit array iterator scalarized on entity with Z-Bin masked words
-		float3 cluster = GetClusterIndex(float3(screenPosition, viewPosition.z));
+		uint3 cluster = GetClusterIndex(float3(screenPosition, viewPosition.z));
 		uint2 lightRange = BitUnpack(LightDepthMinMax[cluster.z], 16, uint2(0, 16));
 		uint2 mergedRange = uint2(WaveActiveMin(lightRange.x), WaveActiveMax(lightRange.y)) >> 5u;
+		uint lightCount = 0;
 	
 		// Read range of words of visibility bits
 		for (uint i = mergedRange.x; i <= mergedRange.y; i++)
@@ -315,7 +320,7 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, o
 			uint maskWidth = clamp((int) lightRange.y - (int) lightRange.x + 1, 0, 32);
 		
 			// BitFieldMask op needs manual 32 size wrap support
-			uint depthMask = maskWidth == 32u ? UintMax : ((1u << maskWidth) - 1u) << localMin;
+			uint depthMask = maskWidth == 32u ? UintMax : BitFieldMask(maskWidth, localMin);
 		
 			// Compact world bitmask over all lanes in wavefront
 			uint mask = WaveActiveBitOr(tileMask & depthMask);
@@ -323,9 +328,10 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, o
 			{
 				uint bitIndex = firstbitlow(mask);
 				uint lightIndex = 32u * i + bitIndex;
-				mask &= ~(1u << bitIndex);
+				mask ^= 1u << bitIndex;
 			
 				Light light = PointLights[lightIndex];
+				lightCount++;
 	
 				// Attenuation
 				float3 lightVector = light.position - viewPosition;
@@ -351,9 +357,12 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, o
 				}
 			
 				illuminance += attenuation * light.color;
+				//luminance += (attenuation > 0) * light.color;
 				luminance += saturate(dot(normal, L)) * attenuation * light.color;
 			}
 		}
+		
+		//luminance = lerp(luminance, (lightCount >> uint3(0, 1, 2) & 1), 0.99);
 	#endif
 	
 	return luminance;

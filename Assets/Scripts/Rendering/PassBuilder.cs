@@ -16,6 +16,8 @@ public class PassBuilder : IDisposable
 	public List<ResourceHandle> UavOutputs { get; } = new();
 	public List<GlobalKeyword> Keywords { get; } = new();
 	public TextureHandle DepthStencil { get; set; } = new(-1);
+	public int DepthSlice { get; set; } = -1;
+	public int VolumeDepth { get; set; } = 1;
 
 	public PassBuilder(RenderGraph renderGraph)
 	{
@@ -70,6 +72,8 @@ public class PassBuilder : IDisposable
 		Name = default;
 		ViewHandle = new(-1);
 		Index = -1;
+		DepthSlice = -1;
+		VolumeDepth = 1;
 		DepthStencil = new(-1);
 		RenderPass = null;
 		Resources.Clear();

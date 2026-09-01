@@ -1,4 +1,5 @@
 #include "../Common.hlsl"
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Geometry.hlsl"
 
 struct VertexInput
 {
@@ -9,7 +10,9 @@ struct VertexInput
 struct FragmentInput
 {
 	float4 position : SV_Position;
-	nointerpolation uint2 data : TEXCOORD;
+	float4 sphere : TEXCOORD0;
+	float3 rayDirection : TEXCOORD1;
+	nointerpolation uint4 data : TEXCOORD2;
 };
 
 RWTexture2DArray<uint> VisibleLightBitsWrite : register(u0);
@@ -25,29 +28,43 @@ FragmentInput Vertex(VertexInput input)
 	float3 viewPosition = input.position * light.cullingSphere.w + light.cullingSphere.xyz;
 	
 	output.position = mul(ViewToClip, float4(viewPosition, 1.0));
+	output.sphere = light.cullingSphere;
+	output.rayDirection = viewPosition;
 	output.data.x = index / 32u; // Offset
 	output.data.y = 1 << (index % 32); // Bit
+	output.data.z = light.angleScale == 0;
+	output.data.w = output.data.x * TileCount;
 	return output;
 }
 
-//uint WaveCompactValue(uint checkValue)
-//{
-//	uint mask; // lane unique compaction mask
-//	for (;;) // Loop until all active lanes removed
-//	{
-//		uint firstValue = WaveReadLaneFirst(checkValue);
-//		mask = WaveActiveBallot(firstValue == checkValue); // mask is only updated for remaining active lanes
-//		if (firstValue == checkValue)
-//			break; // exclude all lanes with firstValue from next iteration
-//	}
-//	// At this point, each lane of mask should contain a bit mask of all other lanes with the same value.
-//	uint index = WavePrefixCountBits(mask); // Note this is performed independently on a different mask for each lane.
-//	return index;
-//}
+uint WaveCompactValue(uint checkValue, uint bit, out uint mergedBit)
+{
+	uint mask, firstValue;
+	do
+	{
+		uint firstValue = WaveReadLaneFirst(checkValue);
+		mask = WaveActiveBallot(firstValue == checkValue);
+	} while (firstValue != checkValue);
+	
+	uint index = WavePrefixCountBits(mask);
+	return index;
+	
+}
 
 [earlydepthstencil]
 void Fragment(FragmentInput input)
 {
-	float2 tile = input.position.xy * RcpTileSize;
-	InterlockedOr(VisibleLightBitsWrite[uint3(tile, input.data.x)], input.data.y);
+	float2 hits;
+	if (!IntersectRaySphere(-input.sphere.xyz, input.rayDirection, input.sphere.w, hits))
+		discard;
+		
+	uint2 tile = input.position.xy * RcpTileSize;
+	uint addrLinear = tile.x + tile.y * TileCountX + input.data.w;
+
+	uint mergedBit;
+	uint hash = WaveCompactValue(addrLinear, input.data.y, mergedBit);
+
+	[branch]
+	if (!hash)
+		InterlockedOr(VisibleLightBitsWrite[uint3(tile, input.data.x)], input.data.y);
 }
