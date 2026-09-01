@@ -4,14 +4,14 @@ using UnityEngine;
 public class TextureHandleSystem
 {
 	private readonly RenderGraph renderGraph;
-	private readonly Dictionary<TextureHandle, RenderTexture> targets = new();
+	private readonly Dictionary<ResourceHandle, RenderTexture> targets = new();
 
 	public TextureHandleSystem(RenderGraph renderGraph)
 	{
 		this.renderGraph = renderGraph;
 	}
 
-	public RenderTexture GetTemporaryRT(TextureHandle handle, RenderTargetDescriptor descriptor, ViewHandle viewHandle, int samples = 1, bool isUav = false)
+	public RenderTexture GetTemporaryRT(ResourceHandle handle, RenderTargetDescriptor descriptor, ViewHandle viewHandle, int samples = 1, bool isUav = false)
 	{
 		var viewInfo = renderGraph.GetViewInfo(viewHandle);
 		var resource = RenderTexture.GetTemporary(descriptor.GetRenderTextureDescriptor(viewInfo, samples, isUav));
@@ -24,7 +24,7 @@ public class TextureHandleSystem
 		return resource;
 	}
 
-	public void ReleaseTemporaryRT(TextureHandle handle)
+	public void ReleaseTemporaryRT(ResourceHandle handle)
 	{
 		if (!targets.TryGetValue(handle, out var resource))
 		{

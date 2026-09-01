@@ -11,30 +11,33 @@ public readonly struct TextureHandle : IEquatable<TextureHandle>
 		this.index = index;
 	}
 
-	public static implicit operator int(TextureHandle handle) => handle.index;
-
-	public static bool operator ==(TextureHandle left, TextureHandle right)
-	{
-		return left.index == right.index;
-	}
-
-	public static bool operator !=(TextureHandle left, TextureHandle right)
-	{
-		return left.index != right.index;
-	}
-
 	public override bool Equals(object obj)
 	{
-		return obj is TextureHandle other && Equals(other);
+		return obj is TextureHandle handle && Equals(handle);
+	}
+
+	public bool Equals(TextureHandle other)
+	{
+		return index == other.index;
 	}
 
 	public override int GetHashCode()
 	{
-		return index;
+		return HashCode.Combine(index);
 	}
 
-	bool IEquatable<TextureHandle>.Equals(TextureHandle other)
+	public static bool operator ==(TextureHandle left, TextureHandle right)
 	{
-		return index == other.index;
+		return left.Equals(right);
 	}
+
+	public static bool operator !=(TextureHandle left, TextureHandle right)
+	{
+		return !(left == right);
+	}
+
+	public static implicit operator int(TextureHandle handle) => handle.index;
+
+	public static implicit operator ResourceHandle(TextureHandle handle) => new(handle, ResourceHandleType.Texture);
 }
+

@@ -194,7 +194,7 @@ public class NewPipeline : RenderPipelineBase
 			using var pass = renderGraph.AddRenderPass("Raytraced Occlusion");
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedOcclusion);
-			pass.AddResources(stackalloc[] { cameraDepth, albedoNormal });
+			pass.AddResources(stackalloc ResourceHandle[] { cameraDepth, albedoNormal });
 
 			pass.SetRenderFunction((rtas, occlusionRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{
@@ -211,7 +211,7 @@ public class NewPipeline : RenderPipelineBase
 			using var pass = renderGraph.AddRenderPass("Raytraced Shadow");
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedShadows);
-			pass.AddResources(stackalloc[] { cameraDepth, albedoNormal });
+			pass.AddResources(stackalloc ResourceHandle[] { cameraDepth, albedoNormal });
 
 			pass.SetRenderFunction((rtas, shadowRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{
@@ -228,7 +228,7 @@ public class NewPipeline : RenderPipelineBase
 			using var pass = renderGraph.AddRenderPass("Raytraced Diffuse");
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedDiffuse);
-			pass.AddResources(stackalloc[] { cameraDepth, albedoNormal });
+			pass.AddResources(stackalloc ResourceHandle[] { cameraDepth, albedoNormal });
 
 			pass.SetRenderFunction((rtas, diffuseRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{

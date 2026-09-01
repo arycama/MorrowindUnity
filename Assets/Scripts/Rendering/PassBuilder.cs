@@ -10,10 +10,10 @@ public class PassBuilder : IDisposable
 	public int Index { get; set; } = -1;
 	public ViewHandle ViewHandle { get; set; } = new(-1);
 	public IRenderPass RenderPass { get; private set; }
-	public List<TextureHandle> Resources { get; } = new();
+	public List<ResourceHandle> Resources { get; } = new();
 	public List<TextureHandle> Inputs { get; } = new();
 	public List<TextureHandle> Outputs { get; } = new();
-	public List<TextureHandle> UavOutputs { get; } = new();
+	public List<ResourceHandle> UavOutputs { get; } = new();
 	public List<GlobalKeyword> Keywords { get; } = new();
 	public TextureHandle DepthStencil { get; set; } = new(-1);
 
@@ -22,9 +22,9 @@ public class PassBuilder : IDisposable
 		this.renderGraph = renderGraph;
 	}
 
-	public void AddResource(TextureHandle resource) => Resources.Add(resource);
+	public void AddResource(ResourceHandle resource) => Resources.Add(resource);
 
-	public void AddResources(ReadOnlySpan<TextureHandle> resources)
+	public void AddResources(Span<ResourceHandle> resources)
 	{
 		foreach (var resource in resources)
 			AddResource(resource);
@@ -38,9 +38,9 @@ public class PassBuilder : IDisposable
 			AddOutput(output);
 	}
 
-	public void AddUavOutput(TextureHandle output) => UavOutputs.Add(output);
+	public void AddUavOutput(ResourceHandle output) => UavOutputs.Add(output);
 
-	public void AddUavOutputs(ReadOnlySpan<TextureHandle> outputs)
+	public void AddUavOutputs(ReadOnlySpan<ResourceHandle> outputs)
 	{
 		foreach (var output in outputs)
 			AddUavOutput(output);

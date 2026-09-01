@@ -11,7 +11,7 @@ public class RenderGraph : IDisposable
 	private readonly List<ViewInfo> viewInfos = new();
 	private readonly List<RenderTargetIdentifier> resources = new();
 	private readonly ResizableArray<RenderTargetInfo> targets = new();
-	private readonly ResizableArray<TextureHandle> handles = new();
+	private readonly ResizableArray<ResourceHandle> handles = new();
 	private readonly TextureHandleSystem textureHandleSystem;
 	private readonly NativeRenderPassSystem nativeRenderPassSystem = new();
 	private readonly PassBuilder builder;
@@ -87,12 +87,12 @@ public class RenderGraph : IDisposable
 		renderPasses.Add(renderPass);
 	}
 
-	public bool IsResourceWritten(TextureHandle resource)
+	public bool IsResourceWritten(ResourceHandle resource)
 	{
 		return targets[resource].lastWriteIndex != -1;
 	}
 
-	private void SetResourceWriteIndex(TextureHandle handle, int index)
+	private void SetResourceWriteIndex(ResourceHandle handle, int index)
 	{
 		ref var target = ref targets[handle];
 
@@ -125,7 +125,7 @@ public class RenderGraph : IDisposable
 		return new(index);
 	}
 
-	private void AllocateResource(TextureHandle handle, ViewHandle viewHandle, bool isUav = false, int samples = 1)
+	private void AllocateResource(ResourceHandle handle, ViewHandle viewHandle, bool isUav = false, int samples = 1)
 	{
 		ref var target = ref targets[handle];
 		target.resourceIndex = resources.Count;
