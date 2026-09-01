@@ -6,7 +6,7 @@ using UnityEngine.Rendering;
 using Unmath;
 using static Unmath.Math;
 
-public class VolumetricLighting : ViewRenderFeature
+public class VolumetricLightingOld : ViewRenderFeature
 {
 	[Serializable]
 	public class Settings
@@ -22,7 +22,7 @@ public class VolumetricLighting : ViewRenderFeature
 	private readonly ComputeShader computeShader;
 	private readonly PersistentRTHandleCache colorHistory;
 
-	public VolumetricLighting(Settings settings, CustomRenderPipeline.RenderGraph renderGraph) : base(renderGraph)
+	public VolumetricLightingOld(Settings settings, CustomRenderPipeline.RenderGraph renderGraph) : base(renderGraph)
 	{
 		this.settings = settings;
 		colorHistory = new(GraphicsFormat.R16G16B16A16_SFloat, renderGraph, "Volumetric Lighting", TextureDimension.Tex3D);

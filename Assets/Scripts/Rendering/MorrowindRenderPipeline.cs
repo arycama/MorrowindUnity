@@ -96,7 +96,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 		}),
 
 		//new LightCulling(asset.LightCulling, renderGraph, "Hidden/Morrowind Point Light"),
-		new VolumetricLighting(asset.VolumetricLighting, renderGraph),
+		new VolumetricLightingOld(asset.VolumetricLighting, renderGraph),
 
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
 		{
@@ -167,7 +167,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			pass.ReadResource<ViewData>();
 			pass.ReadResource<EnvironmentData>();
 			pass.ReadResource<LightingData>();
-			pass.ReadResource<VolumetricLighting.Result>();
+			pass.ReadResource<VolumetricLightingOld.Result>();
 
 			if(renderGraph.TryGetResource<RaytracingResult>(out var raytracingData))
 			{
@@ -196,7 +196,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 			pass.WriteRtHandle<CameraTarget>();
 			pass.ReadResource<ViewData>();
 			pass.ReadResource<EnvironmentData>();
-			pass.ReadResource<VolumetricLighting.Result>();
+			pass.ReadResource<VolumetricLightingOld.Result>();
 		}),
 
 		new GenericViewRenderFeature(renderGraph, (in ReadOnlySpan<ViewParameter> viewParameters, in ViewPassData viewPassData, in DisplayData displayOutputData, ScriptableRenderContext context) =>
@@ -233,7 +233,7 @@ public partial class MorrowindRenderPipeline : CustomRenderPipelineBase<Morrowin
 				pass.ReadResource<ViewData>();
 				pass.ReadResource<EnvironmentData>();
 				pass.ReadResource<LightingData>();
-				pass.ReadResource<VolumetricLighting.Result>();
+				pass.ReadResource<VolumetricLightingOld.Result>();
 
 				if (pass.TryReadResource<PointLightData>())
 					pass.AddKeyword("POINT_LIGHTS_ON");

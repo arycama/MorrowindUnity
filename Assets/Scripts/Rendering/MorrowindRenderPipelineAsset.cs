@@ -14,7 +14,7 @@ public class MorrowindRenderPipelineAsset : CustomRenderPipelineAssetBase
 
 	[field: SerializeField] public LightingSettings LightingSettings { get; private set; }
 	[field: SerializeField] public LightCulling.Settings LightCulling { get; private set; }
-	[field: SerializeField] public VolumetricLighting.Settings VolumetricLighting { get; private set; }
+	[field: SerializeField] public VolumetricLightingOld.Settings VolumetricLighting { get; private set; }
 
 	public override bool UseSrpBatching => useSrpBatching;
 

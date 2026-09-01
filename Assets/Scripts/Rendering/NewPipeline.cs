@@ -4,7 +4,6 @@ using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 using Unmath;
-using static Unmath.Math;
 
 public class NewPipeline : RenderPipelineBase
 {
@@ -16,10 +15,9 @@ public class NewPipeline : RenderPipelineBase
 	private readonly Material blitMaterial, deferredMaterial, backgroundMaterial;
 	private readonly SetupView setupView;
 	private readonly SetupLighting setupLighting;
-	private readonly ComputeShader volumetricLightShader;
+	private readonly VolumetricLight volumetricLight;
 	private readonly RayTracingAccelerationStructure rtas;
 	private readonly RayTracingShader occlusionRaytracingShader, shadowRaytracingShader, diffuseRaytracingShader, depthOfFieldRaytracingShader;
-	private readonly Dictionary<Camera, RenderTexture> volumetricHistory = new();
 
 	public NewPipeline(NewPipelineAsset asset)
 	{
@@ -29,8 +27,7 @@ public class NewPipeline : RenderPipelineBase
 		backgroundMaterial = new Material(Shader.Find("Hidden/Background")) { hideFlags = HideFlags.HideAndDontSave };
 		setupView = new(renderGraph);
 		setupLighting = new(renderGraph, asset.Lighting);
-
-		volumetricLightShader = Resources.Load<ComputeShader>("VolumetricLight");
+		volumetricLight = new(renderGraph, asset);
 
 		occlusionRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindOcclusion");
 		shadowRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindShadow");
@@ -74,71 +71,7 @@ public class NewPipeline : RenderPipelineBase
 		var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds[noiseIndex]);
 		var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
 
-		var volumeWidth = DivRoundUp(viewSize.x, asset.VolumetricTileSize);
-		var volumeHeight = DivRoundUp(viewSize.y, asset.VolumetricTileSize);
-		var volumetricViewHandle = renderGraph.AddViewInfo(new(volumeWidth, volumeHeight), 1, asset.VolumetricSlices);
-		var volumetricLight = renderGraph.GetTexture(new(volumetricViewHandle, GraphicsFormat.R16G16B16A16_SFloat, dimension: TextureDimension.Tex3D), Shader.PropertyToID("VolumetricLight"));
-		if (asset.VolumetricsEnabled)
-		{
-			var volumetricDescriptor = new RenderTargetDescriptor(volumetricViewHandle, GraphicsFormat.R16G16B16A16_SFloat, dimension: TextureDimension.Tex3D);
-			var volumetricLightTemp = renderGraph.GetTexture(volumetricDescriptor, Shader.PropertyToID("VolumetricLightTemp"));
-
-			using (var pass = renderGraph.AddRenderPass("Volumetric Light Compute"))
-			{
-				pass.ViewHandle = volumetricViewHandle;
-				var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
-				pass.AddUavOutput(volumetricLightTemp);
-				pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData });
-
-				if (renderGraph.IsResourceWritten(sunShadow))
-				{
-					pass.AddResource(sunShadow);
-					pass.AddKeyword("SHADOWS_ON");
-				}
-
-				var hasHistory = volumetricHistory.TryGetValue(camera, out var history);
-				if (hasHistory)
-					pass.AddKeyword("HISTORY");
-
-				var viewInfo = renderGraph.GetViewInfo(volumetricViewHandle);
-				var target = RenderTexture.GetTemporary(volumetricDescriptor.GetRenderTextureDescriptor(viewInfo, 1, true));
-				target.Create();
-				volumetricHistory[camera] = target;
-
-				var volumeSize = new Int3(volumeWidth, volumeHeight, asset.VolumetricSlices);
-				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance, blueNoise1D, history), static (command, data) =>
-				{
-					command.SetComputeVectorParam(data.volumetricLightShader, "VolumeSize", new Float3(data.volumeSize.x, data.volumeSize.y, data.volumeSize.z));
-					command.SetComputeFloatParam(data.volumetricLightShader, "MaxDepth", data.VolumetricDistance);
-					command.SetComputeTextureParam(data.volumetricLightShader, 0, "BlueNoise1D", data.blueNoise1D);
-					command.SetComputeTextureParam(data.volumetricLightShader, 0, "VolumetricLight", data.history);
-					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
-					command.DispatchCompute(data.volumetricLightShader, 0, DivRoundUp(data.volumeSize.x, 8), DivRoundUp(data.volumeSize.y, 8), data.volumeSize.z);
-
-					if (data.history != null)
-						RenderTexture.ReleaseTemporary(data.history);
-				});
-
-				renderGraph.ExportTexture(volumetricLightTemp, target);
-			}
-
-			using (var pass = renderGraph.AddRenderPass("Volumetric Light Compute"))
-			{
-				pass.ViewHandle = volumetricViewHandle;
-				var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
-				pass.AddResources(stackalloc ResourceHandle[] { volumetricLightTemp, viewData, environmentData });
-				pass.AddUavOutput(volumetricLight);
-
-				var volumeSize = new Int3(volumeWidth, volumeHeight, asset.VolumetricSlices);
-				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance), static (command, data) =>
-				{
-					command.SetComputeVectorParam(data.volumetricLightShader, "VolumeSize", new Float3(data.volumeSize.x, data.volumeSize.y, data.volumeSize.z));
-					command.SetComputeFloatParam(data.volumetricLightShader, "MaxDepth", data.VolumetricDistance);
-					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
-					command.DispatchCompute(data.volumetricLightShader, 1, DivRoundUp(data.volumeSize.x, 8), DivRoundUp(data.volumeSize.y, 8), 1);
-				});
-			}
-		}
+		var volumetricLight = this.volumetricLight.Render(viewData, environmentData, camera, blueNoise1D, sunShadow);
 
 		var viewHandle = renderGraph.AddViewInfo(viewSize, asset.Samples);
 		var cameraDepth = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt, true), Shader.PropertyToID("CameraDepth"));
