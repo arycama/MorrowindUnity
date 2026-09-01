@@ -15,13 +15,13 @@ public class SetupView
 		this.renderGraph = renderGraph;
 	}
 
-	public BufferHandle Render(Camera camera, bool isFlipped = false)
+	public BufferHandle Render(Camera camera, bool isFlipped = false, bool updatePrevious = true)
 	{
 		var viewData = renderGraph.GetBuffer(new(1, UnsafeUtility.SizeOf<ViewDataStruct>(), GraphicsBuffer.Target.Constant), Shader.PropertyToID("ViewData"));
 		using (var pass = renderGraph.AddRenderPass("Set ViewData"))
 		{
 			pass.AddUavOutput(viewData);
-			pass.SetRenderFunction((camera, previousCameraTransform, isFlipped, viewData, renderGraph), static (command, data) =>
+			pass.SetRenderFunction((camera, previousCameraTransform, isFlipped, viewData, renderGraph, updatePrevious), static (command, data) =>
 			{
 				var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
 				var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
@@ -70,7 +70,8 @@ public class SetupView
 				if (!data.previousCameraTransform.TryGetValue(data.camera, out var previousTransform))
 					previousTransform = (viewPosition, viewRotation, viewToNonJitteredScreen);
 
-				data.previousCameraTransform[data.camera] = (viewPosition, viewRotation, viewToNonJitteredScreen);
+				if (data.updatePrevious)
+					data.previousCameraTransform[data.camera] = (viewPosition, viewRotation, viewToNonJitteredScreen);
 
 				var worldToPreviousView = Float4x4.WorldToLocal(previousTransform.Item1 - viewPosition, previousTransform.Item2);
 				var worldToPreviousScreen = previousTransform.Item3.Mul(worldToPreviousView);

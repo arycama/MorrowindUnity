@@ -1,4 +1,3 @@
-using System;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEditor;
@@ -8,25 +7,18 @@ using UnityEngine.Rendering;
 using Unmath;
 using static Unmath.Math;
 
-public class SetupLighting : IDisposable
+public class SetupLighting
 {
 	private readonly RenderGraph renderGraph;
 	private readonly LightingSettings lighting;
-	private readonly GraphicsBuffer environmentData;
 
 	public SetupLighting(RenderGraph renderGraph, LightingSettings lighting)
 	{
 		this.renderGraph = renderGraph;
 		this.lighting = lighting;
-		environmentData = new GraphicsBuffer(GraphicsBuffer.Target.Constant, 1, UnsafeUtility.SizeOf<EnvironmentDataStruct>());
 	}
 
-	public void Dispose()
-	{
-		environmentData.Dispose();
-	}
-
-	public (GraphicsBuffer environmentData, TextureHandle sunShadow) Render(Camera camera, CullingResults cullingResults, ScriptableRenderContext context, BufferHandle viewData)
+	public (BufferHandle environmentData, TextureHandle sunShadow) Render(Camera camera, CullingResults cullingResults, ScriptableRenderContext context, BufferHandle viewData)
 	{
 		var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -118,9 +110,11 @@ public class SetupLighting : IDisposable
 			fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
+		var environmentData = renderGraph.GetBuffer(new(1, UnsafeUtility.SizeOf<EnvironmentDataStruct>(), GraphicsBuffer.Target.Constant), Shader.PropertyToID("EnvironmentData"));
 		using (var pass = renderGraph.AddRenderPass("Set EnvironmentData"))
 		{
-			pass.SetRenderFunction((sunDirection, sunColor, fogEnabled, environmentData, lighting, viewToSunShadow), static (command, data) =>
+			pass.AddUavOutput(environmentData);
+			pass.SetRenderFunction((sunDirection, sunColor, fogEnabled, environmentData, lighting, viewToSunShadow, renderGraph), static (command, data) =>
 			{
 				var fogStart = data.fogEnabled ? RenderSettings.fogStartDistance : 0;
 				var fogEnd = data.fogEnabled ? RenderSettings.fogEndDistance : 0;
@@ -129,7 +123,8 @@ public class SetupLighting : IDisposable
 				var sunShadowFadeScale = -1.0f / data.lighting.DirectionalFadeLength;
 				var sunShadowFadeOffset = data.lighting.DirectionalShadowDistance / data.lighting.DirectionalFadeLength;
 
-				command.SetBufferData(data.environmentData, stackalloc[]
+				var buffer = data.renderGraph.GetBufferResource(data.environmentData);
+				command.SetBufferData(buffer, stackalloc[]
 				{(
 					RenderSettings.ambientLight.LinearFloat3(), fogScale,
 					RenderSettings.fogColor.LinearFloat3(), fogOffset,

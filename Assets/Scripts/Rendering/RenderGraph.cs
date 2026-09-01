@@ -28,6 +28,12 @@ public class RenderGraph : IDisposable
 		textureSystem = new(this);
 	}
 
+	public void Dispose()
+	{
+		nativeRenderPassSystem.Dispose();
+		bufferSystem.Dispose();
+	}
+
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, int propertyId)
 	{
 		var descriptorIndex = targetDescriptors.Count;
@@ -54,11 +60,6 @@ public class RenderGraph : IDisposable
 	{
 		var target = resourceInfo[handle];
 		return buffers[target.resourceIndex];
-	}
-
-	public void Dispose()
-	{
-		nativeRenderPassSystem.Dispose();
 	}
 
 	public PassBuilder AddRenderPass(string name)
