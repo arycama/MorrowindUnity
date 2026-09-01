@@ -13,7 +13,6 @@ public class RenderGraph : IDisposable
 	private readonly List<RenderTargetIdentifier> renderTargets = new();
 	private readonly ResizableArray<ResourceInfo> resourceInfo = new();
 	private readonly ResizableArray<RenderTargetDescriptor> targetDescriptors = new();
-	private readonly ResizableArray<BufferDescriptor> bufferDescriptors = new();
 	private readonly ResizableArray<ResourceHandle> handles = new();
 	private readonly TextureSystem textureSystem;
 	private readonly BufferSystem bufferSystem = new();
@@ -43,9 +42,8 @@ public class RenderGraph : IDisposable
 
 	public BufferHandle GetBuffer(BufferDescriptor descriptor, int propertyId)
 	{
-		var descriptorIndex = bufferDescriptors.Count;
-		bufferDescriptors.Add(descriptor);
-		resourceInfo.Add(new(descriptorIndex, propertyId, ResourceHandleType.Buffer));
+		var index = bufferSystem.AddDescriptor(descriptor);
+		resourceInfo.Add(new(index, propertyId, ResourceHandleType.Buffer));
 		return new(resourceInfo.Count - 1);
 	}
 
@@ -163,7 +161,7 @@ public class RenderGraph : IDisposable
 	private void AllocateBuffer(BufferHandle handle)
 	{
 		ref var target = ref resourceInfo[handle];
-		target.resourceIndex = bufferSystem.AllocateBuffer(handle, bufferDescriptors[target.descriptorIndex]);
+		target.resourceIndex = bufferSystem.AllocateBuffer(handle, target.descriptorIndex);
 	}
 
 	private void BeginNativeRenderPass(CommandBuffer command, int renderPassIndex, IRenderPass renderPass)

@@ -7,14 +7,23 @@ public class BufferSystem : IDisposable
 	private readonly Dictionary<BufferHandle, int> activeBuffers = new();
 	private readonly List<int> availableBuffers = new();
 	private readonly List<GraphicsBuffer> buffers = new();
+	private readonly ResizableArray<BufferDescriptor> descriptors = new();
 
 	public GraphicsBuffer GetBuffer(int index)
 	{
 		return buffers[index];
 	}
 
-	public int AllocateBuffer(BufferHandle handle, BufferDescriptor descriptor)
+	public int AddDescriptor(BufferDescriptor descriptor)
 	{
+		var descriptorIndex = descriptors.Count;
+		descriptors.Add(descriptor);
+		return descriptorIndex;
+	}
+
+	public int AllocateBuffer(BufferHandle handle, int descriptorIndex)
+	{
+		var descriptor = descriptors[descriptorIndex];
 		var resourceIndex = -1;
 		GraphicsBuffer resource = null;
 		for (var i = 0; i < availableBuffers.Count; i++)
@@ -74,6 +83,7 @@ public class BufferSystem : IDisposable
 		}
 
 		activeBuffers.Clear();
+		descriptors.Clear();
 	}
 
 	public void Dispose()
