@@ -1,4 +1,5 @@
 #include "Common.hlsl"
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Utility.hlsl"
 
 struct VertexInput
 {
@@ -25,6 +26,10 @@ struct FragmentInput
 		float3 color : COLOR;
 	#endif
 	
+	#ifdef SHADOW
+		float3 objectPosition : POSITION2;
+	#endif
+	
 	#if defined(GBUFFER) || defined(FORWARD) || (defined(SHADOW) && defined(_ALPHABLEND_ON))
 		float2 uv : TEXCOORD;
 	#endif
@@ -43,6 +48,7 @@ struct FragmentOutput
 
 Texture2D _MainTex, _EmissionMap;
 SamplerState sampler_MainTex;
+float4 _MainTex_TexelSize;
 
 cbuffer UnityPerMaterial
 {
@@ -54,8 +60,13 @@ cbuffer UnityPerMaterial
 FragmentInput Vertex(VertexInput input)
 {
 	FragmentInput output;
-	output.position = ObjectToClipPosition(input.position, input.instanceId);
 	
+	#ifdef SHADOW
+		output.objectPosition = input.position;
+	#endif
+	
+	output.position = ObjectToClipPosition(input.position, input.instanceId);
+
 	#if defined(GBUFFER) || defined(FORWARD)
 		output.viewPosition = ObjectToViewPosition(input.position, input.instanceId);
 		output.normal = ObjectToViewNormal(input.normal, input.instanceId);
@@ -78,8 +89,10 @@ FragmentOutput Fragment(FragmentInput input)
 	#endif
 	
 	#if defined(SHADOW) && defined(_ALPHABLEND_ON)
-		clip(color.a - 0.5);
+		float threshold = HashedAlphaThresholdCore(input.objectPosition, false);
+		clip(color.a - threshold);
 	#endif
+	
 	
 	#ifdef GBUFFER
 		float3 emissive = input.color * color.rgb;

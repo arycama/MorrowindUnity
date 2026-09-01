@@ -13,6 +13,7 @@
 	const static bool IsShadowPass = false;
 #endif
 
+#include "Shadow.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Color.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Geometry.hlsl"
 #include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/MatrixUtils.hlsl"
@@ -71,6 +72,8 @@ cbuffer EnvironmentData
 	
 	matrix ViewToSunShadow;
 };
+
+float4 SunShadow_TexelSize;
 
 cbuffer ViewData
 {
@@ -275,7 +278,20 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, o
 			float fade = saturate(viewPosition.z * SunShadowFadeScale + SunShadowFadeOffset);
 			float3 shadowPosition = MultiplyPoint3x4(ViewToSunShadow, viewPosition);
 			if (fade && all(saturate(shadowPosition.xy) == shadowPosition.xy))
-				illuminance *= lerp(1.0, SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, shadowPosition.xy, shadowPosition.z), fade);
+			{
+				const uint sampleCount = 4u;
+				half fetchesWeights[sampleCount];
+				half2 fetchesUv[sampleCount];
+				SampleShadow_ComputeSamples_Tent_3x3(SunShadow_TexelSize, shadowPosition.xy, fetchesWeights, fetchesUv);
+				
+				half shadow = 0.0h;
+		
+				[unroll]
+				for (uint i = 0; i < sampleCount; i++)
+					shadow += SunShadow.SampleCmpLevelZero(LinearClampCompareSampler, fetchesUv[i], shadowPosition.z) * fetchesWeights[i];
+					
+				illuminance *= lerp(1.0, shadow, fade);
+			}
 		#endif
 	#endif
 	
