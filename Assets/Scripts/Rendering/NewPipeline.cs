@@ -113,7 +113,7 @@ public class NewPipeline : RenderPipelineBase
 					command.SetComputeTextureParam(data.volumetricLightShader, 0, "BlueNoise1D", data.blueNoise1D);
 					command.SetComputeTextureParam(data.volumetricLightShader, 0, "VolumetricLight", data.history);
 					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
-					command.DispatchCompute(data.volumetricLightShader, 0, data.volumeSize.x, data.volumeSize.y, data.volumeSize.z);
+					command.DispatchCompute(data.volumetricLightShader, 0, DivRoundUp(data.volumeSize.x, 8), DivRoundUp(data.volumeSize.y, 8), data.volumeSize.z);
 
 					if (data.history != null)
 						RenderTexture.ReleaseTemporary(data.history);
@@ -135,7 +135,7 @@ public class NewPipeline : RenderPipelineBase
 					command.SetComputeVectorParam(data.volumetricLightShader, "VolumeSize", new Float3(data.volumeSize.x, data.volumeSize.y, data.volumeSize.z));
 					command.SetComputeFloatParam(data.volumetricLightShader, "MaxDepth", data.VolumetricDistance);
 					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
-					command.DispatchCompute(data.volumetricLightShader, 1, data.volumeSize.x, data.volumeSize.y, 1);
+					command.DispatchCompute(data.volumetricLightShader, 1, DivRoundUp(data.volumeSize.x, 8), DivRoundUp(data.volumeSize.y, 8), 1);
 				});
 			}
 		}
