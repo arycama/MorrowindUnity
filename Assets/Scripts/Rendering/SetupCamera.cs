@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
@@ -6,31 +5,23 @@ using Unmath;
 using static Unmath.Math;
 using Quaternion = Unmath.Quaternion;
 
-public class SetupView : IDisposable
+public class SetupView
 {
 	private readonly RenderGraph renderGraph;
-	private readonly GraphicsBuffer viewDataBuffer;
 	private readonly Dictionary<Camera, (Float3, Quaternion, Float4x4)> previousCameraTransform = new();
 
 	public SetupView(RenderGraph renderGraph)
 	{
 		this.renderGraph = renderGraph;
-		viewDataBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Constant, 1, UnsafeUtility.SizeOf<ViewDataStruct>());
 	}
 
-	public void Dispose()
-	{
-		viewDataBuffer.Dispose();
-	}
-
-	public (GraphicsBuffer, BufferHandle) Render(Camera camera, bool isFlipped = false)
+	public BufferHandle Render(Camera camera, bool isFlipped = false)
 	{
 		var viewData = renderGraph.GetBuffer(new(1, UnsafeUtility.SizeOf<ViewDataStruct>(), GraphicsBuffer.Target.Constant), Shader.PropertyToID("ViewData"));
-
 		using (var pass = renderGraph.AddRenderPass("Set ViewData"))
 		{
 			pass.AddUavOutput(viewData);
-			pass.SetRenderFunction((camera, previousCameraTransform, viewDataBuffer, isFlipped, viewData, renderGraph), static (command, data) =>
+			pass.SetRenderFunction((camera, previousCameraTransform, isFlipped, viewData, renderGraph), static (command, data) =>
 			{
 				var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
 				var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
@@ -51,7 +42,7 @@ public class SetupView : IDisposable
 				var pixelToClip = screenToClip.Mul(pixelToScreen);
 
 				// View
-				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, near, far);
+				var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, near, far, 0, data.isFlipped);
 				var clipToView = Float4x4.PerspectiveReverseZInverse(tanHalfFov, near, far);
 
 				var viewToScreen = clipToScreen.Mul(viewToClip);
@@ -100,26 +91,10 @@ public class SetupView : IDisposable
 					data.camera.transform.WorldPosition(), 0f,
 					tanHalfFov, 0, 0
 				)}.AsArray());
-
-				command.SetBufferData(data.viewDataBuffer, stackalloc[]
-				{(
-					worldToClip,
-					viewToClip,
-					worldToView,
-					viewToWorld,
-					pixelToWorld,
-					screenToWorld,
-					worldToPreviousScreen,
-					overlayMatrix,
-					(far - near) * Rcp(near * far), Rcp(far), near, far,
-					(Float2)viewSize, 1.0f / (Float2)viewSize,
-					data.camera.transform.WorldPosition(), 0f,
-					tanHalfFov, 0, 0
-				)}.AsArray());
 			});
 		}
 
-		return (viewDataBuffer, viewData);
+		return viewData;
 	}
 
 	private struct ViewDataStruct

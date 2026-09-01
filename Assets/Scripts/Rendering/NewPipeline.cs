@@ -71,7 +71,7 @@ public class NewPipeline : RenderPipelineBase
 		cullingParameters.shadowDistance = asset.Lighting.DirectionalShadowDistance;
 		var cullingResults = context.Cull(ref cullingParameters);
 
-		var (viewData, viewDataBuffer) = setupView.Render(camera);
+		var viewData = setupView.Render(camera);
 		var (environmentData, sunShadow) = setupLighting.Render(camera, cullingResults, context, viewData);
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
@@ -96,6 +96,7 @@ public class NewPipeline : RenderPipelineBase
 				pass.ViewHandle = volumetricViewHandle;
 				var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
 				pass.AddUavOutput(volumetricLightTemp);
+				pass.AddResource(viewData);
 
 				if (renderGraph.IsResourceWritten(sunShadow))
 				{
@@ -113,10 +114,9 @@ public class NewPipeline : RenderPipelineBase
 				volumetricHistory[camera] = target;
 
 				var volumeSize = new Int3(volumeWidth, volumeHeight, asset.VolumetricSlices);
-				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance, viewData, environmentData, blueNoise1D, history), static (command, data) =>
+				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance, environmentData, blueNoise1D, history), static (command, data) =>
 				{
 					command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
-					command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 					command.SetComputeVectorParam(data.volumetricLightShader, "VolumeSize", new Float3(data.volumeSize.x, data.volumeSize.y, data.volumeSize.z));
 					command.SetComputeFloatParam(data.volumetricLightShader, "MaxDepth", data.VolumetricDistance);
 					command.SetComputeTextureParam(data.volumetricLightShader, 0, "BlueNoise1D", data.blueNoise1D);
@@ -135,15 +135,13 @@ public class NewPipeline : RenderPipelineBase
 			{
 				pass.ViewHandle = volumetricViewHandle;
 				var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
-				pass.AddResource(volumetricLightTemp);
+				pass.AddResources(stackalloc ResourceHandle[] { volumetricLightTemp, viewData });
 				pass.AddUavOutput(volumetricLight);
 
 				var volumeSize = new Int3(volumeWidth, volumeHeight, asset.VolumetricSlices);
-
-				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance, viewData, environmentData), static (command, data) =>
+				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance, environmentData), static (command, data) =>
 				{
 					command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
-					command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 					command.SetComputeVectorParam(data.volumetricLightShader, "VolumeSize", new Float3(data.volumeSize.x, data.volumeSize.y, data.volumeSize.z));
 					command.SetComputeFloatParam(data.volumetricLightShader, "MaxDepth", data.VolumetricDistance);
 					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
@@ -162,13 +160,12 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutputs(stackalloc[] { albedoNormal, cameraColor });
-			pass.AddResource(viewDataBuffer);
+			pass.AddResource(viewData);
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Terrain"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all, sortingCriteria = SortingCriteria.QuantizedFrontToBack });
-			pass.SetRenderFunction((rendererList, viewData, environmentData), static (command, data) =>
+			pass.SetRenderFunction((rendererList, environmentData), static (command, data) =>
 			{
 				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
-				//command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 				command.DrawRendererList(data.rendererList);
 			});
 		}
@@ -178,13 +175,13 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutputs(stackalloc[] { albedoNormal, cameraColor });
+			pass.AddResource(viewData);
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 			var rendererList = context.CreateRendererList(ref rendererParams);
-			pass.SetRenderFunction((rendererList, viewData, environmentData), static (command, data) =>
+			pass.SetRenderFunction((rendererList, environmentData), static (command, data) =>
 			{
 				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
-				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 				command.DrawRendererList(data.rendererList);
 			});
 		}
@@ -246,6 +243,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
 			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
+			pass.AddResource(viewData);
 
 			if (renderGraph.IsResourceWritten(sunShadow))
 			{
@@ -280,11 +278,10 @@ public class NewPipeline : RenderPipelineBase
 				pass.AddKeyword("VOLUMETRIC_LIGHT_ON");
 			}
 
-			pass.SetRenderFunction((deferredMaterial, viewData, environmentData, propertyBlock, asset.VolumetricDistance), static (command, data) =>
+			pass.SetRenderFunction((deferredMaterial, environmentData, propertyBlock, asset.VolumetricDistance), static (command, data) =>
 			{
 				data.propertyBlock.Clear();
 				data.propertyBlock.SetConstantBuffer(environmentDataId, data.environmentData, 0, data.environmentData.stride);
-				data.propertyBlock.SetConstantBuffer(viewDataId, data.viewData, 0, data.viewData.stride);
 				data.propertyBlock.SetFloat("MaxDepth", data.VolumetricDistance);
 				command.DrawProcedural(default, data.deferredMaterial, 0, MeshTopology.Triangles, 3, 1, data.propertyBlock);
 			});
@@ -295,6 +292,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
+			pass.AddResource(viewData);
 
 			if (renderGraph.IsResourceWritten(volumetricLight))
 			{
@@ -303,15 +301,13 @@ public class NewPipeline : RenderPipelineBase
 			}
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Sky"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all });
-			pass.SetRenderFunction((rendererList, viewData, environmentData, asset.VolumetricDistance, backgroundMaterial, propertyBlock), static (command, data) =>
+			pass.SetRenderFunction((rendererList, environmentData, asset.VolumetricDistance, backgroundMaterial, propertyBlock), static (command, data) =>
 			{
 				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
-				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 				command.SetGlobalFloat("MaxDepth", data.VolumetricDistance);
 
 				data.propertyBlock.Clear();
 				data.propertyBlock.SetConstantBuffer(environmentDataId, data.environmentData, 0, data.environmentData.stride);
-				data.propertyBlock.SetConstantBuffer(viewDataId, data.viewData, 0, data.viewData.stride);
 				command.DrawProcedural(default, data.backgroundMaterial, 0, MeshTopology.Triangles, 3, 1, data.propertyBlock);
 
 				command.DrawRendererList(data.rendererList);
@@ -323,6 +319,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
+			pass.AddResource(viewData);
 
 			if (renderGraph.IsResourceWritten(sunShadow))
 			{
@@ -338,11 +335,10 @@ public class NewPipeline : RenderPipelineBase
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 			var rendererList = context.CreateRendererList(ref rendererParams);
-			pass.SetRenderFunction((rendererList, viewData, environmentData, asset.VolumetricDistance), (command, data) =>
+			pass.SetRenderFunction((rendererList, environmentData, asset.VolumetricDistance), (command, data) =>
 			{
 				command.SetGlobalFloat("MaxDepth", data.VolumetricDistance);
 				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
-				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 				command.DrawRendererList(data.rendererList);
 			});
 		}
@@ -397,6 +393,8 @@ public class NewPipeline : RenderPipelineBase
 			}
 #endif
 
+			pass.AddResource(viewData);
+
 			var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
 			if (renderToBackbuffer)
 			{
@@ -434,11 +432,10 @@ public class NewPipeline : RenderPipelineBase
 				pass.AddKeyword("DEPTH_OF_FIELD");
 			}
 
-			pass.SetRenderFunction((blitMaterial, viewData), static (command, data) =>
+			pass.SetRenderFunction(blitMaterial, static (command, blitMaterial) =>
 			{
-				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 				command.SetWireframe(false);
-				command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, 0, MeshTopology.Triangles, 3);
+				command.DrawProcedural(Matrix4x4.identity, blitMaterial, 0, MeshTopology.Triangles, 3);
 			});
 		}
 
@@ -461,14 +458,15 @@ public class NewPipeline : RenderPipelineBase
 		// Render wireframe
 		if (camera.cameraType == CameraType.SceneView)
 		{
-			(viewData, viewDataBuffer) = setupView.Render(camera, true);
+			var viewDataTemp = setupView.Render(camera, true);
 
 			using var pass = renderGraph.AddRenderPass("Wireframe");
+			pass.AddResource(viewDataTemp);
+
 			var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
-			pass.SetRenderFunction((camera, wireframeRendererList, context, viewData), static (command, data) =>
+			pass.SetRenderFunction((camera, wireframeRendererList, context), static (command, data) =>
 			{
 				data.context.SetupCameraProperties(data.camera);
-				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 				command.DrawRendererList(data.wireframeRendererList);
 			});
 		}

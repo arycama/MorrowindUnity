@@ -26,7 +26,7 @@ public class SetupLighting : IDisposable
 		environmentData.Dispose();
 	}
 
-	public (GraphicsBuffer environmentData, TextureHandle sunShadow) Render(Camera camera, CullingResults cullingResults, ScriptableRenderContext context, GraphicsBuffer viewDataBuffer)
+	public (GraphicsBuffer environmentData, TextureHandle sunShadow) Render(Camera camera, CullingResults cullingResults, ScriptableRenderContext context, BufferHandle viewData)
 	{
 		var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -84,12 +84,13 @@ public class SetupLighting : IDisposable
 					using var pass = renderGraph.AddRenderPass("Directional Shadows");
 					pass.ViewHandle = shadowView;
 					pass.DepthStencil = sunShadow;
-					pass.SetRenderFunction((rendererList, worldToLightClip, lighting, viewDataBuffer), (command, data) =>
+					pass.AddResource(viewData);
+
+					pass.SetRenderFunction((rendererList, worldToLightClip, lighting), (command, data) =>
 					{
 						command.SetGlobalDepthBias(data.lighting.DirectionalShadowBias, data.lighting.DirectionalShadowSlopeBias);
 						command.SetGlobalInt("ZClip", 0);
 						command.SetGlobalMatrix("WorldToShadowClip", data.worldToLightClip);
-						command.SetGlobalConstantBuffer(data.viewDataBuffer, Shader.PropertyToID("ViewData"), 0, data.viewDataBuffer.stride);
 						command.DrawRendererList(rendererList);
 						command.SetGlobalDepthBias(0.0f, 0.0f);
 						command.SetGlobalInt("ZClip", 1);
