@@ -1,27 +1,52 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class TextureSystem
 {
-	private readonly RenderGraph renderGraph;
 	private readonly Dictionary<TextureHandle, RenderTexture> activeTargets = new();
+	private readonly List<RenderTargetIdentifier> renderTargets = new();
+	private readonly ResizableArray<RenderTargetDescriptor> descriptors = new();
 
-	public TextureSystem(RenderGraph renderGraph)
+	public RenderTargetIdentifier GetTexture(int index)
 	{
-		this.renderGraph = renderGraph;
+		return renderTargets[index];
 	}
 
-	public RenderTexture GetResource(TextureHandle handle, RenderTargetDescriptor descriptor, ViewHandle viewHandle, int samples = 1, bool isUav = false)
+	public RenderTargetDescriptor GetDescriptor(int index)
 	{
-		var viewInfo = renderGraph.GetViewInfo(viewHandle);
+		return descriptors[index];
+	}
+
+	public int ExportTexture(RenderTargetIdentifier id)
+	{
+		var index = renderTargets.Count;
+		renderTargets.Add(id);
+		return index;
+	}
+
+	public int AddDescriptor(RenderTargetDescriptor descriptor)
+	{
+		var descriptorIndex = descriptors.Count;
+		descriptors.Add(descriptor);
+		return descriptorIndex;
+	}
+
+	public int AllocateTexture(TextureHandle handle, int descriptorIndex, ViewInfo viewInfo, int samples, bool isUav)
+	{
+		var descriptor = descriptors[descriptorIndex];
 		var resource = RenderTexture.GetTemporary(descriptor.GetRenderTextureDescriptor(viewInfo, samples, isUav));
-		_ = resource.Create();
+
+		if (!resource.IsCreated())
+			_ = resource.Create();
 
 		var wasAdded = activeTargets.TryAdd(handle, resource);
 		if (!wasAdded)
 			Debug.LogError($"Adding an already active texture {handle} {descriptor}");
 
-		return resource;
+		var index = renderTargets.Count;
+		renderTargets.Add(resource);
+		return index;
 	}
 
 	public void ReleaseResource(TextureHandle handle)
@@ -45,5 +70,7 @@ public class TextureSystem
 		}
 
 		activeTargets.Clear();
+		renderTargets.Clear();
+		descriptors.Clear();
 	}
 }

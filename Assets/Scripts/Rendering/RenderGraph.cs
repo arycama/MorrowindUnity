@@ -10,11 +10,9 @@ public class RenderGraph : IDisposable
 {
 	private readonly List<IRenderPass> renderPasses = new();
 	private readonly List<ViewInfo> viewInfos = new();
-	private readonly List<RenderTargetIdentifier> renderTargets = new();
 	private readonly ResizableArray<ResourceInfo> resourceInfo = new();
-	private readonly ResizableArray<RenderTargetDescriptor> targetDescriptors = new();
 	private readonly ResizableArray<ResourceHandle> handles = new();
-	private readonly TextureSystem textureSystem;
+	private readonly TextureSystem textureSystem = new();
 	private readonly BufferSystem bufferSystem = new();
 	private readonly NativeRenderPassSystem nativeRenderPassSystem = new();
 	private readonly PassBuilder builder;
@@ -23,7 +21,6 @@ public class RenderGraph : IDisposable
 	public RenderGraph()
 	{
 		builder = new(this);
-		textureSystem = new(this);
 	}
 
 	public void Dispose()
@@ -34,8 +31,7 @@ public class RenderGraph : IDisposable
 
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, int propertyId)
 	{
-		var descriptorIndex = targetDescriptors.Count;
-		targetDescriptors.Add(descriptor);
+		var descriptorIndex = textureSystem.AddDescriptor(descriptor);
 		resourceInfo.Add(new(descriptorIndex, propertyId, ResourceHandleType.Texture));
 		return new(resourceInfo.Count - 1);
 	}
@@ -50,7 +46,7 @@ public class RenderGraph : IDisposable
 	public RenderTargetIdentifier GetTextureResource(TextureHandle handle)
 	{
 		var target = resourceInfo[handle];
-		return renderTargets[target.resourceIndex];
+		return textureSystem.GetTexture(target.resourceIndex);
 	}
 
 	public GraphicsBuffer GetBufferResource(BufferHandle handle)
@@ -135,9 +131,7 @@ public class RenderGraph : IDisposable
 
 	public void ExportTexture(TextureHandle handle, RenderTargetIdentifier id)
 	{
-		var resourceIndex = renderTargets.Count;
-		renderTargets.Add(id);
-
+		var resourceIndex = textureSystem.ExportTexture(id);
 		ref var target = ref resourceInfo[handle];
 		target.resourceIndex = resourceIndex;
 		target.isExported = true;
@@ -153,9 +147,7 @@ public class RenderGraph : IDisposable
 	private void AllocateTexture(TextureHandle handle, ViewHandle viewHandle, bool isUav = false, int samples = 1)
 	{
 		ref var target = ref resourceInfo[handle];
-		target.resourceIndex = renderTargets.Count;
-		var resource = textureSystem.GetResource(handle, targetDescriptors[target.descriptorIndex], viewHandle, samples, isUav);
-		renderTargets.Add(resource);
+		target.resourceIndex = textureSystem.AllocateTexture(handle, target.descriptorIndex, viewInfos[viewHandle.index], samples, isUav);
 	}
 
 	private void AllocateBuffer(BufferHandle handle)
@@ -175,7 +167,7 @@ public class RenderGraph : IDisposable
 		foreach (var texture in nativePassDesc.attachments)
 		{
 			ref var target = ref resourceInfo[texture];
-			var descriptor = targetDescriptors[target.descriptorIndex];
+			var descriptor = textureSystem.GetDescriptor(target.descriptorIndex);
 			var attachmentDesc = new AttachmentDescriptor
 			{
 				graphicsFormat = descriptor.format
@@ -198,7 +190,7 @@ public class RenderGraph : IDisposable
 			else
 			{
 				// If this target has been written previously, it must be loaded
-				attachmentDesc.loadStoreTarget = renderTargets[target.resourceIndex];
+				attachmentDesc.loadStoreTarget = textureSystem.GetTexture(target.resourceIndex);
 			}
 
 			var isColor = descriptor.format switch
@@ -215,7 +207,7 @@ public class RenderGraph : IDisposable
 			if (requiresResolve)
 			{
 				AllocateTexture(texture, viewHandle);
-				attachmentDesc.resolveTarget = renderTargets[target.resourceIndex];
+				attachmentDesc.resolveTarget = textureSystem.GetTexture(target.resourceIndex);
 				attachmentDesc.storeAction = RenderBufferStoreAction.Resolve;
 			}
 			else if (requiresMsaaStore)
@@ -224,7 +216,7 @@ public class RenderGraph : IDisposable
 				if (isFirstWrite)
 					AllocateTexture(texture, viewHandle, false, viewInfo.samples);
 
-				attachmentDesc.loadStoreTarget = renderTargets[target.resourceIndex];
+				attachmentDesc.loadStoreTarget = textureSystem.GetTexture(target.resourceIndex);
 			}
 			else if (requiresStore)
 			{
@@ -232,7 +224,7 @@ public class RenderGraph : IDisposable
 				if (!target.isExported && isFirstWrite)
 					AllocateTexture(texture, viewHandle, false, 1);
 
-				attachmentDesc.loadStoreTarget = renderTargets[target.resourceIndex];
+				attachmentDesc.loadStoreTarget = textureSystem.GetTexture(target.resourceIndex);
 			}
 			else
 			{
@@ -318,7 +310,7 @@ public class RenderGraph : IDisposable
 
 				if (handle.type == ResourceHandleType.Texture)
 				{
-					var resource = renderTargets[target.resourceIndex];
+					var resource = textureSystem.GetTexture(target.resourceIndex);
 					command.SetGlobalTexture(target.propertyId, resource);
 				}
 
@@ -339,7 +331,7 @@ public class RenderGraph : IDisposable
 
 				if (handle.type == ResourceHandleType.Texture)
 				{
-					var resource = renderTargets[target.resourceIndex];
+					var resource = textureSystem.GetTexture(target.resourceIndex);
 					command.SetGlobalTexture(target.propertyId, resource);
 				}
 
@@ -409,10 +401,8 @@ public class RenderGraph : IDisposable
 	{
 		resourceInfo.Clear();
 		renderPasses.Clear();
-		renderTargets.Clear();
 		viewInfos.Clear();
 		nativeRenderPassSystem.Clear();
 		handles.Clear();
-		targetDescriptors.Clear();
 	}
 }
