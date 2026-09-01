@@ -44,6 +44,18 @@ public class RenderGraph : IDisposable
 		return new(resourceInfo.Count - 1);
 	}
 
+	public RenderTargetIdentifier GetTextureResource(TextureHandle handle)
+	{
+		var target = resourceInfo[handle];
+		return renderTargets[target.resourceIndex];
+	}
+
+	public GraphicsBuffer GetBufferResource(BufferHandle handle)
+	{
+		var target = resourceInfo[handle];
+		return buffers[target.resourceIndex];
+	}
+
 	public void Dispose()
 	{
 		nativeRenderPassSystem.Dispose();
@@ -317,7 +329,10 @@ public class RenderGraph : IDisposable
 				if (handle.type == ResourceHandleType.Buffer)
 				{
 					var resource = buffers[target.resourceIndex];
-					command.SetGlobalBuffer(target.propertyId, resource);
+
+					// Constant buffers are only ever set as uav write for the purposes of having their data set, so don't need to actually be set.
+					if (resource.target != GraphicsBuffer.Target.Constant)
+						command.SetGlobalBuffer(target.propertyId, resource);
 				}
 			}
 

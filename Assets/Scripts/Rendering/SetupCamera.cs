@@ -23,11 +23,14 @@ public class SetupView : IDisposable
 		viewDataBuffer.Dispose();
 	}
 
-	public GraphicsBuffer Render(Camera camera, bool isFlipped = false)
+	public (GraphicsBuffer, BufferHandle) Render(Camera camera, bool isFlipped = false)
 	{
+		var viewData = renderGraph.GetBuffer(new(1, UnsafeUtility.SizeOf<ViewDataStruct>(), GraphicsBuffer.Target.Constant), Shader.PropertyToID("ViewData"));
+
 		using (var pass = renderGraph.AddRenderPass("Set ViewData"))
 		{
-			pass.SetRenderFunction((camera, previousCameraTransform, viewDataBuffer, isFlipped), static (command, data) =>
+			pass.AddUavOutput(viewData);
+			pass.SetRenderFunction((camera, previousCameraTransform, viewDataBuffer, isFlipped, viewData, renderGraph), static (command, data) =>
 			{
 				var tanHalfFovY = Tan(0.5f * Radians(data.camera.fieldOfView));
 				var tanHalfFov = new Float2(tanHalfFovY * data.camera.aspect, tanHalfFovY);
@@ -81,6 +84,23 @@ public class SetupView : IDisposable
 				var worldToPreviousView = Float4x4.WorldToLocal(previousTransform.Item1 - viewPosition, previousTransform.Item2);
 				var worldToPreviousScreen = previousTransform.Item3.Mul(worldToPreviousView);
 
+				var buffer = data.renderGraph.GetBufferResource(data.viewData);
+				command.SetBufferData(buffer, stackalloc[]
+				{(
+					worldToClip,
+					viewToClip,
+					worldToView,
+					viewToWorld,
+					pixelToWorld,
+					screenToWorld,
+					worldToPreviousScreen,
+					overlayMatrix,
+					(far - near) * Rcp(near * far), Rcp(far), near, far,
+					(Float2)viewSize, 1.0f / (Float2)viewSize,
+					data.camera.transform.WorldPosition(), 0f,
+					tanHalfFov, 0, 0
+				)}.AsArray());
+
 				command.SetBufferData(data.viewDataBuffer, stackalloc[]
 				{(
 					worldToClip,
@@ -99,7 +119,7 @@ public class SetupView : IDisposable
 			});
 		}
 
-		return viewDataBuffer;
+		return (viewDataBuffer, viewData);
 	}
 
 	private struct ViewDataStruct

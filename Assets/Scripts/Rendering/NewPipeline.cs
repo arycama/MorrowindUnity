@@ -71,7 +71,7 @@ public class NewPipeline : RenderPipelineBase
 		cullingParameters.shadowDistance = asset.Lighting.DirectionalShadowDistance;
 		var cullingResults = context.Cull(ref cullingParameters);
 
-		var viewData = setupView.Render(camera);
+		var (viewData, viewDataBuffer) = setupView.Render(camera);
 		var (environmentData, sunShadow) = setupLighting.Render(camera, cullingResults, context, viewData);
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
@@ -162,12 +162,13 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutputs(stackalloc[] { albedoNormal, cameraColor });
+			pass.AddResource(viewDataBuffer);
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Terrain"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all, sortingCriteria = SortingCriteria.QuantizedFrontToBack });
 			pass.SetRenderFunction((rendererList, viewData, environmentData), static (command, data) =>
 			{
 				command.SetGlobalConstantBuffer(data.environmentData, environmentDataId, 0, data.environmentData.stride);
-				command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
+				//command.SetGlobalConstantBuffer(data.viewData, viewDataId, 0, data.viewData.stride);
 				command.DrawRendererList(data.rendererList);
 			});
 		}
@@ -460,7 +461,7 @@ public class NewPipeline : RenderPipelineBase
 		// Render wireframe
 		if (camera.cameraType == CameraType.SceneView)
 		{
-			viewData = setupView.Render(camera, true);
+			(viewData, viewDataBuffer) = setupView.Render(camera, true);
 
 			using var pass = renderGraph.AddRenderPass("Wireframe");
 			var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
