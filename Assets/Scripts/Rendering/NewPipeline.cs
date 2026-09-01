@@ -128,7 +128,7 @@ public class NewPipeline : RenderPipelineBase
 						RenderTexture.ReleaseTemporary(data.history);
 				});
 
-				renderGraph.ExportResource(volumetricLightTemp, target);
+				renderGraph.ExportTexture(volumetricLightTemp, target);
 			}
 
 			using (var pass = renderGraph.AddRenderPass("Volumetric Light Compute"))
@@ -381,7 +381,7 @@ public class NewPipeline : RenderPipelineBase
 			var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
 			var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
 			var sceneColor = renderGraph.GetTexture(new(viewHandle, targetFormat), Shader.PropertyToID("SceneColor"));
-			renderGraph.ExportResource(sceneColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+			renderGraph.ExportTexture(sceneColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
 
 			// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 			TextureHandle sceneDepth = default;
@@ -392,7 +392,7 @@ public class NewPipeline : RenderPipelineBase
 			if (requiresSceneDepth)
 			{
 				sceneDepth = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt), Shader.PropertyToID("SceneDepth"));
-				renderGraph.ExportResource(sceneDepth, camera.targetTexture);
+				renderGraph.ExportTexture(sceneDepth, camera.targetTexture);
 			}
 #endif
 
