@@ -11,7 +11,6 @@ public class RenderGraph : IDisposable
 	private readonly List<IRenderPass> renderPasses = new();
 	private readonly List<ViewInfo> viewInfos = new();
 	private readonly List<RenderTargetIdentifier> renderTargets = new();
-	private readonly List<GraphicsBuffer> buffers = new();
 	private readonly ResizableArray<ResourceInfo> resourceInfo = new();
 	private readonly ResizableArray<RenderTargetDescriptor> targetDescriptors = new();
 	private readonly ResizableArray<BufferDescriptor> bufferDescriptors = new();
@@ -59,7 +58,7 @@ public class RenderGraph : IDisposable
 	public GraphicsBuffer GetBufferResource(BufferHandle handle)
 	{
 		var target = resourceInfo[handle];
-		return buffers[target.resourceIndex];
+		return bufferSystem.GetBuffer(target.resourceIndex);
 	}
 
 	public PassBuilder AddRenderPass(string name)
@@ -164,9 +163,7 @@ public class RenderGraph : IDisposable
 	private void AllocateBuffer(BufferHandle handle)
 	{
 		ref var target = ref resourceInfo[handle];
-		target.resourceIndex = buffers.Count;
-		var resource = bufferSystem.GetBuffer(handle, bufferDescriptors[target.descriptorIndex]);
-		buffers.Add(resource);
+		target.resourceIndex = bufferSystem.AllocateBuffer(handle, bufferDescriptors[target.descriptorIndex]);
 	}
 
 	private void BeginNativeRenderPass(CommandBuffer command, int renderPassIndex, IRenderPass renderPass)
@@ -329,7 +326,7 @@ public class RenderGraph : IDisposable
 
 				if (handle.type == ResourceHandleType.Buffer)
 				{
-					var resource = buffers[target.resourceIndex];
+					var resource = bufferSystem.GetBuffer(target.resourceIndex);
 
 					// Constant buffers are only ever set as uav write for the purposes of having their data set, so don't need to actually be set.
 					if (resource.target != GraphicsBuffer.Target.Constant)
@@ -350,7 +347,7 @@ public class RenderGraph : IDisposable
 
 				if (handle.type == ResourceHandleType.Buffer)
 				{
-					var resource = buffers[target.resourceIndex];
+					var resource = bufferSystem.GetBuffer(target.resourceIndex);
 
 					if (resource.target == GraphicsBuffer.Target.Constant)
 						command.SetGlobalConstantBuffer(resource, target.propertyId, 0, resource.stride);

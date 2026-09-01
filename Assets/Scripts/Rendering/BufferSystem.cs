@@ -4,15 +4,23 @@ using UnityEngine;
 
 public class BufferSystem : IDisposable
 {
-	private readonly Dictionary<BufferHandle, GraphicsBuffer> activeBuffers = new();
+	private readonly Dictionary<BufferHandle, int> activeBuffers = new();
+	private readonly List<int> availableBuffers = new();
 	private readonly List<GraphicsBuffer> buffers = new();
 
-	public GraphicsBuffer GetBuffer(BufferHandle handle, BufferDescriptor descriptor)
+	public GraphicsBuffer GetBuffer(int index)
 	{
+		return buffers[index];
+	}
+
+	public int AllocateBuffer(BufferHandle handle, BufferDescriptor descriptor)
+	{
+		var resourceIndex = -1;
 		GraphicsBuffer resource = null;
-		for (var i = 0; i < buffers.Count; i++)
+		for (var i = 0; i < availableBuffers.Count; i++)
 		{
-			var buffer = buffers[i];
+			var bufferIndex = availableBuffers[i];
+			var buffer = buffers[bufferIndex];
 			if (buffer.stride != descriptor.stride)
 				continue;
 
@@ -26,18 +34,23 @@ public class BufferSystem : IDisposable
 				continue;
 
 			resource = buffer;
-			buffers.RemoveAt(i);
+			resourceIndex = bufferIndex;
+			availableBuffers.RemoveAt(i);
 			break;
 		}
 
 		if (resource == null)
+		{
 			resource = new GraphicsBuffer(descriptor.target, descriptor.usageFlags, descriptor.count, descriptor.stride);
+			resourceIndex = buffers.Count;
+			buffers.Add(resource);
+		}
 
-		var wasAdded = activeBuffers.TryAdd(handle, resource);
+		var wasAdded = activeBuffers.TryAdd(handle, resourceIndex);
 		if (!wasAdded)
 			Debug.LogError($"Adding an already active Buffer {handle} {descriptor}");
 
-		return resource;
+		return resourceIndex;
 	}
 
 	public void ReleaseResource(BufferHandle handle)
@@ -49,7 +62,7 @@ public class BufferSystem : IDisposable
 		}
 
 		_ = activeBuffers.Remove(handle);
-		buffers.Add(resource);
+		availableBuffers.Add(resource);
 	}
 
 	public void FreeUnreleasedResources()
@@ -57,7 +70,7 @@ public class BufferSystem : IDisposable
 		foreach (var buffer in activeBuffers)
 		{
 			Debug.LogError($"Buffer {buffer.Value} was not released during frame");
-			buffers.Add(buffer.Value);
+			availableBuffers.Add(buffer.Value);
 		}
 
 		activeBuffers.Clear();

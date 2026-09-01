@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -5,7 +6,7 @@ using UnityEngine.Rendering;
 using Unmath;
 using static Unmath.Math;
 
-public class VolumetricLight
+public class VolumetricLight : IDisposable
 {
 	private readonly RenderGraph renderGraph;
 	private readonly NewPipelineAsset asset;
@@ -17,6 +18,12 @@ public class VolumetricLight
 		this.renderGraph = renderGraph;
 		this.asset = asset;
 		volumetricLightShader = Resources.Load<ComputeShader>("VolumetricLight");
+	}
+
+	public void Dispose()
+	{
+		foreach (var history in volumetricHistory)
+			RenderTexture.ReleaseTemporary(history.Value);
 	}
 
 	public TextureHandle Render(BufferHandle viewData, BufferHandle environmentData, Camera camera, Texture blueNoise1D, TextureHandle sunShadow)

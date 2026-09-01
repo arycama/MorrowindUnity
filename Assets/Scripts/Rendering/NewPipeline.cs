@@ -43,6 +43,7 @@ public class NewPipeline : RenderPipelineBase
 	{
 		base.Dispose(disposing);
 		rtas.Release();
+		volumetricLight.Dispose();
 	}
 
 	protected override void RenderFrame(ScriptableRenderContext context, List<Camera> cameras)
