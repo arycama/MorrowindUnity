@@ -6,7 +6,7 @@ public class TextureSystem
 {
 	private readonly Dictionary<TextureHandle, RenderTexture> activeTargets = new();
 	private readonly List<RenderTargetIdentifier> renderTargets = new();
-	private readonly ResizableArray<RenderTargetDescriptor> descriptors = new();
+	private readonly List<RenderTargetDescriptor> descriptors = new();
 
 	public RenderTargetIdentifier GetTexture(int index)
 	{

@@ -7,7 +7,7 @@ public class BufferSystem : IDisposable
 	private readonly Dictionary<BufferHandle, int> activeBuffers = new();
 	private readonly List<int> availableBuffers = new();
 	private readonly List<GraphicsBuffer> buffers = new();
-	private readonly ResizableArray<BufferDescriptor> descriptors = new();
+	private readonly List<BufferDescriptor> descriptors = new();
 
 	public GraphicsBuffer GetBuffer(int index)
 	{
