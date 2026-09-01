@@ -64,7 +64,8 @@ public class SetupView
 				var worldToPixel = screenToPixel.Mul(worldToScreen);
 				var pixelToWorld = viewToWorld.Mul(pixelToView);
 
-				var overlayMatrix = Float4x4.OrthoReverseZ(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, 0, 1);
+				//var overlayMatrix = Float4x4.Ortho(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, near, far);
+				var overlayMatrix = Matrix4x4.Ortho(0, Screen.width, Screen.height, 0, 0, 1);
 
 				var viewToNonJitteredScreen = clipToScreen.Mul(viewToClip);
 				if (!data.previousCameraTransform.TryGetValue(data.camera, out var previousTransform))
@@ -121,3 +122,4 @@ public class SetupView
 		public int Item15;
 	}
 }
+;

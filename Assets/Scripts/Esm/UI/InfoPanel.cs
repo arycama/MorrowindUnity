@@ -24,8 +24,8 @@ public class InfoPanel : MonoBehaviour
 
 	public static InfoPanel Create(Vector2 position)
 	{
-		var prefab = UIManager.InfoPanel;
 		var infoPanel = Instantiate(UIManager.InfoPanel);
+		infoPanel.GetComponent<Canvas>().worldCamera = UIManager.Instance.Camera;
 		return infoPanel;
 	}
 

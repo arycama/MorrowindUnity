@@ -1,9 +1,5 @@
 ﻿#pragma warning disable 0108
 
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
 using Esm;
 using UnityEngine;
 using Random = UnityEngine.Random;
@@ -12,6 +8,7 @@ public class PlayerInput : CharacterInput
 {
 	private bool isIdle;
 	private InventoryUI inventoryUI;
+	private CharacterMenuUI characterUI;
 
 	private void Update()
 	{
@@ -25,7 +22,7 @@ public class PlayerInput : CharacterInput
 			return;
 		}
 
-        // Set attack strength to none when it is frst pressed
+		// Set attack strength to none when it is frst pressed
 		Attack = Input.GetMouseButton(0);
 		animation.Parameters.SetBoolParameter("Attack", Attack);
 		//if (Input.GetMouseButtonDown(0))
@@ -33,7 +30,7 @@ public class PlayerInput : CharacterInput
 		//	// set attack strength to none here
 		//	animation.SetParameter("AttackStrength", AttackStrength.None);	
 		//}
-		
+
 
 		//// When the button is pressed, set attack strength to none to start
 		//if (Input.GetMouseButtonDown(0))
@@ -109,7 +106,7 @@ public class PlayerInput : CharacterInput
 			var lockable = currentActivator as ILockable;
 			if (lockable != null)
 			{
-				lockable.Unlock(100);
+				_ = lockable.Unlock(100);
 			}
 		}
 
@@ -118,7 +115,7 @@ public class PlayerInput : CharacterInput
 
 		if (!Forward && !Left && !Right && !Back)
 		{
-			if(!isIdle)
+			if (!isIdle)
 			{
 				animation.Parameters.SetIntParameter("Idle", Random.Range(2, 10));
 				isIdle = true;
@@ -143,21 +140,21 @@ public class PlayerInput : CharacterInput
 			{
 				var character = GetComponent<Character>();
 
-				UITitleInfoPair[] info = { new UITitleInfoPair("Level", character.Level.ToString()), new UITitleInfoPair("Race", character.Race.Name), new UITitleInfoPair("Class", character.Class.Name) };
+				UITitleInfoPair[] info = { new("Level", character.Level.ToString()), new("Race", character.Race.Name), new("Class", character.Class.Name) };
 				UITitleInfoPair[] attributes =
 				{
-					new UITitleInfoPair("Strength", character.GetAttribute(CharacterAttribute.sAttributeStrength).ToString()),
-					new UITitleInfoPair("Intelligence", character.GetAttribute(CharacterAttribute.sAttributeIntelligence).ToString()),
-					new UITitleInfoPair("Willpower", character.GetAttribute(CharacterAttribute.sAttributeWillpower).ToString()),
-					new UITitleInfoPair("Agility", character.GetAttribute(CharacterAttribute.sAttributeAgility).ToString()),
-					new UITitleInfoPair("Speed", character.GetAttribute(CharacterAttribute.sAttributeSpeed).ToString()),
-					new UITitleInfoPair("Endurance", character.GetAttribute(CharacterAttribute.sAttributeEndurance).ToString()),
-					new UITitleInfoPair("Personality", character.GetAttribute(CharacterAttribute.sAttributePersonality).ToString()),
-					new UITitleInfoPair("Luck", character.GetAttribute(CharacterAttribute.sAttributeLuck).ToString())
+					new("Strength", character.GetAttribute(CharacterAttribute.sAttributeStrength).ToString()),
+					new("Intelligence", character.GetAttribute(CharacterAttribute.sAttributeIntelligence).ToString()),
+					new("Willpower", character.GetAttribute(CharacterAttribute.sAttributeWillpower).ToString()),
+					new("Agility", character.GetAttribute(CharacterAttribute.sAttributeAgility).ToString()),
+					new("Speed", character.GetAttribute(CharacterAttribute.sAttributeSpeed).ToString()),
+					new("Endurance", character.GetAttribute(CharacterAttribute.sAttributeEndurance).ToString()),
+					new("Personality", character.GetAttribute(CharacterAttribute.sAttributePersonality).ToString()),
+					new("Luck", character.GetAttribute(CharacterAttribute.sAttributeLuck).ToString())
 				};
 
 				var skills = new UITitleInfoPair[character.Skills.Count];
-				for(var i = 0; i < skills.Length; i++)
+				for (var i = 0; i < skills.Length; i++)
 				{
 					skills[i] = new UITitleInfoPair(((CharacterSkill)i).ToString(), character.Skills[i].ToString());
 				}
@@ -170,8 +167,6 @@ public class PlayerInput : CharacterInput
 			}
 		}
 	}
-
-	CharacterMenuUI characterUI;
 
 	private void GetTarget()
 	{
@@ -223,6 +218,7 @@ public class PlayerInput : CharacterInput
 		if (inventoryUI == null)
 		{
 			inventoryUI = InventoryUI.Create(gameObject, GetComponent<IInventory>(), name);
+			inventoryUI.GetComponent<Canvas>().worldCamera = Camera.main;
 		}
 		else
 		{

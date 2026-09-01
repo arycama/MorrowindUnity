@@ -25,6 +25,7 @@ public class CharacterMenuUI : MonoBehaviour
 	public static CharacterMenuUI Create(string name, IEnumerable<UITitleInfoPair> characterInfo, IEnumerable<UITitleInfoPair> attributes, IEnumerable<UITitleInfoPair> skills)
 	{
 		var instance = Instantiate(UIManager.CharacterMenu);
+		instance.GetComponent<Canvas>().worldCamera = UIManager.Instance.Camera;
 
 		instance.title.text = name;
 

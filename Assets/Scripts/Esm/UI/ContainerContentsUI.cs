@@ -1,5 +1,4 @@
 ﻿using System;
-using Esm;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -19,6 +18,7 @@ public class ContainerContentsUI : PauseGameUI
 	{
 		var ui = Resources.Load<ContainerContentsUI>("UI/Container Contents UI");
 		var inventoryUI = Instantiate(ui);
+		inventoryUI.GetComponent<Canvas>().worldCamera = Camera.main;
 
 		// Set the title of the container
 		inventoryUI.title.text = title;

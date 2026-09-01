@@ -49,6 +49,7 @@ public class DialogView : PauseGameUI, IDialogView
 	{
 		// Display the Npc's name
 		var instance = Instantiate(UIManager.DialogUI);
+		instance.GetComponent<Canvas>().worldCamera = UIManager.Instance.Camera;
 		instance.controller = controller;
 
 		instance.title.text = name;

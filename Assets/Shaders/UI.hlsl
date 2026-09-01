@@ -25,9 +25,9 @@ cbuffer UnityPerMaterial
 FragmentInput Vertex(VertexInput input)
 {
 	FragmentInput output;
-	output.position = MultiplyPointProj(UiOverlayMatrix, input.position);
+	output.position = ObjectToClipPosition(input.position, 0);
 	output.uv = input.uv;
-	output.color = float4((input.color.rgb), input.color.a) * _Color;
+	output.color = input.color * _Color;
 	return output;
 }
 

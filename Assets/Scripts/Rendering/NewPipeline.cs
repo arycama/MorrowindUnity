@@ -36,6 +36,7 @@ public class NewPipeline : RenderPipelineBase
 
 		var rasSettings = new RayTracingAccelerationStructure.Settings(RayTracingAccelerationStructure.ManagementMode.Automatic, RayTracingAccelerationStructure.RayTracingModeMask.Everything, asset.RayTracingLayerMask);
 		rtas = new RayTracingAccelerationStructure(rasSettings);
+		SupportedRenderingFeatures.active = SupportedRenderingFeatures;
 	}
 
 	protected override void Dispose(bool disposing)
@@ -62,6 +63,7 @@ public class NewPipeline : RenderPipelineBase
 		var cullingResults = context.Cull(ref cullingParameters);
 
 		var viewData = setupView.Render(camera);
+		var viewDataFlipped = setupView.Render(camera, true, false);
 		var (environmentData, sunShadow) = setupLighting.Render(camera, cullingResults, context, viewData);
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
@@ -266,7 +268,6 @@ public class NewPipeline : RenderPipelineBase
 			var focalLength = 0.5f * (asset.SensorSize / 1000.0f) / tanHalfFovY;
 			var apertureRadius = 0.5f * focalLength / asset.Aperture;
 			var pixelToViewDir = Float4x4.PixelToNearClip(new(camera.pixelWidth, camera.pixelHeight), 0f, tanHalfFov, true, false);
-
 			pass.SetRenderFunction((rtas, depthOfFieldRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise1D, blueNoise2D, apertureRadius, asset.FocusDistance, pixelToViewDir), static (command, data) =>
 			{
 				command.SetRayTracingTextureParam(data.depthOfFieldRaytracingShader, "BlueNoise1D", data.blueNoise1D);
@@ -280,35 +281,42 @@ public class NewPipeline : RenderPipelineBase
 			});
 		}
 
+		// Final blit/resolve if needed
+		// TODO: This should also account for HDR
+		var backbufferViewHandle = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight)); ;
+		var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
+		var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
+		var backbufferColor = renderGraph.GetTexture(new(viewHandle, targetFormat), Shader.PropertyToID("BackbufferColor"));
+		renderGraph.ExportTexture(backbufferColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+
 		using (var pass = renderGraph.AddRenderPass("Final Blit"))
 		{
 			// Can only render directly to backbuffer if there is no msaa samples and there is no target texture
 			// TODO: Check for hardware msaa backbuffer resolve support
-			pass.ViewHandle = renderGraph.AddViewInfo(new(camera.pixelWidth, camera.pixelHeight));
-
-			// Final blit/resolve if needed
-			// TODO: This should also account for HDR
-			var backbufferFormat = QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
-			var targetFormat = camera.targetTexture == null ? backbufferFormat : camera.targetTexture.graphicsFormat;
-			var sceneColor = renderGraph.GetTexture(new(viewHandle, targetFormat), Shader.PropertyToID("SceneColor"));
-			renderGraph.ExportTexture(sceneColor, camera.targetTexture == null ? BuiltinRenderTextureType.CameraTarget : camera.targetTexture);
+			pass.ViewHandle = backbufferViewHandle;
+			pass.AddOutput(backbufferColor);
+			pass.AddResource(viewData);
 
 			// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
-			TextureHandle sceneDepth = default;
-			var requiresSceneDepth = false;
+			var requiresFlip = camera.targetTexture == null;
+			var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
+			var passIndex = 0;
 
 #if UNITY_EDITOR
-			requiresSceneDepth = camera.cameraType == CameraType.SceneView || Handles.ShouldRenderGizmos();
+			var requiresSceneDepth = camera.cameraType == CameraType.SceneView || Handles.ShouldRenderGizmos();
 			if (requiresSceneDepth)
 			{
-				sceneDepth = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt), Shader.PropertyToID("SceneDepth"));
-				renderGraph.ExportTexture(sceneDepth, camera.targetTexture);
+				passIndex = 1;
+				var backbufferDepth = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt), Shader.PropertyToID("BackbufferDepth"));
+				renderGraph.ExportTexture(backbufferDepth, camera.targetTexture);
+				pass.DepthStencil = backbufferDepth;
+				pass.AddKeyword("DEPTH");
+
+				if (!renderToBackbuffer)
+					pass.AddResource(cameraDepth);
 			}
 #endif
 
-			pass.AddResource(viewData);
-
-			var renderToBackbuffer = asset.Samples == 1 && camera.targetTexture == null;
 			if (renderToBackbuffer)
 			{
 				pass.AddInput(cameraColor);
@@ -317,22 +325,8 @@ public class NewPipeline : RenderPipelineBase
 			else
 			{
 				pass.AddResource(cameraColor);
-
-				if (requiresSceneDepth)
-					pass.AddResource(cameraDepth);
 			}
 
-			// TODO: Currently we need to set depth as the first output if it exists. Once this is replaced with a set depth stencil function, this wont be neccessary
-			if (requiresSceneDepth)
-			{
-				pass.DepthStencil = sceneDepth;
-				pass.AddOutput(sceneColor);
-				pass.AddKeyword("DEPTH");
-			}
-			else
-				pass.AddOutputs(stackalloc[] { sceneColor });
-
-			var requiresFlip = camera.targetTexture == null;
 			if (requiresFlip)
 				pass.AddKeyword("FLIP");
 
@@ -345,15 +339,27 @@ public class NewPipeline : RenderPipelineBase
 				pass.AddKeyword("DEPTH_OF_FIELD");
 			}
 
-			pass.SetRenderFunction(blitMaterial, static (command, blitMaterial) =>
+			pass.SetRenderFunction((blitMaterial, passIndex), static (command, data) =>
 			{
 				command.SetWireframe(false);
-				command.DrawProcedural(Matrix4x4.identity, blitMaterial, 0, MeshTopology.Triangles, 3);
+				command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, data.passIndex, MeshTopology.Triangles, 3);
+			});
+		}
+
+		using (var pass = renderGraph.AddRenderPass("Render UI"))
+		{
+			pass.ViewHandle = backbufferViewHandle;
+			pass.AddOutput(backbufferColor);
+			pass.AddResource(camera.cameraType == CameraType.SceneView ? viewDataFlipped : viewData);
+
+			var rendererList = context.CreateRendererList(new(new ShaderTagId("UI"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all, sortingCriteria = SortingCriteria.CommonTransparent });
+			pass.SetRenderFunction(rendererList, static (command, rendererList) =>
+			{
+				command.DrawRendererList(rendererList);
 			});
 		}
 
 #if UNITY_EDITOR
-		// Render gizmos
 		if (Handles.ShouldRenderGizmos())
 		{
 			using var pass = renderGraph.AddRenderPass("Render Gizmos");
@@ -363,23 +369,22 @@ public class NewPipeline : RenderPipelineBase
 			pass.SetRenderFunction((preImageEffectsRenderList, postImageEffectsRenderList), static (command, data) =>
 			{
 				// Note that gizmos use their own matrix logic which we can't override
+				command.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
 				command.DrawRendererList(data.preImageEffectsRenderList);
 				command.DrawRendererList(data.postImageEffectsRenderList);
 			});
 		}
 
-		// Render wireframe
 		if (camera.cameraType == CameraType.SceneView)
 		{
-			var viewDataTemp = setupView.Render(camera, true, false);
-
 			using var pass = renderGraph.AddRenderPass("Wireframe");
-			pass.AddResource(viewDataTemp);
+			pass.AddResource(viewDataFlipped);
 
 			var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
 			pass.SetRenderFunction((camera, wireframeRendererList, context), static (command, data) =>
 			{
 				data.context.SetupCameraProperties(data.camera);
+				command.SetRenderTarget(BuiltinRenderTextureType.CameraTarget);
 				command.DrawRendererList(data.wireframeRendererList);
 			});
 		}

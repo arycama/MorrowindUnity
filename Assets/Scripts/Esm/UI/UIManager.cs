@@ -14,6 +14,8 @@ public class UIManager : Singleton<UIManager>
 	[SerializeField]
 	private CharacterMenuUI characterMenu;
 
+	[field: SerializeField] public Camera Camera { get; private set; }
+
 	public static DialogView DialogUI => Instance.dialogUI;
 	public static InfoPanel InfoPanel => Instance.infoPanel;
 	public static ListPanelUI ListPanelUI => Instance.listPanelUI;

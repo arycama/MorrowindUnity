@@ -28,7 +28,6 @@ float4 Fragment(float4 position : SV_Position,
 	
 	#ifdef DEPTH
 		#ifdef MSAA
-			
 			depth = CameraDepth.Load(coord, 0);
 		#else
 			depth = CameraDepth.Sample(PointClampSampler, uv);

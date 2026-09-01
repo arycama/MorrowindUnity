@@ -31,6 +31,7 @@ public class ListPanelUI : MonoBehaviour
 	public static ListPanelUI Create(IEnumerable<ListUIOption> options, string title, string description, string button, int gold, PauseGameUI parent, bool closeOnComplete = false, bool closeUIOnComplete = false)
 	{
 		var instance = Instantiate(UIManager.ListPanelUI);
+		instance.GetComponent<Canvas>().worldCamera = UIManager.Instance.Camera;
 
 		instance.title.text = title;
 		instance.description.text = description;

@@ -907,6 +907,7 @@ MonoBehaviour:
     type: 3}
   characterMenu: {fileID: 114649624377303442, guid: 103418b1a2051ce4287371dc78eaff22,
     type: 3}
+  <Camera>k__BackingField: {fileID: 2051501577}
 --- !u!114 &1594392083
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -973,6 +974,11 @@ PrefabInstance:
       propertyPath: m_Sprite
       value: 
       objectReference: {fileID: 1462751769}
+    - target: {fileID: 223359512028295772, guid: e2fb151713dea714c9fb7014637df049,
+        type: 3}
+      propertyPath: m_Camera
+      value: 
+      objectReference: {fileID: 2051501577}
     - target: {fileID: 224581431188086546, guid: e2fb151713dea714c9fb7014637df049,
         type: 3}
       propertyPath: m_Pivot.x
