@@ -14,6 +14,7 @@ public class RenderGraph : IDisposable
 	private readonly ResizableArray<ResourceHandle> handles = new();
 	private readonly TextureSystem textureSystem = new();
 	private readonly BufferSystem bufferSystem = new();
+	private readonly List<RayTracingAccelerationStructure> rayTracingAccelerationStructures = new();
 	private readonly NativeRenderPassSystem nativeRenderPassSystem = new();
 	private readonly ResourceMap resourceMap = new();
 	private readonly PassBuilder builder;
@@ -122,12 +123,6 @@ public class RenderGraph : IDisposable
 		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(builder);
 
 		var renderPass = builder.RenderPass;
-
-		if (renderPass == null)
-		{
-			Debug.LogError("Yes");
-		}
-
 		renderPass.ResourceRange = resourceRange;
 		renderPass.UavResourceRange = uavResourceRange;
 		renderPass.IsNewSubPass = isNewSubPass;
@@ -166,6 +161,18 @@ public class RenderGraph : IDisposable
 		ref var target = ref resourceInfo[handle];
 		target.resourceIndex = resourceIndex;
 		target.isExported = true;
+	}
+
+	public RayTracingAccelerationStructureHandle GetRtasHandle(RayTracingAccelerationStructure structure, int propertyId)
+	{
+		resourceInfo.Add(new(-1, propertyId, ResourceHandleType.RayTracingAccelerationStructure));
+		var handle = new RayTracingAccelerationStructureHandle(resourceInfo.Count - 1);
+		var resourceIndex = rayTracingAccelerationStructures.Count;
+		ref var target = ref resourceInfo[handle];
+		target.resourceIndex = resourceIndex;
+		target.isExported = true;
+		rayTracingAccelerationStructures.Add(structure);
+		return handle;
 	}
 
 	public ViewHandle AddViewInfo(Int2 size, int samples = 1, int volumeDepth = 1)
@@ -376,6 +383,12 @@ public class RenderGraph : IDisposable
 						command.SetGlobalBuffer(target.propertyId, resource);
 				}
 
+				if (handle.type == ResourceHandleType.RayTracingAccelerationStructure)
+				{
+					var resource = rayTracingAccelerationStructures[target.resourceIndex];
+					command.SetGlobalRayTracingAccelerationStructure(target.propertyId, resource);
+				}
+
 				// If this is the last time a resource is read, it can be freed for the next pass
 				if (i == target.lastReadIndex && !target.isExported)
 				{
@@ -436,5 +449,6 @@ public class RenderGraph : IDisposable
 		nativeRenderPassSystem.Clear();
 		handles.Clear();
 		resourceMap.Clear();
+		rayTracingAccelerationStructures.Clear();
 	}
 }

@@ -40,4 +40,3 @@ public readonly struct BufferHandle : IEquatable<BufferHandle>
 
 	public static implicit operator ResourceHandle(BufferHandle handle) => new(handle, ResourceHandleType.Buffer);
 }
-

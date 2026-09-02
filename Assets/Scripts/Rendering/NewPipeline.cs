@@ -65,6 +65,9 @@ public class NewPipeline : RenderPipelineBase
 		cullingParameters.shadowDistance = asset.Lighting.DirectionalShadowDistance;
 		var cullingResults = context.Cull(ref cullingParameters);
 
+		// Needs to be done per camera for now since we clear the resource map between cameras
+		renderGraph.SetResource<SceneRtas>(new(renderGraph.GetRtasHandle(rtas, Shader.PropertyToID("SceneRaytracingAccelerationStructure"))));
+
 		var noiseIndex = renderGraph.FrameIndex % 64;
 		var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds[noiseIndex]);
 		var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
@@ -118,13 +121,12 @@ public class NewPipeline : RenderPipelineBase
 			var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedOcclusion);
-			pass.AddResources<CameraDepth, AlbedoNormal>();
+			pass.AddResources<CameraDepth, AlbedoNormal, SceneRtas>();
 
 			pass.SetRenderFunction((rtas, occlusionRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{
 				command.SetRayTracingTextureParam(data.occlusionRaytracingShader, "BlueNoise2D", data.blueNoise2D);
 				command.SetRayTracingShaderPass(data.occlusionRaytracingShader, "RaytracedTransmittance");
-				command.SetGlobalRayTracingAccelerationStructure("SceneRaytracingAccelerationStructure", data.rtas);
 				command.DispatchRays(data.occlusionRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
 
@@ -137,13 +139,12 @@ public class NewPipeline : RenderPipelineBase
 			var raytracedShadows = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceShadows"));
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedShadows);
-			pass.AddResources<CameraDepth, AlbedoNormal>();
+			pass.AddResources<CameraDepth, AlbedoNormal, SceneRtas>();
 
 			pass.SetRenderFunction((rtas, shadowRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{
 				command.SetRayTracingTextureParam(data.shadowRaytracingShader, "BlueNoise2D", data.blueNoise2D);
 				command.SetRayTracingShaderPass(data.shadowRaytracingShader, "RaytracedTransmittance");
-				command.SetGlobalRayTracingAccelerationStructure("SceneRaytracingAccelerationStructure", data.rtas);
 				command.DispatchRays(data.shadowRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
 
@@ -162,7 +163,6 @@ public class NewPipeline : RenderPipelineBase
 			{
 				command.SetRayTracingTextureParam(data.diffuseRaytracingShader, "BlueNoise2D", data.blueNoise2D);
 				command.SetRayTracingShaderPass(data.diffuseRaytracingShader, "RaytracedLuminance");
-				command.SetGlobalRayTracingAccelerationStructure("SceneRaytracingAccelerationStructure", data.rtas);
 				command.DispatchRays(data.diffuseRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
 
@@ -225,6 +225,7 @@ public class NewPipeline : RenderPipelineBase
 
 			var raytracedDepthOfField = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("DepthOfField"));
 			pass.AddUavOutput(raytracedDepthOfField);
+			pass.AddResource<SceneRtas>();
 
 			var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
 			var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -239,7 +240,6 @@ public class NewPipeline : RenderPipelineBase
 				command.SetRayTracingFloatParam(data.depthOfFieldRaytracingShader, "FocusDistance", data.FocusDistance);
 				command.SetRayTracingMatrixParam(data.depthOfFieldRaytracingShader, "PixelToViewDir", data.pixelToViewDir);
 				command.SetRayTracingShaderPass(data.depthOfFieldRaytracingShader, "RaytracedLuminance");
-				command.SetGlobalRayTracingAccelerationStructure("SceneRaytracingAccelerationStructure", data.rtas);
 				command.DispatchRays(data.depthOfFieldRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
 
