@@ -12,10 +12,11 @@ public class NewPipeline : RenderPipelineBase
 
 	protected override SupportedRenderingFeatures SupportedRenderingFeatures => asset.SupportedRenderingFeatures;
 	private readonly NewPipelineAsset asset;
-	private readonly Material blitMaterial, deferredMaterial, backgroundMaterial, pointLightMaterial;
+	private readonly Material blitMaterial, deferredMaterial, backgroundMaterial;
 	private readonly SetupView setupView;
 	private readonly SetupLighting setupLighting;
 	private readonly VolumetricLight volumetricLight;
+	private readonly LightCulling lightCulling;
 	private readonly RayTracingAccelerationStructure rtas;
 	private readonly RayTracingShader occlusionRaytracingShader, shadowRaytracingShader, diffuseRaytracingShader, depthOfFieldRaytracingShader;
 
@@ -25,9 +26,9 @@ public class NewPipeline : RenderPipelineBase
 		blitMaterial = new Material(Shader.Find("Hidden/Blit Material")) { hideFlags = HideFlags.HideAndDontSave };
 		deferredMaterial = new Material(Shader.Find("Hidden/Morrowind Deferred")) { hideFlags = HideFlags.HideAndDontSave };
 		backgroundMaterial = new Material(Shader.Find("Hidden/Background")) { hideFlags = HideFlags.HideAndDontSave };
-		pointLightMaterial = new Material(Shader.Find("Hidden/Morrowind Point Light")) { hideFlags = HideFlags.HideAndDontSave };
 		setupView = new(renderGraph);
 		setupLighting = new(renderGraph, asset.Lighting, asset.LightCulling);
+		lightCulling = new(renderGraph, asset.LightCulling);
 		volumetricLight = new(renderGraph, asset);
 
 		occlusionRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindOcclusion");
@@ -109,34 +110,9 @@ public class NewPipeline : RenderPipelineBase
 			});
 		}
 
-		using (var pass = renderGraph.AddRenderPass("Light Culling"))
-		{
-			pass.ViewHandle = viewHandle;
-			pass.DepthStencil = cameraDepth;
-			pass.AddUavOutput(visibleLightBits);
-			pass.AddResources(stackalloc ResourceHandle[] { viewData, pointLightData, pointLights });
-
-			pass.SetRenderFunction((visibleLightBits, renderGraph, asset.LightCulling, pointLightMaterial, pointLightCount, intersectingLightCount), static (command, data) =>
-			{
-				command.SetRandomWriteTarget(0, data.renderGraph.GetTextureResource(data.visibleLightBits));
-
-				if (data.intersectingLightCount > 0)
-				{
-					command.SetGlobalFloat("IndexOffset", 0);
-					command.DrawMeshInstancedProcedural(data.LightCulling.PointLightMesh, 0, data.pointLightMaterial, 0, data.intersectingLightCount);
-				}
-
-				var remainingPointLightCount = data.pointLightCount - data.intersectingLightCount;
-				if (remainingPointLightCount > 0)
-				{
-					command.SetGlobalFloat("IndexOffset", data.intersectingLightCount);
-					command.DrawMeshInstancedProcedural(data.LightCulling.PointLightMesh, 0, data.pointLightMaterial, 1, remainingPointLightCount);
-				}
-			});
-		}
+		lightCulling.Render(viewHandle, cameraDepth, visibleLightBits, viewData, pointLightData, pointLights, pointLightCount, intersectingLightCount);
 
 		var volumetricLight = this.volumetricLight.Render(viewData, environmentData, camera, blueNoise1D, sunShadow, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows);
-
 		var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
 		if (asset.RaytracedOcclusion)
 		{

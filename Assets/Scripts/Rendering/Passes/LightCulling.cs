@@ -11,4 +11,44 @@ public class LightCulling
 		[field: SerializeField] public Mesh PointLightMesh { get; private set; }
 		[field: SerializeField] public Mesh SpotLightMesh { get; private set; }
 	}
+
+	private readonly RenderGraph renderGraph;
+	private readonly Material pointLightMaterial;
+	private readonly Settings settings;
+
+	public LightCulling(RenderGraph renderGraph, Settings settings)
+	{
+		this.renderGraph = renderGraph;
+		this.settings = settings;
+		pointLightMaterial = new Material(Shader.Find("Hidden/Morrowind Point Light")) { hideFlags = HideFlags.HideAndDontSave };
+	}
+
+	public void Render(ViewHandle viewHandle, TextureHandle cameraDepth, TextureHandle visibleLightBits, BufferHandle viewData, BufferHandle pointLightData, BufferHandle pointLights, int pointLightCount, int intersectingLightCount)
+	{
+		using (var pass = renderGraph.AddRenderPass("Light Culling"))
+		{
+			pass.ViewHandle = viewHandle;
+			pass.DepthStencil = cameraDepth;
+			pass.AddUavOutput(visibleLightBits);
+			pass.AddResources(stackalloc ResourceHandle[] { viewData, pointLightData, pointLights });
+
+			pass.SetRenderFunction((visibleLightBits, renderGraph, settings, pointLightMaterial, pointLightCount, intersectingLightCount), static (command, data) =>
+			{
+				command.SetRandomWriteTarget(0, data.renderGraph.GetTextureResource(data.visibleLightBits));
+
+				if (data.intersectingLightCount > 0)
+				{
+					command.SetGlobalFloat("IndexOffset", 0);
+					command.DrawMeshInstancedProcedural(data.settings.PointLightMesh, 0, data.pointLightMaterial, 0, data.intersectingLightCount);
+				}
+
+				var remainingPointLightCount = data.pointLightCount - data.intersectingLightCount;
+				if (remainingPointLightCount > 0)
+				{
+					command.SetGlobalFloat("IndexOffset", data.intersectingLightCount);
+					command.DrawMeshInstancedProcedural(data.settings.PointLightMesh, 0, data.pointLightMaterial, 1, remainingPointLightCount);
+				}
+			});
+		}
+	}
 }
