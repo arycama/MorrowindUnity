@@ -62,25 +62,26 @@ public class VolumetricLight : IDisposable
 			pass.AddResources(stackalloc ResourceHandle[] { dataBuffer });
 			pass.AddResources<EnvironmentData, ViewData, PointLightData, BlueNoise1D>();
 
+			var viewInfo = renderGraph.GetViewInfo(volumetricViewHandle);
+			var target = RenderTexture.GetTemporary(volumetricDescriptor.GetRenderTextureDescriptor(viewInfo, 1, true));
+			_ = target.Create();
+			renderGraph.ExportTexture(volumetricLightTemp, target);
+
 			if (volumetricHistory.TryGetValue(camera, out var history))
+			{
 				pass.AddKeyword("HISTORY");
+				pass.AddResource(renderGraph.GetTextureHandle(history, Shader.PropertyToID("VolumetricLight")));
+				RenderTexture.ReleaseTemporary(history);
+			}
+
+			volumetricHistory[camera] = target;
 
 			var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
 			pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, history), static (command, data) =>
 			{
-				command.SetComputeTextureParam(data.volumetricLightShader, 0, "VolumetricLight", data.history);
 				command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
 				command.DispatchCompute(data.volumetricLightShader, 0, DivRoundUp(data.volumeSize.x, 8), DivRoundUp(data.volumeSize.y, 8), data.volumeSize.z);
-
-				if (data.history != null)
-					RenderTexture.ReleaseTemporary(data.history);
 			});
-
-			var viewInfo = renderGraph.GetViewInfo(volumetricViewHandle);
-			var target = RenderTexture.GetTemporary(volumetricDescriptor.GetRenderTextureDescriptor(viewInfo, 1, true));
-			_ = target.Create();
-			volumetricHistory[camera] = target;
-			renderGraph.ExportTexture(volumetricLightTemp, target);
 		}
 
 		var volumetricLight = renderGraph.GetTexture(new(volumetricViewHandle, GraphicsFormat.R16G16B16A16_SFloat, dimension: TextureDimension.Tex3D), Shader.PropertyToID("VolumetricLight"));
