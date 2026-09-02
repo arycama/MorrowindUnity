@@ -26,7 +26,7 @@ public class VolumetricLight : IDisposable
 			RenderTexture.ReleaseTemporary(history.Value);
 	}
 
-	public TextureHandle Render(BufferHandle environmentData, Camera camera, Texture blueNoise1D, TextureHandle sunShadow, BufferHandle pointLightData, BufferHandle pointLights, BufferHandle lightDepthMinMaxBuffer, TextureHandle visibleLightBits, TextureHandle pointShadows)
+	public TextureHandle Render(Camera camera, Texture blueNoise1D, TextureHandle sunShadow, BufferHandle pointLightData, BufferHandle pointLights, BufferHandle lightDepthMinMaxBuffer, TextureHandle visibleLightBits, TextureHandle pointShadows)
 	{
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
@@ -46,8 +46,8 @@ public class VolumetricLight : IDisposable
 				pass.ViewHandle = volumetricViewHandle;
 				var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
 				pass.AddUavOutput(volumetricLightTemp);
-				pass.AddResources(stackalloc ResourceHandle[] { environmentData, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
-				pass.AddResource<ViewData>();
+				pass.AddResources(stackalloc ResourceHandle[] { pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
+				pass.AddResources<EnvironmentData, ViewData>();
 
 				if (renderGraph.IsResourceWritten(sunShadow))
 				{
@@ -90,8 +90,8 @@ public class VolumetricLight : IDisposable
 			{
 				pass.ViewHandle = volumetricViewHandle;
 				var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
-				pass.AddResources(stackalloc ResourceHandle[] { volumetricLightTemp, environmentData });
-				pass.AddResource<ViewData>();
+				pass.AddResources(stackalloc ResourceHandle[] { volumetricLightTemp });
+				pass.AddResources<EnvironmentData, ViewData>();
 				pass.AddUavOutput(volumetricLight);
 
 				var volumeSize = new Int3(volumeWidth, volumeHeight, asset.VolumetricSlices);
