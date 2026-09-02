@@ -40,7 +40,7 @@ public class Bloom
 		material = new Material(Shader.Find("Hidden/Morrowind Bloom")) { hideFlags = HideFlags.HideAndDontSave };
 	}
 
-	public void Render(Camera camera, TextureHandle cameraTarget)
+	public void Render(Camera camera)
 	{
 		var mipCount = Min(settings.MaxMips, (int)Log2(Max(camera.pixelWidth, camera.pixelHeight)));
 		Span<TextureHandle> bloomIds = stackalloc TextureHandle[mipCount];
@@ -57,7 +57,7 @@ public class Bloom
 			using var pass = renderGraph.AddRenderPass("Bloom Down");
 			pass.ViewHandle = viewHandles[i];
 			pass.AddOutput(bloomIds[i]);
-			pass.AddResource(i > 0 ? bloomIds[i - 1] : cameraTarget);
+			pass.AddResource(i > 0 ? bloomIds[i - 1] : renderGraph.GetResource<CameraColor>().handle);
 			var passIndex = i > 0 ? 1 : 0;
 			pass.SetRenderFunction((1.0f / new Float2(width, height), material, passIndex), static (command, data) =>
 			{

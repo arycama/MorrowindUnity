@@ -52,13 +52,11 @@ public class NewPipeline : RenderPipelineBase
 
 	protected override void RenderFrame(ScriptableRenderContext context, List<Camera> cameras)
 	{
-		using (var pass = renderGraph.AddRenderPass("Raytracing Update"))
+		using var pass = renderGraph.AddRenderPass("Raytracing Update");
+		pass.SetRenderFunction(rtas, static (command, data) =>
 		{
-			pass.SetRenderFunction(rtas, static (command, data) =>
-			{
-				command.BuildRayTracingAccelerationStructure(data);
-			});
-		}
+			command.BuildRayTracingAccelerationStructure(data);
+		});
 	}
 
 	protected override void RenderCamera(Camera camera, ScriptableCullingParameters cullingParameters, ScriptableRenderContext context)
@@ -76,19 +74,17 @@ public class NewPipeline : RenderPipelineBase
 
 		setupLighting.Render(camera, cullingResults, context);
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
-		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
-		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
 
 		var viewHandle = renderGraph.AddViewInfo(viewSize, asset.Samples);
-		var cameraDepth = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt, true), Shader.PropertyToID("CameraDepth"));
-		var albedoNormal = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"));
-		var cameraColor = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("CameraColor"));
+		renderGraph.SetResource<CameraDepth>(new(renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt, true), Shader.PropertyToID("CameraDepth"))));
+		renderGraph.SetResource<AlbedoNormal>(new(renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"))));
+		renderGraph.SetResource<CameraColor>(new(renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("CameraColor"))));
 
 		using (var pass = renderGraph.AddRenderPass("Terrain"))
 		{
 			pass.ViewHandle = viewHandle;
-			pass.DepthStencil = cameraDepth;
-			pass.AddOutputs(stackalloc[] { albedoNormal, cameraColor });
+			pass.DepthStencil = renderGraph.GetResource<CameraDepth>().handle;
+			pass.AddOutputs(stackalloc[] { renderGraph.GetResource<AlbedoNormal>().handle, renderGraph.GetResource<CameraColor>().handle });
 			pass.AddResources<EnvironmentData, ViewData>();
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Terrain"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all, sortingCriteria = SortingCriteria.QuantizedFrontToBack });
@@ -101,8 +97,8 @@ public class NewPipeline : RenderPipelineBase
 		using (var pass = renderGraph.AddRenderPass("GBuffer"))
 		{
 			pass.ViewHandle = viewHandle;
-			pass.DepthStencil = cameraDepth;
-			pass.AddOutputs(stackalloc[] { albedoNormal, cameraColor });
+			pass.DepthStencil = renderGraph.GetResource<CameraDepth>().handle;
+			pass.AddOutputs(stackalloc[] { renderGraph.GetResource<AlbedoNormal>().handle, renderGraph.GetResource<CameraColor>().handle });
 			pass.AddResources<EnvironmentData, ViewData>();
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.opaque));
@@ -113,7 +109,7 @@ public class NewPipeline : RenderPipelineBase
 			});
 		}
 
-		lightCulling.Render(viewHandle, cameraDepth);
+		lightCulling.Render(viewHandle);
 		volumetricLight.Render(camera, blueNoise1D);
 
 		var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
@@ -122,7 +118,7 @@ public class NewPipeline : RenderPipelineBase
 			using var pass = renderGraph.AddRenderPass("Raytraced Occlusion");
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedOcclusion);
-			pass.AddResources(stackalloc ResourceHandle[] { cameraDepth, albedoNormal });
+			pass.AddResources<CameraDepth, AlbedoNormal>();
 
 			pass.SetRenderFunction((rtas, occlusionRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{
@@ -139,7 +135,7 @@ public class NewPipeline : RenderPipelineBase
 			using var pass = renderGraph.AddRenderPass("Raytraced Shadow");
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedShadows);
-			pass.AddResources(stackalloc ResourceHandle[] { cameraDepth, albedoNormal });
+			pass.AddResources<CameraDepth, AlbedoNormal>();
 
 			pass.SetRenderFunction((rtas, shadowRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{
@@ -156,7 +152,7 @@ public class NewPipeline : RenderPipelineBase
 			using var pass = renderGraph.AddRenderPass("Raytraced Diffuse");
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedDiffuse);
-			pass.AddResources(stackalloc ResourceHandle[] { cameraDepth, albedoNormal });
+			pass.AddResources<CameraDepth, AlbedoNormal>();
 
 			pass.SetRenderFunction((rtas, diffuseRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
 			{
@@ -170,9 +166,9 @@ public class NewPipeline : RenderPipelineBase
 		using (var pass = renderGraph.AddRenderPass("Deferred"))
 		{
 			pass.ViewHandle = viewHandle;
-			pass.DepthStencil = cameraDepth;
-			pass.AddOutput(cameraColor);
-			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
+			pass.DepthStencil = renderGraph.GetResource<CameraDepth>().handle;
+			pass.AddOutput(renderGraph.GetResource<CameraColor>().handle);
+			pass.AddInputs(stackalloc[] { renderGraph.GetResource<CameraDepth>().handle, renderGraph.GetResource<AlbedoNormal>().handle });
 			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData, PointLightData>();
 
 			if (asset.Samples > 1)
@@ -205,8 +201,8 @@ public class NewPipeline : RenderPipelineBase
 		using (var pass = renderGraph.AddRenderPass("Sky"))
 		{
 			pass.ViewHandle = viewHandle;
-			pass.DepthStencil = cameraDepth;
-			pass.AddOutput(cameraColor);
+			pass.DepthStencil = renderGraph.GetResource<CameraDepth>().handle;
+			pass.AddOutput(renderGraph.GetResource<CameraColor>().handle);
 			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData>();
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Sky"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all });
@@ -220,8 +216,8 @@ public class NewPipeline : RenderPipelineBase
 		using (var pass = renderGraph.AddRenderPass("Forward Transparent"))
 		{
 			pass.ViewHandle = viewHandle;
-			pass.DepthStencil = cameraDepth;
-			pass.AddOutput(cameraColor);
+			pass.DepthStencil = renderGraph.GetResource<CameraDepth>().handle;
+			pass.AddOutput(renderGraph.GetResource<CameraColor>().handle);
 			pass.AddResources<EnvironmentData, ViewData, PointLightData, VolumetricLightData>();
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));
@@ -232,7 +228,7 @@ public class NewPipeline : RenderPipelineBase
 			});
 		}
 
-		bloom.Render(camera, cameraColor);
+		bloom.Render(camera);
 
 		var raytracedDepthOfField = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("DepthOfField"));
 		if (asset.RaytracedDepthOfField)
@@ -241,6 +237,8 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedDepthOfField);
 
+			var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
+			var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
 			var focalLength = 0.5f * (asset.SensorSize / 1000.0f) / tanHalfFovY;
 			var apertureRadius = 0.5f * focalLength / asset.Aperture;
 			var pixelToViewDir = Float4x4.PixelToNearClip(new(camera.pixelWidth, camera.pixelHeight), 0f, tanHalfFov, true, false);
@@ -289,18 +287,18 @@ public class NewPipeline : RenderPipelineBase
 				pass.AddKeyword("DEPTH");
 
 				if (!renderToBackbuffer)
-					pass.AddResource(cameraDepth);
+					pass.AddResource<CameraDepth>();
 			}
 #endif
 
 			if (renderToBackbuffer)
 			{
-				pass.AddInput(cameraColor);
+				pass.AddInput(renderGraph.GetResource<CameraColor>().handle);
 				pass.AddKeyword("DIRECT");
 			}
 			else
 			{
-				pass.AddResource(cameraColor);
+				pass.AddResource<CameraColor>();
 			}
 
 			if (requiresFlip)
