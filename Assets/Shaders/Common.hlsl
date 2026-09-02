@@ -342,22 +342,19 @@ float3 GetLuminance(float3 normal, float3 viewPosition, float2 screenPosition, o
 				attenuation *= saturate(dot(light.forward, L) * light.angleScale + light.angleOffset);
 				attenuation = Sq(attenuation);
 				
-				float3 worldL = mul((float3x3)ViewToWorld, lightVector);
+				float3 worldL = -mul((float3x3)ViewToWorld, lightVector);
 				
 				if(light.shadowIndex != UintMax && !light.angleScale)
 				{
-					// Point light
 					float dominantAxis = Max3(abs(worldL));
-					float depth = (dominantAxis * light.shadowProjectionX + light.shadowProjectionY) / dominantAxis;
-			
-					float faceIndex = CubeMapFaceID(-worldL);
-					float2 uv = CubeMapFaceUv(-worldL, faceIndex);
+					float depth = light.shadowProjectionX + light.shadowProjectionY / dominantAxis;
+					float2 uv = CubeMapFaceUv(worldL);
+					float faceIndex = CubeMapFaceID(worldL);
 					float shadowIndex = light.shadowIndex + faceIndex;
-					attenuation *= PointShadows.SampleCmpLevelZero(LinearClampCompareSampler, float3(uv, shadowIndex), depth);
+					attenuation *= PointShadows.SampleCmpLevelZero(LinearRepeatCompareSampler, float3(uv, shadowIndex), depth);
 				}
 			
 				illuminance += attenuation * light.color;
-				//luminance += (attenuation > 0) * light.color;
 				luminance += saturate(dot(normal, L)) * attenuation * light.color;
 			}
 		}

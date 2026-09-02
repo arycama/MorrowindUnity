@@ -169,12 +169,12 @@ public class SetupLighting
 
 					for (var j = 0; j < 6; j++)
 					{
-						var faceForward = Float4x4.lookAtList[j];
-						var rotation = Quaternion.LookRotation(faceForward, Float4x4.upVectorList[j]);
+						var matrix = Float4x4.cubemapRotations[j];
+						var rotation = new Quaternion(matrix.column0, matrix.column1, matrix.column2);
 						var worldToView = Float4x4.WorldToLocal(position, rotation);
 						var viewToClip = Float4x4.PerspectiveReverseZ(1, nearPlane, radius);
 						var worldToClip = viewToClip.Mul(worldToView);
-						var shadowSplitData = CalculateShadowSplitData(worldToClip, faceForward, false);
+						var shadowSplitData = CalculateShadowSplitData(worldToClip, matrix.column2, false);
 
 						// Convert to camera relative
 						var cameraInverseTranslation = Float4x4.Translate(viewPosition);
