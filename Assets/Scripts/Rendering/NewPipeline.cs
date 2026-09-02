@@ -65,9 +65,9 @@ public class NewPipeline : RenderPipelineBase
 		cullingParameters.shadowDistance = asset.Lighting.DirectionalShadowDistance;
 		var cullingResults = context.Cull(ref cullingParameters);
 
-		var viewData = setupView.Render(camera);
-		var viewDataFlipped = setupView.Render(camera, true, false);
-		var (environmentData, sunShadow, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointLightCount, intersectingLightCount, pointShadows) = setupLighting.Render(camera, cullingResults, context, viewData);
+		setupView.Render(camera);
+		setupView.Render(camera, true, false);
+		var (environmentData, sunShadow, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointLightCount, intersectingLightCount, pointShadows) = setupLighting.Render(camera, cullingResults, context);
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -86,7 +86,8 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutputs(stackalloc[] { albedoNormal, cameraColor });
-			pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData });
+			pass.AddResources(stackalloc ResourceHandle[] { environmentData });
+			pass.AddResource<ViewData>();
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Terrain"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all, sortingCriteria = SortingCriteria.QuantizedFrontToBack });
 			pass.SetRenderFunction(rendererList, static (command, rendererList) =>
@@ -100,7 +101,8 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutputs(stackalloc[] { albedoNormal, cameraColor });
-			pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData });
+			pass.AddResource(environmentData);
+			pass.AddResource<ViewData>();
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("GBuffer"), new(camera) { criteria = SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.opaque));
 			var rendererList = context.CreateRendererList(ref rendererParams);
@@ -110,9 +112,9 @@ public class NewPipeline : RenderPipelineBase
 			});
 		}
 
-		lightCulling.Render(viewHandle, cameraDepth, visibleLightBits, viewData, pointLightData, pointLights, pointLightCount, intersectingLightCount);
+		lightCulling.Render(viewHandle, cameraDepth, visibleLightBits, pointLightData, pointLights, pointLightCount, intersectingLightCount);
 
-		var volumetricLight = this.volumetricLight.Render(viewData, environmentData, camera, blueNoise1D, sunShadow, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows);
+		var volumetricLight = this.volumetricLight.Render(environmentData, camera, blueNoise1D, sunShadow, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows);
 		var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
 		if (asset.RaytracedOcclusion)
 		{
@@ -170,7 +172,8 @@ public class NewPipeline : RenderPipelineBase
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
 			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
-			pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
+			pass.AddResources(stackalloc ResourceHandle[] { environmentData, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
+			pass.AddResource<ViewData>();
 
 			if (renderGraph.IsResourceWritten(sunShadow))
 			{
@@ -222,7 +225,8 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
-			pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData });
+			pass.AddResources(stackalloc ResourceHandle[] { environmentData });
+			pass.AddResource<ViewData>();
 
 			if (renderGraph.IsResourceWritten(volumetricLight))
 			{
@@ -244,7 +248,8 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
-			pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
+			pass.AddResources(stackalloc ResourceHandle[] { environmentData, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
+			pass.AddResource<ViewData>();
 
 			if (renderGraph.IsResourceWritten(sunShadow))
 			{
@@ -309,7 +314,7 @@ public class NewPipeline : RenderPipelineBase
 			// TODO: Check for hardware msaa backbuffer resolve support
 			pass.ViewHandle = backbufferViewHandle;
 			pass.AddOutput(backbufferColor);
-			pass.AddResource(viewData);
+			pass.AddResource<ViewData>();
 
 			// For sceneView, take the first depth sample for for gizmos, wireframe, etc.
 			var requiresFlip = camera.targetTexture == null;
@@ -364,7 +369,11 @@ public class NewPipeline : RenderPipelineBase
 		{
 			pass.ViewHandle = backbufferViewHandle;
 			pass.AddOutput(backbufferColor);
-			pass.AddResource(camera.cameraType == CameraType.SceneView ? viewDataFlipped : viewData);
+
+			if (camera.cameraType == CameraType.SceneView)
+				pass.AddResource<ViewDataFlipped>();
+			else
+				pass.AddResource<ViewData>();
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("UI"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all, sortingCriteria = SortingCriteria.CommonTransparent });
 			pass.SetRenderFunction(rendererList, static (command, rendererList) =>
@@ -392,7 +401,7 @@ public class NewPipeline : RenderPipelineBase
 		if (camera.cameraType == CameraType.SceneView)
 		{
 			using var pass = renderGraph.AddRenderPass("Wireframe");
-			pass.AddResource(viewDataFlipped);
+			pass.AddResource<ViewDataFlipped>();
 
 			var wireframeRendererList = context.CreateWireOverlayRendererList(camera);
 			pass.SetRenderFunction((camera, wireframeRendererList, context), static (command, data) =>

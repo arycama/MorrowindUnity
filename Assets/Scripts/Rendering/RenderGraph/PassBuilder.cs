@@ -24,6 +24,12 @@ public class PassBuilder : IDisposable
 		this.renderGraph = renderGraph;
 	}
 
+	public void AddResource<T>() where T : IRenderResource
+	{
+		var resource = renderGraph.GetResource<T>();
+		resource.SetData(this);
+	}
+
 	public void AddResource(ResourceHandle resource) => Resources.Add(resource);
 
 	public void AddResources(Span<ResourceHandle> resources)

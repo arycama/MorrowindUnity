@@ -30,7 +30,7 @@ public class SetupLighting
 		this.lightCulling = lightCulling;
 	}
 
-	public (BufferHandle environmentData, TextureHandle sunShadow, BufferHandle dataBuffer, BufferHandle lightBuffer, BufferHandle lightDepthMinMaxBuffer, TextureHandle visibleLightBits, int pointLightCount, int intersectingPointLightCount, TextureHandle pointShadows) Render(Camera camera, CullingResults cullingResults, ScriptableRenderContext context, BufferHandle viewData)
+	public (BufferHandle environmentData, TextureHandle sunShadow, BufferHandle dataBuffer, BufferHandle lightBuffer, BufferHandle lightDepthMinMaxBuffer, TextureHandle visibleLightBits, int pointLightCount, int intersectingPointLightCount, TextureHandle pointShadows) Render(Camera camera, CullingResults cullingResults, ScriptableRenderContext context)
 	{
 		var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -106,7 +106,7 @@ public class SetupLighting
 					using var pass = renderGraph.AddRenderPass("Directional Shadows");
 					pass.ViewHandle = shadowView;
 					pass.DepthStencil = sunShadow;
-					pass.AddResource(viewData);
+					pass.AddResource<ViewData>();
 
 					pass.SetRenderFunction((rendererList, worldToLightClip, lighting), (command, data) =>
 					{

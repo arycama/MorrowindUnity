@@ -23,14 +23,15 @@ public class LightCulling
 		pointLightMaterial = new Material(Shader.Find("Hidden/Morrowind Point Light")) { hideFlags = HideFlags.HideAndDontSave };
 	}
 
-	public void Render(ViewHandle viewHandle, TextureHandle cameraDepth, TextureHandle visibleLightBits, BufferHandle viewData, BufferHandle pointLightData, BufferHandle pointLights, int pointLightCount, int intersectingLightCount)
+	public void Render(ViewHandle viewHandle, TextureHandle cameraDepth, TextureHandle visibleLightBits, BufferHandle pointLightData, BufferHandle pointLights, int pointLightCount, int intersectingLightCount)
 	{
 		using (var pass = renderGraph.AddRenderPass("Light Culling"))
 		{
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddUavOutput(visibleLightBits);
-			pass.AddResources(stackalloc ResourceHandle[] { viewData, pointLightData, pointLights });
+			pass.AddResources(stackalloc ResourceHandle[] { pointLightData, pointLights });
+			pass.AddResource<ViewData>();
 
 			pass.SetRenderFunction((visibleLightBits, renderGraph, settings, pointLightMaterial, pointLightCount, intersectingLightCount), static (command, data) =>
 			{

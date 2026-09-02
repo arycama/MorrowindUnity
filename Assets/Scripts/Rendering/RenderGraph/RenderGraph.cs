@@ -15,6 +15,7 @@ public class RenderGraph : IDisposable
 	private readonly TextureSystem textureSystem = new();
 	private readonly BufferSystem bufferSystem = new();
 	private readonly NativeRenderPassSystem nativeRenderPassSystem = new();
+	private readonly ResourceMap resourceMap = new();
 	private readonly PassBuilder builder;
 	public int FrameIndex { get; private set; }
 
@@ -53,6 +54,16 @@ public class RenderGraph : IDisposable
 	{
 		var target = resourceInfo[handle];
 		return bufferSystem.GetBuffer(target.resourceIndex);
+	}
+
+	public void SetResource<T>(T resource) where T : IRenderResource
+	{
+		resourceMap.SetResource(resource);
+	}
+
+	public T GetResource<T>()
+	{
+		return resourceMap.GetResource<T>();
 	}
 
 	public PassBuilder AddRenderPass(string name)
@@ -404,5 +415,6 @@ public class RenderGraph : IDisposable
 		viewInfos.Clear();
 		nativeRenderPassSystem.Clear();
 		handles.Clear();
+		resourceMap.Clear();
 	}
 }

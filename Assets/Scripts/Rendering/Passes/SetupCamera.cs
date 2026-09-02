@@ -15,7 +15,7 @@ public class SetupView
 		this.renderGraph = renderGraph;
 	}
 
-	public BufferHandle Render(Camera camera, bool isFlipped = false, bool updatePrevious = true)
+	public void Render(Camera camera, bool isFlipped = false, bool updatePrevious = true)
 	{
 		var viewData = renderGraph.GetBuffer(new(1, UnsafeUtility.SizeOf<ViewDataStruct>(), GraphicsBuffer.Target.Constant), Shader.PropertyToID("ViewData"));
 		using (var pass = renderGraph.AddRenderPass("Set ViewData"))
@@ -96,7 +96,10 @@ public class SetupView
 			});
 		}
 
-		return viewData;
+		if (isFlipped)
+			renderGraph.SetResource(new ViewDataFlipped(viewData));
+		else
+			renderGraph.SetResource(new ViewData(viewData));
 	}
 
 	private struct ViewDataStruct
