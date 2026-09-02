@@ -55,7 +55,7 @@ void RayGeneration()
 		ray.TMin = 0.1;
 		ray.TMax = 8192.0;
 		
-		uint flags = 0;
+		uint flags = RAY_FLAG_CULL_BACK_FACING_TRIANGLES;
 		TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 0, ray, payload);
 		
 		luminance += payload.color;

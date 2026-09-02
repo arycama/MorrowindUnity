@@ -66,7 +66,7 @@ Material:
     m_Ints: []
     m_Floats:
     - Alpha: 0.75
-    - Fade: 0.81752014
+    - Fade: 1.1724615
     - Scale: 0.21052632
     - _Alpha: 0.75
     - _BumpScale: 1

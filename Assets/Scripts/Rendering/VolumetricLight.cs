@@ -26,7 +26,7 @@ public class VolumetricLight : IDisposable
 			RenderTexture.ReleaseTemporary(history.Value);
 	}
 
-	public TextureHandle Render(BufferHandle viewData, BufferHandle environmentData, Camera camera, Texture blueNoise1D, TextureHandle sunShadow)
+	public TextureHandle Render(BufferHandle viewData, BufferHandle environmentData, Camera camera, Texture blueNoise1D, TextureHandle sunShadow, BufferHandle pointLightData, BufferHandle pointLights, BufferHandle lightDepthMinMaxBuffer, TextureHandle visibleLightBits, TextureHandle pointShadows)
 	{
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
@@ -46,7 +46,7 @@ public class VolumetricLight : IDisposable
 				pass.ViewHandle = volumetricViewHandle;
 				var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
 				pass.AddUavOutput(volumetricLightTemp);
-				pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData });
+				pass.AddResources(stackalloc ResourceHandle[] { viewData, environmentData, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
 
 				if (renderGraph.IsResourceWritten(sunShadow))
 				{
@@ -57,6 +57,11 @@ public class VolumetricLight : IDisposable
 				var hasHistory = volumetricHistory.TryGetValue(camera, out var history);
 				if (hasHistory)
 					pass.AddKeyword("HISTORY");
+
+				if (renderGraph.IsResourceWritten(visibleLightBits))
+				{
+					pass.AddKeyword("POINT_LIGHTS_ON");
+				}
 
 				var viewInfo = renderGraph.GetViewInfo(volumetricViewHandle);
 				var target = RenderTexture.GetTemporary(volumetricDescriptor.GetRenderTextureDescriptor(viewInfo, 1, true));

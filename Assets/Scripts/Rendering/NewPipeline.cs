@@ -75,8 +75,6 @@ public class NewPipeline : RenderPipelineBase
 		var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds[noiseIndex]);
 		var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
 
-		var volumetricLight = this.volumetricLight.Render(viewData, environmentData, camera, blueNoise1D, sunShadow);
-
 		var viewHandle = renderGraph.AddViewInfo(viewSize, asset.Samples);
 		var cameraDepth = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt, true), Shader.PropertyToID("CameraDepth"));
 		var albedoNormal = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8G8B8A8_UNorm), Shader.PropertyToID("AlbedoNormal"));
@@ -136,6 +134,8 @@ public class NewPipeline : RenderPipelineBase
 				}
 			});
 		}
+
+		var volumetricLight = this.volumetricLight.Render(viewData, environmentData, camera, blueNoise1D, sunShadow, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows);
 
 		var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
 		if (asset.RaytracedOcclusion)

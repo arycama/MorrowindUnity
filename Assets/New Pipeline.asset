@@ -17,7 +17,7 @@ MonoBehaviour:
   <VolumetricTileSize>k__BackingField: 8
   <VolumetricSlices>k__BackingField: 64
   <VolumetricDistance>k__BackingField: 8192
-  <FocusDistance>k__BackingField: 10
+  <FocusDistance>k__BackingField: 100
   <SensorSize>k__BackingField: 24
   <Aperture>k__BackingField: 0.0625
   <RayTracingLayerMask>k__BackingField:
@@ -41,9 +41,9 @@ MonoBehaviour:
     <DirectionalShadowResolution>k__BackingField: 4096
     <DirectionalShadowBias>k__BackingField: 10
     <DirectionalShadowSlopeBias>k__BackingField: 2
-    <PointShadowResolution>k__BackingField: 256
-    <PointShadowBias>k__BackingField: 10
-    <PointShadowSlopeBias>k__BackingField: 2
+    <PointShadowResolution>k__BackingField: 512
+    <PointShadowBias>k__BackingField: 1
+    <PointShadowSlopeBias>k__BackingField: 1
     <SpotShadowResolution>k__BackingField: 512
     <SpotShadowBias>k__BackingField: 10
     <SpotShadowSlopeBias>k__BackingField: 2

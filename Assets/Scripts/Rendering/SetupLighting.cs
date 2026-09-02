@@ -170,8 +170,7 @@ public class SetupLighting
 					for (var j = 0; j < 6; j++)
 					{
 						var matrix = Float4x4.cubemapRotations[j];
-						var rotation = new Quaternion(matrix.column0, matrix.column1, matrix.column2);
-						var worldToView = Float4x4.WorldToLocal(position, rotation);
+						var worldToView = Float4x4.WorldToLocal(matrix.column0, matrix.column1, matrix.column2, position);
 						var viewToClip = Float4x4.PerspectiveReverseZ(1, nearPlane, radius);
 						var worldToClip = viewToClip.Mul(worldToView);
 						var shadowSplitData = CalculateShadowSplitData(worldToClip, matrix.column2, false);

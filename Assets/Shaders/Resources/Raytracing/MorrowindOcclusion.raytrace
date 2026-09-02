@@ -47,7 +47,7 @@ void RayGeneration()
 		ray.TMin = 0.1;
 		ray.TMax = 5.0 * 69.99104;
 		
-		uint flags = RAY_FLAG_CULL_BACK_FACING_TRIANGLES | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
+		uint flags = RAY_FLAG_CULL_BACK_FACING_TRIANGLES;
 		TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 0, ray, payload);
 		
 		visibility += payload.transmittance;

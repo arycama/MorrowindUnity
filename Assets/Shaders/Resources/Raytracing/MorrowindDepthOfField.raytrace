@@ -49,7 +49,7 @@ void RayGeneration()
 		payload.color = 0.0;
 		payload.transmittance = 1.0;
 		
-		uint flags = 0;
+		uint flags = RAY_FLAG_CULL_BACK_FACING_TRIANGLES;
 		TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 0, ray, payload);
 		
 		luminance += payload.color;
