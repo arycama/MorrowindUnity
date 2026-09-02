@@ -30,7 +30,7 @@ public class SetupLighting
 		this.lightCulling = lightCulling;
 	}
 
-	public (BufferHandle dataBuffer, BufferHandle lightBuffer, BufferHandle lightDepthMinMaxBuffer, TextureHandle visibleLightBits, int pointLightCount, int intersectingPointLightCount, TextureHandle pointShadows) Render(Camera camera, CullingResults cullingResults, ScriptableRenderContext context)
+	public void Render(Camera camera, CullingResults cullingResults, ScriptableRenderContext context)
 	{
 		var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -363,7 +363,7 @@ public class SetupLighting
 			});
 		}
 
-		return (dataBuffer, lightBuffer, lightDepthMinMaxBuffer, visibleLightBits, pointLightCount, intersectingLightCount, pointShadows);
+		renderGraph.SetResource(new PointLightData(dataBuffer, lightBuffer, lightDepthMinMaxBuffer, visibleLightBits, pointShadows, pointLightCount, intersectingLightCount));
 	}
 
 	private static ShadowSplitData CalculateShadowSplitData(Float4x4 matrix, Float3 lightDirection, bool skipNearPlane)

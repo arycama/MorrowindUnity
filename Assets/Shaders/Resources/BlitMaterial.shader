@@ -14,6 +14,7 @@ Shader "Hidden/Blit Material"
             #pragma multi_compile _ MSAA
             #pragma multi_compile _ DIRECT
             #pragma multi_compile _ DEPTH_OF_FIELD
+            #pragma multi_compile _ BLOOM
             #include "BlitMaterial.hlsl"
             ENDHLSL
         }
@@ -29,6 +30,7 @@ Shader "Hidden/Blit Material"
             #pragma multi_compile _ FLIP
             #pragma multi_compile _ MSAA
             #pragma multi_compile _ DEPTH_OF_FIELD
+            #pragma multi_compile _ BLOOM
             #define DEPTH
             #include "BlitMaterial.hlsl"
             ENDHLSL

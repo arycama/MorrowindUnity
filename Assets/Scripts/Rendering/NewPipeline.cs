@@ -17,6 +17,7 @@ public class NewPipeline : RenderPipelineBase
 	private readonly SetupLighting setupLighting;
 	private readonly VolumetricLight volumetricLight;
 	private readonly LightCulling lightCulling;
+	private readonly Bloom bloom;
 	private readonly RayTracingAccelerationStructure rtas;
 	private readonly RayTracingShader occlusionRaytracingShader, shadowRaytracingShader, diffuseRaytracingShader, depthOfFieldRaytracingShader;
 
@@ -30,6 +31,7 @@ public class NewPipeline : RenderPipelineBase
 		setupLighting = new(renderGraph, asset.Lighting, asset.LightCulling);
 		lightCulling = new(renderGraph, asset.LightCulling);
 		volumetricLight = new(renderGraph, asset);
+		bloom = new(renderGraph, asset.Bloom);
 
 		occlusionRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindOcclusion");
 		shadowRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindShadow");
@@ -72,7 +74,7 @@ public class NewPipeline : RenderPipelineBase
 		setupView.Render(camera);
 		setupView.Render(camera, true, false);
 
-		var (pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointLightCount, intersectingLightCount, pointShadows) = setupLighting.Render(camera, cullingResults, context);
+		setupLighting.Render(camera, cullingResults, context);
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -111,8 +113,8 @@ public class NewPipeline : RenderPipelineBase
 			});
 		}
 
-		lightCulling.Render(viewHandle, cameraDepth, visibleLightBits, pointLightData, pointLights, pointLightCount, intersectingLightCount);
-		volumetricLight.Render(camera, blueNoise1D, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows);
+		lightCulling.Render(viewHandle, cameraDepth);
+		volumetricLight.Render(camera, blueNoise1D);
 
 		var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
 		if (asset.RaytracedOcclusion)
@@ -171,8 +173,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
 			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
-			pass.AddResources(stackalloc ResourceHandle[] { pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
-			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData>();
+			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData, PointLightData>();
 
 			if (asset.Samples > 1)
 				pass.AddKeyword("MSAA_ON");
@@ -193,11 +194,6 @@ public class NewPipeline : RenderPipelineBase
 			{
 				pass.AddResource(raytracedDiffuse);
 				pass.AddKeyword("RAYTRACED_DIFFUSE");
-			}
-
-			if (renderGraph.IsResourceWritten(visibleLightBits))
-			{
-				pass.AddKeyword("POINT_LIGHTS_ON");
 			}
 
 			pass.SetRenderFunction(deferredMaterial, static (command, deferredMaterial) =>
@@ -226,13 +222,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
-			pass.AddResources(stackalloc ResourceHandle[] { pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
-			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData>();
-
-			if (renderGraph.IsResourceWritten(visibleLightBits))
-			{
-				pass.AddKeyword("POINT_LIGHTS_ON");
-			}
+			pass.AddResources<EnvironmentData, ViewData, PointLightData, VolumetricLightData>();
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 			var rendererList = context.CreateRendererList(ref rendererParams);
@@ -241,6 +231,8 @@ public class NewPipeline : RenderPipelineBase
 				command.DrawRendererList(rendererList);
 			});
 		}
+
+		bloom.Render(camera, cameraColor);
 
 		var raytracedDepthOfField = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("DepthOfField"));
 		if (asset.RaytracedDepthOfField)
@@ -323,8 +315,11 @@ public class NewPipeline : RenderPipelineBase
 				pass.AddKeyword("DEPTH_OF_FIELD");
 			}
 
-			pass.SetRenderFunction((blitMaterial, passIndex), static (command, data) =>
+			pass.AddResource<BloomData>();
+
+			pass.SetRenderFunction((blitMaterial, passIndex, asset.Bloom.Strength), static (command, data) =>
 			{
+				command.SetGlobalFloat("BloomStrength", data.Strength);
 				command.SetWireframe(false);
 				command.DrawProcedural(Matrix4x4.identity, data.blitMaterial, data.passIndex, MeshTopology.Triangles, 3);
 			});

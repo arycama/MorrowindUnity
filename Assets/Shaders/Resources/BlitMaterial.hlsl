@@ -1,7 +1,10 @@
 #include "../Common.hlsl"
+#include "../BloomCommon.hlsl"
 
 Texture2D<float4> _UnityFBInput0;
-Texture2D<float3> DepthOfField;
+Texture2D<float3> DepthOfField, Bloom;
+float4 Bloom_TexelSize;
+float BloomStrength;
 
 float4 Vertex(uint vertexId : SV_VertexID, out float2 uv : TEXCOORD) : SV_Position
 {
@@ -39,8 +42,15 @@ float4 Fragment(float4 position : SV_Position,
 	#endif
 	
 	#ifdef DIRECT
-		return float4(_UnityFBInput0[position.xy].rgb, 1.0);
+		float4 color = float4(_UnityFBInput0[position.xy].rgb, 1.0);
 	#else
-		return float4(CameraColor.Sample(PointClampSampler, uv), 1.0);
+		float4 color = float4(CameraColor.Sample(PointClampSampler, uv), 1.0);
 	#endif
+	
+	#ifdef BLOOM
+		float3 bloom = SampleBloom(uv, Bloom, Bloom_TexelSize.xy, 0);
+		color.rgb = lerp(color.rgb, bloom, BloomStrength);
+	#endif
+	
+	return color;
 }
