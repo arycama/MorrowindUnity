@@ -41,20 +41,20 @@ void Compute(uint3 id : SV_DispatchThreadID)
 	float3 albedo = FogColor / (SunColor + AmbientLight);
 	float4 luminanceExtinction = float4(albedo * illuminance, extinction);
 	
-#ifdef HISTORY
-	// Reproject previous frame. Needs to use unjittered world position
-	float linearUnjitteredDepth = SliceToLinearDepth(id.z + 0.5);
-	float3 worldPosition = MultiplyPointProj(ScreenToWorld, float3(screenPosition, LinearToDeviceDepth(linearUnjitteredDepth))).xyz;
-	float4 previousScreenPosition = MultiplyPoint(WorldToPreviousScreen, worldPosition);
-	previousScreenPosition.xy = PerspectiveDivide(previousScreenPosition).xy;
+	#ifdef HISTORY
+		// Reproject previous frame. Needs to use unjittered world position
+		float linearUnjitteredDepth = SliceToLinearDepth(id.z + 0.5);
+		float3 worldPosition = MultiplyPointProj(ScreenToWorld, float3(screenPosition, LinearToDeviceDepth(linearUnjitteredDepth))).xyz;
+		float4 previousScreenPosition = MultiplyPoint(WorldToPreviousScreen, worldPosition);
+		previousScreenPosition.xy = PerspectiveDivide(previousScreenPosition).xy;
 	
-	float3 volumeUv = float3(previousScreenPosition.xy, previousScreenPosition.w / MaxDepth);
-	if (!IsFirst && all(saturate(volumeUv) == volumeUv))
-	{
-		float4 previousLuminanceExtinction = VolumetricLight.SampleLevel(TrilinearClampSampler, volumeUv, 0.0);
-		luminanceExtinction = lerp(previousLuminanceExtinction, luminanceExtinction, 0.05);
-	}
-#endif
+		float3 volumeUv = float3(previousScreenPosition.xy, previousScreenPosition.w / MaxDepth);
+		if (!IsFirst && all(saturate(volumeUv) == volumeUv))
+		{
+			float4 previousLuminanceExtinction = VolumetricLight.SampleLevel(TrilinearClampSampler, volumeUv, 0.0);
+			luminanceExtinction = lerp(previousLuminanceExtinction, luminanceExtinction, 0.05);
+		}
+	#endif
 	
 	VolumetricLightTemp[id] = luminanceExtinction;
 }

@@ -121,13 +121,11 @@ cbuffer PointLightData
 	float RcpBinWidth;
 };
 
-cbuffer VolumetricLightingData
+cbuffer VolumetricLightData
 {
 	float MaxDepth;
-	float3 VolumetricLightingDataPadding0;
+	float3 VolumeSize;
 };
-
-float3 VolumeSize;
 
 StructuredBuffer<Light> PointLights;
 StructuredBuffer<uint> LightDepthMinMax;

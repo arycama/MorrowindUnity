@@ -76,7 +76,7 @@ public class RenderGraph : IDisposable
 	public bool TryGetResource<T>(out T resource)
 	{
 		var hasResource = TryGetResource(typeof(T), out var temp);
-		resource = (T)temp;
+		resource = hasResource ? (T)temp : default;
 		return hasResource;
 	}
 
@@ -122,6 +122,12 @@ public class RenderGraph : IDisposable
 		var (nativePassIndex, isNewSubPass) = nativeRenderPassSystem.AddRenderPass(builder);
 
 		var renderPass = builder.RenderPass;
+
+		if (renderPass == null)
+		{
+			Debug.LogError("Yes");
+		}
+
 		renderPass.ResourceRange = resourceRange;
 		renderPass.UavResourceRange = uavResourceRange;
 		renderPass.IsNewSubPass = isNewSubPass;
