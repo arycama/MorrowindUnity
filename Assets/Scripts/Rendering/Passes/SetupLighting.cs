@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using CustomRenderPipeline;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
 using UnityEditor;
@@ -11,7 +10,6 @@ using UnityEngine.Rendering;
 using Unmath;
 using static Unmath.Math;
 using Bounds = Unmath.Bounds;
-using Quaternion = Unmath.Quaternion;
 
 public class SetupLighting
 {

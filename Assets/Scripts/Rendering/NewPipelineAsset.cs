@@ -1,4 +1,3 @@
-using CustomRenderPipeline;
 using UnityEngine;
 using UnityEngine.Rendering;
 
