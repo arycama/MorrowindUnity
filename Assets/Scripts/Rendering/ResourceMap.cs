@@ -10,6 +10,18 @@ public class ResourceMap
 		resources[typeof(T)] = resource;
 	}
 
+	public bool TryGetResource(Type type, out IRenderResource resource)
+	{
+		return resources.TryGetValue(type, out resource);
+	}
+
+	public bool TryGetResource<T>(out T resource)
+	{
+		var resourceExists = TryGetResource(typeof(T), out var temp);
+		resource = (T)temp;
+		return resourceExists;
+	}
+
 	public T GetResource<T>()
 	{
 		return (T)resources[typeof(T)];

@@ -48,6 +48,8 @@ public abstract class RenderPipelineBase : RenderPipeline
 #endif
 				ScriptableRenderContext.EmitGeometryForCamera(camera);
 
+			renderGraph.BeginCamera();
+
 			BeginCameraRendering(context, camera);
 			RenderCamera(camera, cullingParameters, context);
 			//EndCameraRendering(context, camera);

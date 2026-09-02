@@ -112,9 +112,9 @@ public class NewPipeline : RenderPipelineBase
 		lightCulling.Render(viewHandle);
 		volumetricLight.Render(camera, blueNoise1D);
 
-		var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
 		if (asset.RaytracedOcclusion)
 		{
+			var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
 			using var pass = renderGraph.AddRenderPass("Raytraced Occlusion");
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedOcclusion);
@@ -127,6 +127,8 @@ public class NewPipeline : RenderPipelineBase
 				command.SetGlobalRayTracingAccelerationStructure("SceneRaytracingAccelerationStructure", data.rtas);
 				command.DispatchRays(data.occlusionRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
+
+			renderGraph.SetResource<RaytracedOcclusion>(new(raytracedOcclusion));
 		}
 
 		var raytracedShadows = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceShadows"));
@@ -169,16 +171,10 @@ public class NewPipeline : RenderPipelineBase
 			pass.DepthStencil = renderGraph.GetResource<CameraDepth>().handle;
 			pass.AddOutput(renderGraph.GetResource<CameraColor>().handle);
 			pass.AddInputs(stackalloc[] { renderGraph.GetResource<CameraDepth>().handle, renderGraph.GetResource<AlbedoNormal>().handle });
-			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData, PointLightData>();
+			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData, PointLightData, RaytracedOcclusion>();
 
 			if (asset.Samples > 1)
 				pass.AddKeyword("MSAA_ON");
-
-			if (renderGraph.IsResourceWritten(raytracedOcclusion))
-			{
-				pass.AddResource(raytracedOcclusion);
-				pass.AddKeyword("RAYTRACED_OCCLUSION");
-			}
 
 			if (renderGraph.IsResourceWritten(raytracedShadows))
 			{

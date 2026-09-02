@@ -11,11 +11,8 @@ public readonly struct VolumetricLightData : IRenderResource
 
 	public readonly void SetData(PassBuilder builder)
 	{
-		if (builder.RenderGraph.IsResourceWritten(volumetricLight))
-		{
-			builder.AddResource(volumetricLight);
-			builder.AddResource(data);
-			builder.AddKeyword("VOLUMETRIC_LIGHT_ON");
-		}
+		builder.AddResource(volumetricLight);
+		builder.AddResource(data);
+		builder.AddKeyword("VOLUMETRIC_LIGHT_ON");
 	}
 }

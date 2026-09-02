@@ -24,31 +24,41 @@ public class PassBuilder : IDisposable
 		RenderGraph = renderGraph;
 	}
 
+	public void AddResources(ReadOnlySpan<Type> types)
+	{
+		foreach (var type in types)
+			if (RenderGraph.TryGetResource(type, out var resource))
+				resource.SetData(this);
+	}
+
 	public void AddResource<T>() where T : IRenderResource
 	{
-		var resource = RenderGraph.GetResource<T>();
-		resource.SetData(this);
+		if (RenderGraph.TryGetResource<T>(out var resource))
+			resource.SetData(this);
 	}
 
 	public void AddResources<T0, T1>() where T0 : IRenderResource where T1 : IRenderResource
 	{
-		RenderGraph.GetResource<T0>().SetData(this);
-		RenderGraph.GetResource<T1>().SetData(this);
+		AddResource<T0>();
+		AddResource<T1>();
 	}
 
 	public void AddResources<T0, T1, T2>() where T0 : IRenderResource where T1 : IRenderResource where T2 : IRenderResource
 	{
-		RenderGraph.GetResource<T0>().SetData(this);
-		RenderGraph.GetResource<T1>().SetData(this);
-		RenderGraph.GetResource<T2>().SetData(this);
+		AddResource<T0>();
+		AddResources<T1, T2>();
 	}
 
 	public void AddResources<T0, T1, T2, T3>() where T0 : IRenderResource where T1 : IRenderResource where T2 : IRenderResource where T3 : IRenderResource
 	{
-		RenderGraph.GetResource<T0>().SetData(this);
-		RenderGraph.GetResource<T1>().SetData(this);
-		RenderGraph.GetResource<T2>().SetData(this);
-		RenderGraph.GetResource<T3>().SetData(this);
+		AddResource<T0>();
+		AddResources<T1, T2, T3>();
+	}
+
+	public void AddResources<T0, T1, T2, T3, T4>() where T0 : IRenderResource where T1 : IRenderResource where T2 : IRenderResource where T3 : IRenderResource where T4 : IRenderResource
+	{
+		AddResource<T0>();
+		AddResources<T1, T2, T3, T4>();
 	}
 
 	public void AddResource(ResourceHandle resource) => Resources.Add(resource);

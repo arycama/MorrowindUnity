@@ -103,8 +103,8 @@ public class VolumetricLight : IDisposable
 					command.DispatchCompute(data.volumetricLightShader, 1, DivRoundUp(data.volumeSize.x, 8), DivRoundUp(data.volumeSize.y, 8), 1);
 				});
 			}
-		}
 
-		renderGraph.SetResource(new VolumetricLightData(volumetricLight, dataBuffer));
+			renderGraph.SetResource(new VolumetricLightData(volumetricLight, dataBuffer));
+		}
 	}
 }

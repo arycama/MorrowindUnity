@@ -23,7 +23,7 @@ MonoBehaviour:
   <RayTracingLayerMask>k__BackingField:
     serializedVersion: 2
     m_Bits: 7681
-  <RaytracedOcclusion>k__BackingField: 0
+  <RaytracedOcclusion>k__BackingField: 1
   <RaytracedShadows>k__BackingField: 0
   <RaytracedDiffuse>k__BackingField: 0
   <RaytracedSpecular>k__BackingField: 0
@@ -54,6 +54,9 @@ MonoBehaviour:
       type: 3}
     <SpotLightMesh>k__BackingField: {fileID: -8825038141534415262, guid: c7ee5e159e04fd64a88d11aff4cbe2c2,
       type: 3}
+  <Bloom>k__BackingField:
+    <Strength>k__BackingField: 0.125
+    <MaxMips>k__BackingField: 6
   defaultMaterials:
     <DefaultMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,
       type: 2}

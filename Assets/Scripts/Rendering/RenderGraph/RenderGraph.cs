@@ -30,6 +30,11 @@ public class RenderGraph : IDisposable
 		bufferSystem.Dispose();
 	}
 
+	public void BeginCamera()
+	{
+		resourceMap.Clear();
+	}
+
 	public TextureHandle GetTexture(RenderTargetDescriptor descriptor, int propertyId)
 	{
 		var descriptorIndex = textureSystem.AddDescriptor(descriptor);
@@ -64,6 +69,15 @@ public class RenderGraph : IDisposable
 	public T GetResource<T>()
 	{
 		return resourceMap.GetResource<T>();
+	}
+
+	public bool TryGetResource(Type type, out IRenderResource resource) => resourceMap.TryGetResource(type, out resource);
+
+	public bool TryGetResource<T>(out T resource)
+	{
+		var hasResource = TryGetResource(typeof(T), out var temp);
+		resource = (T)temp;
+		return hasResource;
 	}
 
 	public PassBuilder AddRenderPass(string name)
