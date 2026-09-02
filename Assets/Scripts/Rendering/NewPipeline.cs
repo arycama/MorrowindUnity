@@ -65,16 +65,17 @@ public class NewPipeline : RenderPipelineBase
 		cullingParameters.shadowDistance = asset.Lighting.DirectionalShadowDistance;
 		var cullingResults = context.Cull(ref cullingParameters);
 
+		var noiseIndex = renderGraph.FrameIndex % 64;
+		var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds[noiseIndex]);
+		var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
+
 		setupView.Render(camera);
 		setupView.Render(camera, true, false);
+
 		var (pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointLightCount, intersectingLightCount, pointShadows) = setupLighting.Render(camera, cullingResults, context);
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
-
-		var noiseIndex = renderGraph.FrameIndex % 64;
-		var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds[noiseIndex]);
-		var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
 
 		var viewHandle = renderGraph.AddViewInfo(viewSize, asset.Samples);
 		var cameraDepth = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.D32_SFloat_S8_UInt, true), Shader.PropertyToID("CameraDepth"));
@@ -111,8 +112,8 @@ public class NewPipeline : RenderPipelineBase
 		}
 
 		lightCulling.Render(viewHandle, cameraDepth, visibleLightBits, pointLightData, pointLights, pointLightCount, intersectingLightCount);
+		volumetricLight.Render(camera, blueNoise1D, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows);
 
-		var volumetricLight = this.volumetricLight.Render(camera, blueNoise1D, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows);
 		var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
 		if (asset.RaytracedOcclusion)
 		{
@@ -171,7 +172,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.AddOutput(cameraColor);
 			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
 			pass.AddResources(stackalloc ResourceHandle[] { pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
-			pass.AddResources<EnvironmentData, ViewData>();
+			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData>();
 
 			if (asset.Samples > 1)
 				pass.AddKeyword("MSAA_ON");
@@ -194,21 +195,14 @@ public class NewPipeline : RenderPipelineBase
 				pass.AddKeyword("RAYTRACED_DIFFUSE");
 			}
 
-			if (renderGraph.IsResourceWritten(volumetricLight))
-			{
-				pass.AddResource(volumetricLight);
-				pass.AddKeyword("VOLUMETRIC_LIGHT_ON");
-			}
-
 			if (renderGraph.IsResourceWritten(visibleLightBits))
 			{
 				pass.AddKeyword("POINT_LIGHTS_ON");
 			}
 
-			pass.SetRenderFunction((deferredMaterial, asset.VolumetricDistance), static (command, data) =>
+			pass.SetRenderFunction(deferredMaterial, static (command, deferredMaterial) =>
 			{
-				command.SetGlobalFloat("MaxDepth", data.VolumetricDistance);
-				command.DrawProcedural(default, data.deferredMaterial, 0, MeshTopology.Triangles, 3, 1);
+				command.DrawProcedural(default, deferredMaterial, 0, MeshTopology.Triangles, 3, 1);
 			});
 		}
 
@@ -217,18 +211,11 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
-			pass.AddResources<EnvironmentData, ViewData>();
-
-			if (renderGraph.IsResourceWritten(volumetricLight))
-			{
-				pass.AddResource(volumetricLight);
-				pass.AddKeyword("VOLUMETRIC_LIGHT_ON");
-			}
+			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData>();
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Sky"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all });
-			pass.SetRenderFunction((rendererList, asset.VolumetricDistance, backgroundMaterial), static (command, data) =>
+			pass.SetRenderFunction((rendererList, backgroundMaterial), static (command, data) =>
 			{
-				command.SetGlobalFloat("MaxDepth", data.VolumetricDistance);
 				command.DrawProcedural(default, data.backgroundMaterial, 0, MeshTopology.Triangles, 3, 1);
 				command.DrawRendererList(data.rendererList);
 			});
@@ -240,13 +227,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.DepthStencil = cameraDepth;
 			pass.AddOutput(cameraColor);
 			pass.AddResources(stackalloc ResourceHandle[] { pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
-			pass.AddResources<EnvironmentData, ViewData>();
-
-			if (renderGraph.IsResourceWritten(volumetricLight))
-			{
-				pass.AddResource(volumetricLight);
-				pass.AddKeyword("VOLUMETRIC_LIGHT_ON");
-			}
+			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData>();
 
 			if (renderGraph.IsResourceWritten(visibleLightBits))
 			{
@@ -255,10 +236,9 @@ public class NewPipeline : RenderPipelineBase
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 			var rendererList = context.CreateRendererList(ref rendererParams);
-			pass.SetRenderFunction((rendererList, asset.VolumetricDistance), (command, data) =>
+			pass.SetRenderFunction(rendererList, (command, rendererList) =>
 			{
-				command.SetGlobalFloat("MaxDepth", data.VolumetricDistance);
-				command.DrawRendererList(data.rendererList);
+				command.DrawRendererList(rendererList);
 			});
 		}
 

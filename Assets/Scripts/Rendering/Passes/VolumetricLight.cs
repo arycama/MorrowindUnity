@@ -26,7 +26,7 @@ public class VolumetricLight : IDisposable
 			RenderTexture.ReleaseTemporary(history.Value);
 	}
 
-	public TextureHandle Render(Camera camera, Texture blueNoise1D, BufferHandle pointLightData, BufferHandle pointLights, BufferHandle lightDepthMinMaxBuffer, TextureHandle visibleLightBits, TextureHandle pointShadows)
+	public void Render(Camera camera, Texture blueNoise1D, BufferHandle pointLightData, BufferHandle pointLights, BufferHandle lightDepthMinMaxBuffer, TextureHandle visibleLightBits, TextureHandle pointShadows)
 	{
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
@@ -36,6 +36,19 @@ public class VolumetricLight : IDisposable
 		var volumeHeight = DivRoundUp(viewSize.y, asset.VolumetricTileSize);
 		var volumetricViewHandle = renderGraph.AddViewInfo(new(volumeWidth, volumeHeight), 1, asset.VolumetricSlices);
 		var volumetricLight = renderGraph.GetTexture(new(volumetricViewHandle, GraphicsFormat.R16G16B16A16_SFloat, dimension: TextureDimension.Tex3D), Shader.PropertyToID("VolumetricLight"));
+
+		var dataBuffer = renderGraph.GetBuffer(new(1, 16, GraphicsBuffer.Target.Constant), Shader.PropertyToID("VolumetricLightData"));
+		using (var pass = renderGraph.AddRenderPass("Volumetric Light Set Data"))
+		{
+			var data = stackalloc[] { asset.VolumetricDistance, 0f, 0f, 0f }.ToNativeArray();
+			pass.AddUavOutput(dataBuffer);
+			pass.SetRenderFunction((dataBuffer, data, renderGraph), static (command, data) =>
+			{
+				var buffer = data.renderGraph.GetBufferResource(data.dataBuffer);
+				command.SetBufferData(buffer, data.data);
+			});
+		}
+
 		if (asset.VolumetricsEnabled)
 		{
 			var volumetricDescriptor = new RenderTargetDescriptor(volumetricViewHandle, GraphicsFormat.R16G16B16A16_SFloat, dimension: TextureDimension.Tex3D);
@@ -46,7 +59,7 @@ public class VolumetricLight : IDisposable
 				pass.ViewHandle = volumetricViewHandle;
 				var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
 				pass.AddUavOutput(volumetricLightTemp);
-				pass.AddResources(stackalloc ResourceHandle[] { pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
+				pass.AddResources(stackalloc ResourceHandle[] { pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows, dataBuffer });
 				pass.AddResources<EnvironmentData, ViewData>();
 
 				var hasHistory = volumetricHistory.TryGetValue(camera, out var history);
@@ -64,10 +77,9 @@ public class VolumetricLight : IDisposable
 				volumetricHistory[camera] = target;
 
 				var volumeSize = new Int3(volumeWidth, volumeHeight, asset.VolumetricSlices);
-				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance, blueNoise1D, history), static (command, data) =>
+				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, blueNoise1D, history), static (command, data) =>
 				{
 					command.SetComputeVectorParam(data.volumetricLightShader, "VolumeSize", new Float3(data.volumeSize.x, data.volumeSize.y, data.volumeSize.z));
-					command.SetComputeFloatParam(data.volumetricLightShader, "MaxDepth", data.VolumetricDistance);
 					command.SetComputeTextureParam(data.volumetricLightShader, 0, "BlueNoise1D", data.blueNoise1D);
 					command.SetComputeTextureParam(data.volumetricLightShader, 0, "VolumetricLight", data.history);
 					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
@@ -80,25 +92,24 @@ public class VolumetricLight : IDisposable
 				renderGraph.ExportTexture(volumetricLightTemp, target);
 			}
 
-			using (var pass = renderGraph.AddRenderPass("Volumetric Light Compute"))
+			using (var pass = renderGraph.AddRenderPass("Volumetric Light Accumulate"))
 			{
 				pass.ViewHandle = volumetricViewHandle;
 				var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
-				pass.AddResources(stackalloc ResourceHandle[] { volumetricLightTemp });
+				pass.AddResources(stackalloc ResourceHandle[] { volumetricLightTemp, dataBuffer });
 				pass.AddResources<EnvironmentData, ViewData>();
 				pass.AddUavOutput(volumetricLight);
 
 				var volumeSize = new Int3(volumeWidth, volumeHeight, asset.VolumetricSlices);
-				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, asset.VolumetricDistance), static (command, data) =>
+				pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize), static (command, data) =>
 				{
 					command.SetComputeVectorParam(data.volumetricLightShader, "VolumeSize", new Float3(data.volumeSize.x, data.volumeSize.y, data.volumeSize.z));
-					command.SetComputeFloatParam(data.volumetricLightShader, "MaxDepth", data.VolumetricDistance);
 					command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
 					command.DispatchCompute(data.volumetricLightShader, 1, DivRoundUp(data.volumeSize.x, 8), DivRoundUp(data.volumeSize.y, 8), 1);
 				});
 			}
 		}
 
-		return volumetricLight;
+		renderGraph.SetResource(new VolumetricLightData(volumetricLight, dataBuffer));
 	}
 }
