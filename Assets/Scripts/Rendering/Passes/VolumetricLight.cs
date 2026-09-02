@@ -26,7 +26,7 @@ public class VolumetricLight : IDisposable
 			RenderTexture.ReleaseTemporary(history.Value);
 	}
 
-	public TextureHandle Render(Camera camera, Texture blueNoise1D, TextureHandle sunShadow, BufferHandle pointLightData, BufferHandle pointLights, BufferHandle lightDepthMinMaxBuffer, TextureHandle visibleLightBits, TextureHandle pointShadows)
+	public TextureHandle Render(Camera camera, Texture blueNoise1D, BufferHandle pointLightData, BufferHandle pointLights, BufferHandle lightDepthMinMaxBuffer, TextureHandle visibleLightBits, TextureHandle pointShadows)
 	{
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
@@ -48,12 +48,6 @@ public class VolumetricLight : IDisposable
 				pass.AddUavOutput(volumetricLightTemp);
 				pass.AddResources(stackalloc ResourceHandle[] { pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
 				pass.AddResources<EnvironmentData, ViewData>();
-
-				if (renderGraph.IsResourceWritten(sunShadow))
-				{
-					pass.AddResource(sunShadow);
-					pass.AddKeyword("SHADOWS_ON");
-				}
 
 				var hasHistory = volumetricHistory.TryGetValue(camera, out var history);
 				if (hasHistory)

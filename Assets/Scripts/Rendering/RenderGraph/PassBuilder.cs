@@ -4,7 +4,7 @@ using UnityEngine.Rendering;
 
 public class PassBuilder : IDisposable
 {
-	private readonly RenderGraph renderGraph;
+	public RenderGraph RenderGraph { get; }
 
 	public string Name { get; set; }
 	public int Index { get; set; } = -1;
@@ -21,34 +21,34 @@ public class PassBuilder : IDisposable
 
 	public PassBuilder(RenderGraph renderGraph)
 	{
-		this.renderGraph = renderGraph;
+		RenderGraph = renderGraph;
 	}
 
 	public void AddResource<T>() where T : IRenderResource
 	{
-		var resource = renderGraph.GetResource<T>();
+		var resource = RenderGraph.GetResource<T>();
 		resource.SetData(this);
 	}
 
 	public void AddResources<T0, T1>() where T0 : IRenderResource where T1 : IRenderResource
 	{
-		renderGraph.GetResource<T0>().SetData(this);
-		renderGraph.GetResource<T1>().SetData(this);
+		RenderGraph.GetResource<T0>().SetData(this);
+		RenderGraph.GetResource<T1>().SetData(this);
 	}
 
 	public void AddResources<T0, T1, T2>() where T0 : IRenderResource where T1 : IRenderResource where T2 : IRenderResource
 	{
-		renderGraph.GetResource<T0>().SetData(this);
-		renderGraph.GetResource<T1>().SetData(this);
-		renderGraph.GetResource<T2>().SetData(this);
+		RenderGraph.GetResource<T0>().SetData(this);
+		RenderGraph.GetResource<T1>().SetData(this);
+		RenderGraph.GetResource<T2>().SetData(this);
 	}
 
 	public void AddResources<T0, T1, T2, T3>() where T0 : IRenderResource where T1 : IRenderResource where T2 : IRenderResource where T3 : IRenderResource
 	{
-		renderGraph.GetResource<T0>().SetData(this);
-		renderGraph.GetResource<T1>().SetData(this);
-		renderGraph.GetResource<T2>().SetData(this);
-		renderGraph.GetResource<T3>().SetData(this);
+		RenderGraph.GetResource<T0>().SetData(this);
+		RenderGraph.GetResource<T1>().SetData(this);
+		RenderGraph.GetResource<T2>().SetData(this);
+		RenderGraph.GetResource<T3>().SetData(this);
 	}
 
 	public void AddResource(ResourceHandle resource) => Resources.Add(resource);
@@ -95,7 +95,7 @@ public class PassBuilder : IDisposable
 
 	public void Dispose()
 	{
-		renderGraph.SetRenderPass(this);
+		RenderGraph.SetRenderPass(this);
 		Name = default;
 		ViewHandle = new(-1);
 		Index = -1;

@@ -67,7 +67,7 @@ public class NewPipeline : RenderPipelineBase
 
 		setupView.Render(camera);
 		setupView.Render(camera, true, false);
-		var (sunShadow, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointLightCount, intersectingLightCount, pointShadows) = setupLighting.Render(camera, cullingResults, context);
+		var (pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointLightCount, intersectingLightCount, pointShadows) = setupLighting.Render(camera, cullingResults, context);
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 		var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -112,7 +112,7 @@ public class NewPipeline : RenderPipelineBase
 
 		lightCulling.Render(viewHandle, cameraDepth, visibleLightBits, pointLightData, pointLights, pointLightCount, intersectingLightCount);
 
-		var volumetricLight = this.volumetricLight.Render(camera, blueNoise1D, sunShadow, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows);
+		var volumetricLight = this.volumetricLight.Render(camera, blueNoise1D, pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows);
 		var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
 		if (asset.RaytracedOcclusion)
 		{
@@ -172,12 +172,6 @@ public class NewPipeline : RenderPipelineBase
 			pass.AddInputs(stackalloc[] { cameraDepth, albedoNormal });
 			pass.AddResources(stackalloc ResourceHandle[] { pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
 			pass.AddResources<EnvironmentData, ViewData>();
-
-			if (renderGraph.IsResourceWritten(sunShadow))
-			{
-				pass.AddResource(sunShadow);
-				pass.AddKeyword("SHADOWS_ON");
-			}
 
 			if (asset.Samples > 1)
 				pass.AddKeyword("MSAA_ON");
@@ -247,12 +241,6 @@ public class NewPipeline : RenderPipelineBase
 			pass.AddOutput(cameraColor);
 			pass.AddResources(stackalloc ResourceHandle[] { pointLightData, pointLights, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
 			pass.AddResources<EnvironmentData, ViewData>();
-
-			if (renderGraph.IsResourceWritten(sunShadow))
-			{
-				pass.AddResource(sunShadow);
-				pass.AddKeyword("SHADOWS_ON");
-			}
 
 			if (renderGraph.IsResourceWritten(volumetricLight))
 			{
