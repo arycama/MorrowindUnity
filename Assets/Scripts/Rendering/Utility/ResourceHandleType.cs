@@ -1,6 +1,7 @@
 public enum ResourceHandleType
 {
-	Texture,
+	RenderTarget,
 	Buffer,
 	RayTracingAccelerationStructure,
+	Texture
 }

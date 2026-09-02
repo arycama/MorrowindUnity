@@ -1,10 +1,10 @@
 public readonly struct PointLightData : IRenderResource
 {
 	public readonly BufferHandle dataBuffer, lightBuffer, lightDepthMinMaxBuffer;
-	public readonly TextureHandle visibleLightBits, pointShadows;
+	public readonly RenderTargetHandle visibleLightBits, pointShadows;
 	public readonly int pointLightCount, intersectingLightCount;
 
-	public PointLightData(BufferHandle dataBuffer, BufferHandle lightBuffer, BufferHandle lightDepthMinMaxBuffer, TextureHandle visibleLightBits, TextureHandle pointShadows, int pointLightCount, int intersectingLightCount)
+	public PointLightData(BufferHandle dataBuffer, BufferHandle lightBuffer, BufferHandle lightDepthMinMaxBuffer, RenderTargetHandle visibleLightBits, RenderTargetHandle pointShadows, int pointLightCount, int intersectingLightCount)
 	{
 		this.dataBuffer = dataBuffer;
 		this.lightBuffer = lightBuffer;

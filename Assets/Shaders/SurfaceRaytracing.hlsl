@@ -1,5 +1,5 @@
 #include "Common.hlsl"
-#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Raytracing.hlsl"
+#include "RaytracingCommon.hlsl"
 
 #ifdef __INTELLISENSE__
 	#define _ALPHABLEND_ON
@@ -15,17 +15,24 @@ cbuffer UnityPerMaterial
 	float _Cutoff, _SrcBlend;
 };
 
+float2 GetUv(uint vertexIndex)
+{
+	uint2 data;
+	data.x = unity_MeshVertexBuffers_RT[2].Load(vertexIndex * 2 + 0);
+	data.y = unity_MeshVertexBuffers_RT[2].Load(vertexIndex * 2 + 1);
+	return asfloat(data);
+}
+
 #ifdef _ALPHABLEND_ON
 [shader("anyhit")]
 void AnyHitVisibility(inout RayTransmittancePayload payload : SV_RayPayload, AttributeData attribs : SV_IntersectionAttributes)
 {
 	uint index = PrimitiveIndex();
-	uint3 triangleIndices = UnityRayTracingFetchTriangleIndices(index);
-	
-	float2 uv0 = UnityRayTracingFetchVertexAttribute2(triangleIndices.x, kVertexAttributeTexCoord0);
-	float2 uv1 = UnityRayTracingFetchVertexAttribute2(triangleIndices.y, kVertexAttributeTexCoord0);
-	float2 uv2 = UnityRayTracingFetchVertexAttribute2(triangleIndices.z, kVertexAttributeTexCoord0);
-	float2 uv = BarycentricInterpolate(uv0, uv1, uv2, attribs.barycentrics.x, attribs.barycentrics.y);
+	uint3 triangleIndices = GetTriangleIndices(index);
+	float2 uv0 = GetUv(triangleIndices.x);
+	float2 uv1 = GetUv(triangleIndices.y);
+	float2 uv2 = GetUv(triangleIndices.z);
+	float2 uv = BarycentricInterpolate(uv0, uv1, uv2, attribs.barycentrics);
 	
 	float4 color = _MainTex.SampleLevel(LinearRepeatSampler, uv, 0.0) * _Color;
 	payload.transmittance *= 1.0 - color.a;

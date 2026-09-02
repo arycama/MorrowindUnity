@@ -1,8 +1,8 @@
 public readonly struct CameraDepth : IRenderResource
 {
-	public readonly TextureHandle handle;
+	public readonly RenderTargetHandle handle;
 
-	public CameraDepth(TextureHandle handle)
+	public CameraDepth(RenderTargetHandle handle)
 	{
 		this.handle = handle;
 	}

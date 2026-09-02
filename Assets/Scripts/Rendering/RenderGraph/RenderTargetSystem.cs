@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-public class TextureSystem
+public class RenderTargetSystem
 {
-	private readonly Dictionary<TextureHandle, RenderTexture> activeTargets = new();
+	private readonly Dictionary<RenderTargetHandle, RenderTexture> activeTargets = new();
 	private readonly List<RenderTargetIdentifier> renderTargets = new();
 	private readonly List<RenderTargetDescriptor> descriptors = new();
 
@@ -18,7 +18,7 @@ public class TextureSystem
 		return descriptors[index];
 	}
 
-	public int ExportTexture(RenderTargetIdentifier id)
+	public int ExportTarget(RenderTargetIdentifier id)
 	{
 		var index = renderTargets.Count;
 		renderTargets.Add(id);
@@ -32,7 +32,7 @@ public class TextureSystem
 		return descriptorIndex;
 	}
 
-	public int AllocateTexture(TextureHandle handle, int descriptorIndex, ViewInfo viewInfo, int samples, bool isUav)
+	public int AllocateTarget(RenderTargetHandle handle, int descriptorIndex, ViewInfo viewInfo, int samples, bool isUav)
 	{
 		var descriptor = descriptors[descriptorIndex];
 		var resource = RenderTexture.GetTemporary(descriptor.GetRenderTextureDescriptor(viewInfo, samples, isUav));
@@ -49,7 +49,7 @@ public class TextureSystem
 		return index;
 	}
 
-	public void ReleaseResource(TextureHandle handle)
+	public void ReleaseResource(RenderTargetHandle handle)
 	{
 		if (!activeTargets.TryGetValue(handle, out var resource))
 		{

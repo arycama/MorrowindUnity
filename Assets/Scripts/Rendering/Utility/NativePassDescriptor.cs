@@ -3,7 +3,7 @@ using UnityEngine.Rendering;
 
 public readonly struct NativePassDescriptor
 {
-	public readonly NativeArray<TextureHandle> attachments;
+	public readonly NativeArray<RenderTargetHandle> attachments;
 	public readonly NativeArray<SubPassDescriptor> subpasses;
 	public readonly int depthIndex;
 	public readonly int passEndIndex;
@@ -11,7 +11,7 @@ public readonly struct NativePassDescriptor
 	public readonly int depthSlice;
 	public readonly int volumeDepth;
 
-	public NativePassDescriptor(NativeArray<TextureHandle> attachments, NativeArray<SubPassDescriptor> subpasses, int depthIndex, int passEndIndex, int depthSlice, int volumeDepth, string debugName)
+	public NativePassDescriptor(NativeArray<RenderTargetHandle> attachments, NativeArray<SubPassDescriptor> subpasses, int depthIndex, int passEndIndex, int depthSlice, int volumeDepth, string debugName)
 	{
 		this.attachments = attachments;
 		this.subpasses = subpasses;

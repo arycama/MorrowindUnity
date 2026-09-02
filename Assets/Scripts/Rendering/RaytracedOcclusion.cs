@@ -1,8 +1,8 @@
 public readonly struct RaytracedOcclusion : IRenderResource
 {
-	private readonly TextureHandle handle;
+	private readonly RenderTargetHandle handle;
 
-	public RaytracedOcclusion(TextureHandle handle)
+	public RaytracedOcclusion(RenderTargetHandle handle)
 	{
 		this.handle = handle;
 	}

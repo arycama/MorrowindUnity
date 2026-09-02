@@ -4,7 +4,7 @@ using System.Diagnostics;
 public struct ResourceInfo
 {
 	public int descriptorIndex;
-	public bool isExported;
+	public bool isExternal;
 	public int resourceIndex;
 	public int firstWriteIndex;
 	public int lastWriteIndex;
@@ -17,7 +17,7 @@ public struct ResourceInfo
 		this.descriptorIndex = descriptorIndex;
 		this.propertyId = propertyId;
 		this.type = type;
-		isExported = false;
+		isExternal = false;
 		resourceIndex = -1;
 		firstWriteIndex = -1;
 		lastWriteIndex = -1;

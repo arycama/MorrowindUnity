@@ -6,9 +6,9 @@ using static Unmath.Math;
 
 public struct BloomData : IRenderResource
 {
-	private readonly TextureHandle bloom;
+	private readonly RenderTargetHandle bloom;
 
-	public BloomData(TextureHandle bloom)
+	public BloomData(RenderTargetHandle bloom)
 	{
 		this.bloom = bloom;
 	}
@@ -43,7 +43,7 @@ public class Bloom
 	public void Render(Camera camera)
 	{
 		var mipCount = Min(settings.MaxMips, (int)Log2(Max(camera.pixelWidth, camera.pixelHeight)));
-		Span<TextureHandle> bloomIds = stackalloc TextureHandle[mipCount];
+		Span<RenderTargetHandle> bloomIds = stackalloc RenderTargetHandle[mipCount];
 		Span<ViewHandle> viewHandles = stackalloc ViewHandle[mipCount];
 
 		for (var i = 0; i < mipCount; i++)

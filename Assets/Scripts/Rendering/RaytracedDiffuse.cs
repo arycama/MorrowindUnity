@@ -1,8 +1,8 @@
 public readonly struct RaytracedDiffuse : IRenderResource
 {
-	private readonly TextureHandle handle;
+	private readonly RenderTargetHandle handle;
 
-	public RaytracedDiffuse(TextureHandle handle)
+	public RaytracedDiffuse(RenderTargetHandle handle)
 	{
 		this.handle = handle;
 	}

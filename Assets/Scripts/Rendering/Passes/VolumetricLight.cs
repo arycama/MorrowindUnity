@@ -26,7 +26,7 @@ public class VolumetricLight : IDisposable
 			RenderTexture.ReleaseTemporary(history.Value);
 	}
 
-	public void Render(Camera camera, Texture blueNoise1D)
+	public void Render(Camera camera)
 	{
 		if (!asset.VolumetricsEnabled)
 			return;
@@ -60,15 +60,14 @@ public class VolumetricLight : IDisposable
 
 			pass.AddUavOutput(volumetricLightTemp);
 			pass.AddResources(stackalloc ResourceHandle[] { dataBuffer });
-			pass.AddResources<EnvironmentData, ViewData, PointLightData>();
+			pass.AddResources<EnvironmentData, ViewData, PointLightData, BlueNoise1D>();
 
 			if (volumetricHistory.TryGetValue(camera, out var history))
 				pass.AddKeyword("HISTORY");
 
 			var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
-			pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, blueNoise1D, history), static (command, data) =>
+			pass.SetRenderFunction((pixelToViewDir, volumetricLightShader, volumeSize, history), static (command, data) =>
 			{
-				command.SetComputeTextureParam(data.volumetricLightShader, 0, "BlueNoise1D", data.blueNoise1D);
 				command.SetComputeTextureParam(data.volumetricLightShader, 0, "VolumetricLight", data.history);
 				command.SetComputeMatrixParam(data.volumetricLightShader, "PixelToViewDir", data.pixelToViewDir);
 				command.DispatchCompute(data.volumetricLightShader, 0, DivRoundUp(data.volumeSize.x, 8), DivRoundUp(data.volumeSize.y, 8), data.volumeSize.z);

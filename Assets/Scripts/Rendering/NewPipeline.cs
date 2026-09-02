@@ -69,8 +69,8 @@ public class NewPipeline : RenderPipelineBase
 		renderGraph.SetResource<SceneRtas>(new(renderGraph.GetRtasHandle(rtas, Shader.PropertyToID("SceneRaytracingAccelerationStructure"))));
 
 		var noiseIndex = renderGraph.FrameIndex % 64;
-		var blueNoise1D = Resources.Load<Texture2D>(blueNoise1DIds[noiseIndex]);
-		var blueNoise2D = Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]);
+		renderGraph.SetResource<BlueNoise1D>(new(renderGraph.GetTextureHandle(Resources.Load<Texture2D>(blueNoise1DIds[noiseIndex]), Shader.PropertyToID("BlueNoise1D"))));
+		renderGraph.SetResource<BlueNoise2D>(new(renderGraph.GetTextureHandle(Resources.Load<Texture2D>(blueNoise2DIds[noiseIndex]), Shader.PropertyToID("BlueNoise2D"))));
 
 		setupView.Render(camera);
 		setupView.Render(camera, true, false);
@@ -113,7 +113,7 @@ public class NewPipeline : RenderPipelineBase
 		}
 
 		lightCulling.Render(viewHandle);
-		volumetricLight.Render(camera, blueNoise1D);
+		volumetricLight.Render(camera);
 
 		if (asset.RaytracedOcclusion)
 		{
@@ -121,11 +121,10 @@ public class NewPipeline : RenderPipelineBase
 			var raytracedOcclusion = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceOcclusion"));
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedOcclusion);
-			pass.AddResources<CameraDepth, AlbedoNormal, SceneRtas>();
+			pass.AddResources<CameraDepth, AlbedoNormal, SceneRtas, BlueNoise2D>();
 
-			pass.SetRenderFunction((rtas, occlusionRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
+			pass.SetRenderFunction((rtas, occlusionRaytracingShader, camera.pixelWidth, camera.pixelHeight), static (command, data) =>
 			{
-				command.SetRayTracingTextureParam(data.occlusionRaytracingShader, "BlueNoise2D", data.blueNoise2D);
 				command.SetRayTracingShaderPass(data.occlusionRaytracingShader, "RaytracedTransmittance");
 				command.DispatchRays(data.occlusionRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
@@ -139,11 +138,10 @@ public class NewPipeline : RenderPipelineBase
 			var raytracedShadows = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.R8_UNorm), Shader.PropertyToID("ScreenSpaceShadows"));
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedShadows);
-			pass.AddResources<CameraDepth, AlbedoNormal, SceneRtas>();
+			pass.AddResources<CameraDepth, AlbedoNormal, SceneRtas, BlueNoise2D>();
 
-			pass.SetRenderFunction((rtas, shadowRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
+			pass.SetRenderFunction((rtas, shadowRaytracingShader, camera.pixelWidth, camera.pixelHeight), static (command, data) =>
 			{
-				command.SetRayTracingTextureParam(data.shadowRaytracingShader, "BlueNoise2D", data.blueNoise2D);
 				command.SetRayTracingShaderPass(data.shadowRaytracingShader, "RaytracedTransmittance");
 				command.DispatchRays(data.shadowRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
@@ -157,11 +155,10 @@ public class NewPipeline : RenderPipelineBase
 			var raytracedDiffuse = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("ScreenSpaceDiffuse"));
 			pass.ViewHandle = viewHandle;
 			pass.AddUavOutput(raytracedDiffuse);
-			pass.AddResources<CameraDepth, AlbedoNormal>();
+			pass.AddResources<CameraDepth, AlbedoNormal, BlueNoise2D>();
 
-			pass.SetRenderFunction((rtas, diffuseRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise2D), static (command, data) =>
+			pass.SetRenderFunction((rtas, diffuseRaytracingShader, camera.pixelWidth, camera.pixelHeight), static (command, data) =>
 			{
-				command.SetRayTracingTextureParam(data.diffuseRaytracingShader, "BlueNoise2D", data.blueNoise2D);
 				command.SetRayTracingShaderPass(data.diffuseRaytracingShader, "RaytracedLuminance");
 				command.DispatchRays(data.diffuseRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
 			});
@@ -225,17 +222,15 @@ public class NewPipeline : RenderPipelineBase
 
 			var raytracedDepthOfField = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("DepthOfField"));
 			pass.AddUavOutput(raytracedDepthOfField);
-			pass.AddResource<SceneRtas>();
+			pass.AddResources<SceneRtas, BlueNoise1D, BlueNoise2D>();
 
 			var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
 			var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
 			var focalLength = 0.5f * (asset.SensorSize / 1000.0f) / tanHalfFovY;
 			var apertureRadius = 0.5f * focalLength / asset.Aperture;
 			var pixelToViewDir = Float4x4.PixelToNearClip(new(camera.pixelWidth, camera.pixelHeight), 0f, tanHalfFov, true, false);
-			pass.SetRenderFunction((rtas, depthOfFieldRaytracingShader, camera.pixelWidth, camera.pixelHeight, blueNoise1D, blueNoise2D, apertureRadius, asset.FocusDistance, pixelToViewDir), static (command, data) =>
+			pass.SetRenderFunction((rtas, depthOfFieldRaytracingShader, camera.pixelWidth, camera.pixelHeight, apertureRadius, asset.FocusDistance, pixelToViewDir), static (command, data) =>
 			{
-				command.SetRayTracingTextureParam(data.depthOfFieldRaytracingShader, "BlueNoise1D", data.blueNoise1D);
-				command.SetRayTracingTextureParam(data.depthOfFieldRaytracingShader, "BlueNoise2D", data.blueNoise2D);
 				command.SetRayTracingFloatParam(data.depthOfFieldRaytracingShader, "ApertureRadius", data.apertureRadius);
 				command.SetRayTracingFloatParam(data.depthOfFieldRaytracingShader, "FocusDistance", data.FocusDistance);
 				command.SetRayTracingMatrixParam(data.depthOfFieldRaytracingShader, "PixelToViewDir", data.pixelToViewDir);

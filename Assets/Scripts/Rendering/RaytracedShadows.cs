@@ -1,8 +1,8 @@
 public readonly struct RaytracedShadows : IRenderResource
 {
-	private readonly TextureHandle handle;
+	private readonly RenderTargetHandle handle;
 
-	public RaytracedShadows(TextureHandle handle)
+	public RaytracedShadows(RenderTargetHandle handle)
 	{
 		this.handle = handle;
 	}

@@ -7,11 +7,11 @@ using static Unmath.Math;
 
 public class NativeRenderPassSystem : IDisposable
 {
-	private readonly NativeList<TextureHandle> attachments = new(8, Allocator.Persistent);
-	private readonly NativeList<TextureHandle> outputs = new(8, Allocator.Persistent);
-	private readonly NativeList<TextureHandle> inputs = new(8, Allocator.Persistent);
+	private readonly NativeList<RenderTargetHandle> attachments = new(8, Allocator.Persistent);
+	private readonly NativeList<RenderTargetHandle> outputs = new(8, Allocator.Persistent);
+	private readonly NativeList<RenderTargetHandle> inputs = new(8, Allocator.Persistent);
 	private readonly NativeList<SubPassDescriptor> subPasses = new(8, Allocator.Persistent);
-	private TextureHandle? depthStencil;
+	private RenderTargetHandle? depthStencil;
 	private SubPassFlags flags;
 	private int depthSlice = -1;
 	private int volumeDepth = 1;

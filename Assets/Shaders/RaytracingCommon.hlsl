@@ -30,4 +30,19 @@ float2 BarycentricInterpolate(float2 x, float2 y, float2 z, float2 uv) { return 
 float3 BarycentricInterpolate(float3 x, float3 y, float3 z, float2 uv) { return mad(uv.y, z, mad(uv.x, y, mad(-x, uv.y, mad(-x, uv.x, x)))); }
 float4 BarycentricInterpolate(float4 x, float4 y, float4 z, float2 uv) { return mad(uv.y, z, mad(uv.x, y, mad(-x, uv.y, mad(-x, uv.x, x)))); }
 
+uint3 GetTriangleIndices(uint primitiveIndex)
+{
+	uint byteOffset = (primitiveIndex * 3) << 1;
+	uint index = byteOffset >> 2;
+
+	uint2 data;
+	data.x = unity_MeshIndexBuffer_RT[index + 0u];
+	data.y = unity_MeshIndexBuffer_RT[index + 1u];
+
+	bool isOdd = primitiveIndex & 1u;
+	uint3 raw = uint3(data, isOdd ? data.y : data.x).xzy;
+	uint3 shift = uint2(isOdd, !isOdd).xyx << 4;
+	return (raw >> shift) & 0xffff;
+}
+
 #endif

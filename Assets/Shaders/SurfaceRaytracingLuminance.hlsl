@@ -15,21 +15,6 @@ cbuffer UnityPerMaterial
 	float _Cutoff, _SrcBlend;
 };
 
-uint3 GetTriangleIndices(uint primitiveIndex)
-{
-	uint byteOffset = (primitiveIndex * 3) << 1;
-	uint index = byteOffset >> 2;
-
-	uint2 data;
-	data.x = unity_MeshIndexBuffer_RT[index + 0u];
-	data.y = unity_MeshIndexBuffer_RT[index + 1u];
-
-	bool isOdd = primitiveIndex & 1u;
-	uint3 raw = uint3(data, isOdd ? data.y : data.x).xzy;
-	uint3 shift = uint2(isOdd, !isOdd).xyx << 4;
-	return (raw >> shift) & 0xffff;
-}
-
 float3 GetNormal(uint vertexIndex)
 {
 	uint3 data;

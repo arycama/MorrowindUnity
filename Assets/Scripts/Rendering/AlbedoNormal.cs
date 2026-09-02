@@ -1,8 +1,8 @@
 public readonly struct AlbedoNormal : IRenderResource
 {
-	public readonly TextureHandle handle;
+	public readonly RenderTargetHandle handle;
 
-	public AlbedoNormal(TextureHandle handle)
+	public AlbedoNormal(RenderTargetHandle handle)
 	{
 		this.handle = handle;
 	}

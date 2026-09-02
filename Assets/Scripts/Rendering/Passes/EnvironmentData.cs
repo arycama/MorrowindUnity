@@ -1,9 +1,9 @@
 public readonly struct EnvironmentData : IRenderResource
 {
 	private readonly BufferHandle environmentData;
-	private readonly TextureHandle sunShadow;
+	private readonly RenderTargetHandle sunShadow;
 
-	public EnvironmentData(BufferHandle environmentData, TextureHandle sunShadow)
+	public EnvironmentData(BufferHandle environmentData, RenderTargetHandle sunShadow)
 	{
 		this.environmentData = environmentData;
 		this.sunShadow = sunShadow;

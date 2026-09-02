@@ -1,8 +1,8 @@
 public readonly struct RaytracedDepthOfField : IRenderResource
 {
-	private readonly TextureHandle handle;
+	private readonly RenderTargetHandle handle;
 
-	public RaytracedDepthOfField(TextureHandle handle)
+	public RaytracedDepthOfField(RenderTargetHandle handle)
 	{
 		this.handle = handle;
 	}
