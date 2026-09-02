@@ -61,6 +61,24 @@ public class PassBuilder : IDisposable
 		AddResources<T1, T2, T3, T4>();
 	}
 
+	public void AddResources<T0, T1, T2, T3, T4, T5>() where T0 : IRenderResource where T1 : IRenderResource where T2 : IRenderResource where T3 : IRenderResource where T4 : IRenderResource where T5 : IRenderResource
+	{
+		AddResource<T0>();
+		AddResources<T1, T2, T3, T4, T5>();
+	}
+
+	public void AddResources<T0, T1, T2, T3, T4, T5, T6>() where T0 : IRenderResource where T1 : IRenderResource where T2 : IRenderResource where T3 : IRenderResource where T4 : IRenderResource where T5 : IRenderResource where T6 : IRenderResource
+	{
+		AddResource<T0>();
+		AddResources<T1, T2, T3, T4, T5, T6>();
+	}
+
+	public void AddResources<T0, T1, T2, T3, T4, T5, T6, T7>() where T0 : IRenderResource where T1 : IRenderResource where T2 : IRenderResource where T3 : IRenderResource where T4 : IRenderResource where T5 : IRenderResource where T6 : IRenderResource where T7 : IRenderResource
+	{
+		AddResource<T0>();
+		AddResources<T1, T2, T3, T4, T5, T6, T7>();
+	}
+
 	public void AddResource(ResourceHandle resource) => Resources.Add(resource);
 
 	public void AddResources(Span<ResourceHandle> resources)

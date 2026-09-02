@@ -37,7 +37,7 @@ float4 Fragment(float4 position : SV_Position,
 		#endif
 	#endif
 	
-	#ifdef DEPTH_OF_FIELD
+	#ifdef RAYTRACED_DEPTH_OF_FIELD
 		return float4(DepthOfField[coord], 1.0);
 	#endif
 	
