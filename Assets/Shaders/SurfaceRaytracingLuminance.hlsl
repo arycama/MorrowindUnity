@@ -2,7 +2,7 @@
 #include "RaytracingCommon.hlsl"
 
 #ifdef __INTELLISENSE__
-	//#define _ALPHABLEND_ON
+	#define _ALPHABLEND_ON
 #endif
 
 Texture2D<float4> _MainTex, _EmissionMap;
@@ -68,6 +68,8 @@ void AnyHitVisibility(inout RayColorPayload payload : SV_RayPayload, AttributeDa
 	
 	float4 albedoOpacity = _MainTex.SampleLevel(LinearRepeatSampler, uv, 0.0) * _Color;
 	color *= albedoOpacity.rgb;
+	color.rgb = lerp(color.rgb, FogColor, saturate(RayTCurrent() * FogScale + FogOffset));
+	color.rgb *= albedoOpacity.a;
 	
 	payload.color += color.rgb * payload.transmittance;
 	payload.transmittance *= 1.0 - albedoOpacity.a;
@@ -95,9 +97,9 @@ void Raytracing(inout RayColorPayload payload : SV_RayPayload, AttributeData att
 		float3 normal2 = GetNormal(triangleIndices.z);
 		float3 normal = normalize(BarycentricInterpolate(normal0, normal1, normal2, attribs.barycentrics));
 		
-		float3 color0 = GetColor(triangleIndices.x).rgb;
-		float3 color1 = GetColor(triangleIndices.y).rgb;
-		float3 color2 = GetColor(triangleIndices.z).rgb;
+		float3 color0 = GammaToLinear(GetColor(triangleIndices.x).rgb);
+		float3 color1 = GammaToLinear(GetColor(triangleIndices.y).rgb);
+		float3 color2 = GammaToLinear(GetColor(triangleIndices.z).rgb);
 		float3 vertexColor = BarycentricInterpolate(color0, color1, color2, attribs.barycentrics);
 		
 		float2 uv0 = GetUv(triangleIndices.x);
@@ -129,7 +131,7 @@ void Raytracing(inout RayColorPayload payload : SV_RayPayload, AttributeData att
 	
 		float4 albedoOpacity = _MainTex.SampleLevel(LinearRepeatSampler, uv, 0.0) * _Color;
 		color *= albedoOpacity.rgb;
-	
+		color = lerp(color, FogColor, saturate(RayTCurrent() * FogScale + FogOffset));
 		payload.color = color.rgb;
 #endif
 }

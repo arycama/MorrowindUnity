@@ -49,7 +49,6 @@
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
-			#pragma use_dxc
 			#pragma multi_compile_local _ TEXT_ON
 			#include "UI.hlsl"
 			ENDHLSL

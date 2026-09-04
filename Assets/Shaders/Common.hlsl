@@ -77,14 +77,13 @@ float4 SunShadow_TexelSize;
 
 cbuffer ViewData
 {
-	matrix WorldToClip;
 	matrix ViewToClip;
-	matrix WorldToView;
-	matrix ViewToWorld;
-	matrix PixelToWorld;
-	matrix ScreenToWorld;
 	matrix WorldToPreviousScreen;
-	matrix UiOverlayMatrix;
+	matrix WorldToView;
+	matrix WorldToClip;
+	matrix ViewToWorld;
+	matrix ScreenToWorld;
+	matrix PixelToWorld;
 	float LinearDepthScale, LinearDepthOffset, Near, Far;
 	float2 ViewSize;
 	float2 RcpViewSize;

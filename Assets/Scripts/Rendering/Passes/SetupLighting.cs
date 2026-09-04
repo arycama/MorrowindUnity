@@ -254,33 +254,24 @@ public class SetupLighting
 			fogEnabled &= SceneView.currentDrawingSceneView.sceneViewState.fogEnabled;
 #endif
 
-		var environmentData = renderGraph.GetBuffer(new(1, UnsafeUtility.SizeOf<EnvironmentDataStruct>(), GraphicsBuffer.Target.Constant), Shader.PropertyToID("EnvironmentData"));
-		using (var pass = renderGraph.AddRenderPass("Set EnvironmentData"))
+		using (var buffer = renderGraph.AddConstantBuffer("EnvironmentData", out var environmentData))
 		{
-			pass.AddUavOutput(environmentData);
-			pass.SetRenderFunction((sunDirection, sunColor, fogEnabled, environmentData, lighting, viewToSunShadow, renderGraph), static (command, data) =>
-			{
-				var fogStart = data.fogEnabled ? RenderSettings.fogStartDistance : 0;
-				var fogEnd = data.fogEnabled ? RenderSettings.fogEndDistance : 0;
-				var fogScale = data.fogEnabled ? 1 / (fogEnd - fogStart) : 0;
-				var fogOffset = data.fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
-				var sunShadowFadeScale = -1.0f / data.lighting.DirectionalFadeLength;
-				var sunShadowFadeOffset = data.lighting.DirectionalShadowDistance / data.lighting.DirectionalFadeLength;
+			var fogStart = fogEnabled ? RenderSettings.fogStartDistance : 0;
+			var fogEnd = fogEnabled ? RenderSettings.fogEndDistance : 0;
+			var fogScale = fogEnabled ? 1 / (fogEnd - fogStart) : 0;
+			var fogOffset = fogEnabled ? fogStart / (fogStart - fogEnd) : 0;
+			var sunShadowFadeScale = -1.0f / lighting.DirectionalFadeLength;
+			var sunShadowFadeOffset = lighting.DirectionalShadowDistance / lighting.DirectionalFadeLength;
 
-				var buffer = data.renderGraph.GetBufferResource(data.environmentData);
-				command.SetBufferData(buffer, stackalloc[]
-				{(
-					RenderSettings.ambientLight.LinearFloat3(), fogScale,
-					RenderSettings.fogColor.LinearFloat3(), fogOffset,
-					Time.time, fogStart, fogEnd, 0,
-					data.sunDirection, sunShadowFadeScale,
-					data.sunColor, sunShadowFadeOffset,
-					data.viewToSunShadow
-				)}.AsArray());
-			});
+			buffer.AddData((RenderSettings.ambientLight.LinearFloat3(), fogScale));
+			buffer.AddData((RenderSettings.fogColor.LinearFloat3(), fogOffset));
+			buffer.AddData((Time.time, fogStart, fogEnd, 0));
+			buffer.AddData((sunDirection, sunShadowFadeScale));
+			buffer.AddData((sunColor, sunShadowFadeOffset));
+			buffer.AddData(viewToSunShadow);
+
+			renderGraph.SetResource(new EnvironmentData(environmentData, sunShadow));
 		}
-
-		renderGraph.SetResource(new EnvironmentData(environmentData, sunShadow));
 
 		// Sort lights by view depth
 		Array.Sort(pointLightDepths, pointLights);
@@ -332,30 +323,29 @@ public class SetupLighting
 		var lightDepthMinMaxBuffer = renderGraph.GetBuffer(new(lightCulling.DepthSlices), Shader.PropertyToID("LightDepthMinMax"));
 		var tileView = renderGraph.AddViewInfo(new(tileCountX, tileCountY), 1, lightIndexCount);
 		var visibleLightBits = renderGraph.GetTexture(new(tileView, GraphicsFormat.R32_UInt, true, dimension: TextureDimension.Tex2DArray), Shader.PropertyToID("VisibleLightBits"));
-		var dataBuffer = renderGraph.GetBuffer(new(1, 4 * 8, GraphicsBuffer.Target.Constant), Shader.PropertyToID("PointLightData"));
+
+		BufferHandle pointLightData;
+		using (var buffer = renderGraph.AddConstantBuffer("PointLightData", out pointLightData))
+		{
+			buffer.AddData((float)lightCulling.TileSize);
+			buffer.AddData(tileCountX * tileCountY);
+			buffer.AddData(tileCountX);
+			buffer.AddData(lightIndexCount);
+			buffer.AddData(lightCulling.DepthSlices);
+			buffer.AddData(binWidth);
+			buffer.AddData(Rcp(lightCulling.TileSize));
+			buffer.AddData(Rcp(binWidth));
+		}
 
 		using (var pass = renderGraph.AddRenderPass("Set Light Data"))
 		{
 			pass.ViewHandle = tileView; // TODO: Would be nice to not need to specify this always
-			pass.AddUavOutputs(stackalloc ResourceHandle[] { lightBuffer, lightDepthMinMaxBuffer, visibleLightBits, dataBuffer });
+			pass.AddUavOutputs(stackalloc ResourceHandle[] { lightBuffer, lightDepthMinMaxBuffer, visibleLightBits });
 
-			var dataBufferData = stackalloc[]
-			{(
-				(float)lightCulling.TileSize,
-				tileCountX * tileCountY,
-				tileCountX,
-				lightIndexCount,
-				lightCulling.DepthSlices,
-				binWidth,
-				Rcp(lightCulling.TileSize),
-				Rcp(binWidth)
-			)}.ToNativeArray();
-
-			pass.SetRenderFunction((pointLights, pointLightCount, lightBuffer, lightDepthMinMaxBuffer, lightDepthMinMax, visibleLightBits, renderGraph, dataBuffer, dataBufferData), static (command, data) =>
+			pass.SetRenderFunction((pointLights, pointLightCount, lightBuffer, lightDepthMinMaxBuffer, lightDepthMinMax, visibleLightBits, renderGraph), static (command, data) =>
 			{
 				command.SetBufferData(data.renderGraph.GetBufferResource(data.lightBuffer), data.pointLights, 0, 0, data.pointLightCount);
 				command.SetBufferData(data.renderGraph.GetBufferResource(data.lightDepthMinMaxBuffer), data.lightDepthMinMax);
-				command.SetBufferData(data.renderGraph.GetBufferResource(data.dataBuffer), data.dataBufferData);
 
 				// Clear the light bitmask texture (TODO: Can we do this in another way)
 				command.SetRenderTarget(data.renderGraph.GetTextureResource(data.visibleLightBits), 0, CubemapFace.Unknown, -1);
@@ -363,7 +353,7 @@ public class SetupLighting
 			});
 		}
 
-		renderGraph.SetResource(new PointLightData(dataBuffer, lightBuffer, lightDepthMinMaxBuffer, visibleLightBits, pointShadows, pointLightCount, intersectingLightCount));
+		renderGraph.SetResource(new PointLightData(pointLightData, lightBuffer, lightDepthMinMaxBuffer, visibleLightBits, pointShadows, pointLightCount, intersectingLightCount));
 	}
 
 	private static ShadowSplitData CalculateShadowSplitData(Float4x4 matrix, Float3 lightDirection, bool skipNearPlane)
@@ -522,22 +512,5 @@ public class SetupLighting
 		});
 
 		return unique;
-	}
-
-	private struct EnvironmentDataStruct
-	{
-		public Float3 Item1;
-		public float fogScale;
-		public Float3 Item3;
-		public float fogOffset;
-		public float time;
-		public float fogStart;
-		public float fogEnd;
-		public int Item8;
-		public Float3 sunDirection;
-		public int Item10;
-		public Float3 sunColor;
-		public int Item12;
-		public Float4x4 item13;
 	}
 }

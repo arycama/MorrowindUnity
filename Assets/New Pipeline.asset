@@ -13,19 +13,19 @@ MonoBehaviour:
   m_Name: New Pipeline
   m_EditorClassIdentifier: Rendering::NewPipelineAsset
   <Samples>k__BackingField: 1
-  <VolumetricsEnabled>k__BackingField: 1
+  <VolumetricsEnabled>k__BackingField: 0
   <VolumetricTileSize>k__BackingField: 8
   <VolumetricSlices>k__BackingField: 64
   <VolumetricDistance>k__BackingField: 8192
-  <FocusDistance>k__BackingField: 100
+  <FocusDistance>k__BackingField: 10
   <SensorSize>k__BackingField: 24
   <Aperture>k__BackingField: 0.0625
   <RayTracingLayerMask>k__BackingField:
     serializedVersion: 2
     m_Bits: 7681
-  <RaytracedOcclusion>k__BackingField: 1
+  <RaytracedOcclusion>k__BackingField: 0
   <RaytracedShadows>k__BackingField: 0
-  <RaytracedDiffuse>k__BackingField: 0
+  <RaytracedDiffuse>k__BackingField: 1
   <RaytracedSpecular>k__BackingField: 0
   <RaytracedDepthOfField>k__BackingField: 0
   <Lighting>k__BackingField:
@@ -55,7 +55,7 @@ MonoBehaviour:
     <SpotLightMesh>k__BackingField: {fileID: -8825038141534415262, guid: c7ee5e159e04fd64a88d11aff4cbe2c2,
       type: 3}
   <Bloom>k__BackingField:
-    <Strength>k__BackingField: 0.125
+    <Strength>k__BackingField: 0.1875
     <MaxMips>k__BackingField: 6
   defaultMaterials:
     <DefaultMaterial>k__BackingField: {fileID: 2100000, guid: 9d1918dc274d6ba4790921099385476e,

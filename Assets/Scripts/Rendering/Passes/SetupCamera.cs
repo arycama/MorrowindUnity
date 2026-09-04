@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Unity.Collections.LowLevel.Unsafe;
 using UnityEngine;
 using Unmath;
 using static Unmath.Math;
@@ -8,7 +7,7 @@ using Quaternion = Unmath.Quaternion;
 public class SetupView
 {
 	private readonly RenderGraph renderGraph;
-	private readonly Dictionary<Camera, (Float3, Quaternion, Float4x4)> previousCameraTransform = new();
+	private readonly Dictionary<Camera, (Float3 position, Quaternion rotation, Float4x4 viewToScreen)> previousCameraTransform = new();
 
 	public SetupView(RenderGraph renderGraph)
 	{
@@ -17,115 +16,61 @@ public class SetupView
 
 	public void Render(Camera camera, bool isFlipped = false, bool updatePrevious = true)
 	{
-		using (var pass = renderGraph.AddRenderPass("Set ViewData"))
-		{
-			var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
-			var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
-			var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
-			var near = camera.nearClipPlane;
-			var far = camera.farClipPlane;
-			var viewPosition = camera.transform.WorldPosition();
-			var viewRotation = camera.transform.WorldRotation();
+		using var buffer = renderGraph.AddConstantBuffer("ViewData", out var viewData);
 
-			// Screen
-			var screenToPixel = Float4x4.Scale(new Float3((Float2)viewSize, 1));
-			var pixelToScreen = Float4x4.Scale(new Float3(1 / (Float2)viewSize, 1));
+		var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
+		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
+		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
+		var near = camera.nearClipPlane;
+		var far = camera.farClipPlane;
+		var viewPosition = camera.transform.WorldPosition();
+		var viewRotation = camera.transform.WorldRotation();
 
-			// Clip
-			var clipToScreen = Float4x4.ScaleOffset(new Float3(0.5f, -0.5f, 1), new Float2(0.5f, 0).xxy);
-			var screenToClip = Float4x4.ScaleOffset(new Float3(2, -2, 1), new Float3(-1, 1, 0));
-			var clipToPixel = screenToPixel.Mul(clipToScreen);
-			var pixelToClip = screenToClip.Mul(pixelToScreen);
+		var clipToScreen = Float4x4.ScaleOffset(new Float3(0.5f, -0.5f, 1), new Float2(0.5f, 0).xxy);
+		var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, near, far, 0, isFlipped);
+		buffer.AddData(viewToClip);
 
-			// View
-			var viewToClip = Float4x4.PerspectiveReverseZ(tanHalfFov, near, far, 0, isFlipped);
-			var clipToView = Float4x4.PerspectiveReverseZInverse(tanHalfFov, near, far);
+		var viewToScreen = clipToScreen.Mul(viewToClip);
+		if (!previousCameraTransform.TryGetValue(camera, out var previousTransform))
+			previousTransform = (viewPosition, viewRotation, viewToScreen);
 
-			var viewToScreen = clipToScreen.Mul(viewToClip);
-			var screenToView = clipToView.Mul(screenToClip);
+		if (updatePrevious)
+			previousCameraTransform[camera] = (viewPosition, viewRotation, viewToScreen);
 
-			var viewToPixel = screenToPixel.Mul(viewToScreen);
-			var pixelToView = clipToView.Mul(pixelToClip);
+		var worldToPreviousView = Float4x4.WorldToLocal(previousTransform.position - viewPosition, previousTransform.rotation);
+		var worldToPreviousScreen = previousTransform.viewToScreen.Mul(worldToPreviousView);
+		buffer.AddData(worldToPreviousScreen);
 
-			var viewToWorld = Float4x4.Rotate(viewRotation);
-			var worldToView = Float4x4.Rotate(viewRotation.Inverse);
+		var worldToView = Float4x4.Rotate(viewRotation.Inverse);
+		buffer.AddData(worldToView);
 
-			// World
-			var worldToClip = viewToClip.Mul(worldToView);
-			var clipToWorld = viewToWorld.Mul(clipToView);
+		var worldToClip = viewToClip.Mul(worldToView);
+		buffer.AddData(worldToClip);
 
-			var worldToScreen = clipToScreen.Mul(worldToClip);
-			var screenToWorld = viewToWorld.Mul(screenToView);
+		var pixelToScreen = Float4x4.Scale(new Float3(1 / (Float2)viewSize, 1));
+		var screenToClip = Float4x4.ScaleOffset(new Float3(2, -2, 1), new Float3(-1, 1, 0));
+		var clipToView = Float4x4.PerspectiveReverseZInverse(tanHalfFov, near, far);
+		var viewToWorld = Float4x4.Rotate(viewRotation);
+		buffer.AddData(viewToWorld);
 
-			var worldToPixel = screenToPixel.Mul(worldToScreen);
-			var pixelToWorld = viewToWorld.Mul(pixelToView);
+		var pixelToClip = screenToClip.Mul(pixelToScreen);
 
-			//var overlayMatrix = Float4x4.Ortho(-Screen.width / 2f, Screen.width / 2f, -Screen.height / 2f, Screen.height / 2f, near, far);
-			var overlayMatrix = Matrix4x4.Ortho(0, Screen.width, Screen.height, 0, 0, 1);
+		var pixelToView = clipToView.Mul(pixelToClip);
+		var screenToView = clipToView.Mul(screenToClip);
+		var screenToWorld = viewToWorld.Mul(screenToView);
+		buffer.AddData(screenToWorld);
 
-			var viewToNonJitteredScreen = clipToScreen.Mul(viewToClip);
-			if (!previousCameraTransform.TryGetValue(camera, out var previousTransform))
-				previousTransform = (viewPosition, viewRotation, viewToNonJitteredScreen);
+		var pixelToWorld = viewToWorld.Mul(pixelToView);
+		buffer.AddData(pixelToWorld);
 
-			if (updatePrevious)
-				previousCameraTransform[camera] = (viewPosition, viewRotation, viewToNonJitteredScreen);
+		buffer.AddData(((far - near) * Rcp(near * far), Rcp(far), near, far));
+		buffer.AddData(((Float2)viewSize, 1.0f / (Float2)viewSize));
+		buffer.AddData((camera.transform.WorldPosition(), 0f));
+		buffer.AddData((tanHalfFov, 0, 0));
 
-			var worldToPreviousView = Float4x4.WorldToLocal(previousTransform.Item1 - viewPosition, previousTransform.Item2);
-			var worldToPreviousScreen = previousTransform.Item3.Mul(worldToPreviousView);
-
-			var data = stackalloc[]
-			{(
-				worldToClip,
-				viewToClip,
-				worldToView,
-				viewToWorld,
-				pixelToWorld,
-				screenToWorld,
-				worldToPreviousScreen,
-				overlayMatrix,
-				(far - near) * Rcp(near * far), Rcp(far), near, far,
-				(Float2)viewSize, 1.0f / (Float2)viewSize,
-				camera.transform.WorldPosition(), 0f,
-				tanHalfFov, 0, 0
-			)}.ToNativeArray();
-
-			var viewData = renderGraph.GetBuffer(new(1, UnsafeUtility.SizeOf<ViewDataStruct>(), GraphicsBuffer.Target.Constant), Shader.PropertyToID("ViewData"));
-			pass.AddUavOutput(viewData);
-
-			pass.SetRenderFunction((viewData, renderGraph, data), static (command, data) =>
-			{
-				var buffer = data.renderGraph.GetBufferResource(data.viewData);
-				command.SetBufferData(buffer, data.data);
-			});
-
-			if (isFlipped)
-				renderGraph.SetResource(new ViewDataFlipped(viewData));
-			else
-				renderGraph.SetResource(new ViewData(viewData));
-		}
-	}
-
-	private struct ViewDataStruct
-	{
-		public Float4x4 worldToClip;
-		public Float4x4 viewToClip;
-		public Float4x4 worldToView;
-		public Float4x4 viewToWorld;
-		public Float4x4 pixelToWorld;
-		public Float4x4 screenToWorld;
-		public Float4x4 worldToPreviousScreen;
-		public Float4x4 overlayMatrix;
-		public float Item5;
-		public float Item6;
-		public float near;
-		public float far;
-		public Float2 Item9;
-		public Float2 Item10;
-		public Float3 Item11;
-		public float Item12;
-		public Float2 tanHalfFov;
-		public int Item14;
-		public int Item15;
+		if (isFlipped)
+			renderGraph.SetResource(new ViewDataFlipped(viewData));
+		else
+			renderGraph.SetResource(new ViewData(viewData));
 	}
 }
-;

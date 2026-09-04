@@ -15,7 +15,6 @@ Shader "Terrain"
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
-			#pragma use_dxc
 			#define GBUFFER
 			#include "Terrain.hlsl"
 			ENDHLSL
@@ -31,7 +30,6 @@ Shader "Terrain"
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
-			#pragma use_dxc
 			#define SHADOW
 			#include "Terrain.hlsl"
 			ENDHLSL

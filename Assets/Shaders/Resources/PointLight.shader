@@ -14,7 +14,6 @@ Shader "Hidden/Morrowind Point Light"
             HLSLPROGRAM
             #pragma vertex Vertex
             #pragma fragment Fragment
-            #pragma use_dxc
             #include "PointLight.hlsl"
             ENDHLSL
         }
@@ -28,7 +27,6 @@ Shader "Hidden/Morrowind Point Light"
             HLSLPROGRAM
             #pragma vertex Vertex
             #pragma fragment Fragment
-            #pragma use_dxc
             #include "PointLight.hlsl"
             ENDHLSL
         }

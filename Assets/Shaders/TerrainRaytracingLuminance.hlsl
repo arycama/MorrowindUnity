@@ -91,5 +91,6 @@ void Raytracing(inout RayColorPayload payload : SV_RayPayload, AttributeData att
 	TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 1, shadowRay, shadowPayload);
 	
 	color *= AmbientLight + saturate(dot(viewNormal, SunDirection)) * SunColor * shadowPayload.transmittance;
+	color = lerp(color, FogColor, saturate(RayTCurrent() * FogScale + FogOffset));
 	payload.color = color;
 }

@@ -14,7 +14,6 @@ Shader "Hidden/Morrowind Tonemap"
             #pragma vertex VertexFullscreenTriangleMinimal
             #pragma fragment Fragment
             #pragma multi_compile _ FLIP
-            #pragma use_dxc
             #include "Tonemap.hlsl"
             ENDHLSL
         }

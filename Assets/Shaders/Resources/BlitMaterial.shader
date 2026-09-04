@@ -9,7 +9,6 @@ Shader "Hidden/Blit Material"
             HLSLPROGRAM
             #pragma vertex Vertex
             #pragma fragment Fragment
-            #pragma use_dxc
             #pragma multi_compile _ FLIP
             #pragma multi_compile _ MSAA
             #pragma multi_compile _ DIRECT
@@ -26,7 +25,6 @@ Shader "Hidden/Blit Material"
             HLSLPROGRAM
             #pragma vertex Vertex
             #pragma fragment Fragment
-            #pragma use_dxc
             #pragma multi_compile _ FLIP
             #pragma multi_compile _ MSAA
             #pragma multi_compile _ RAYTRACED_DEPTH_OF_FIELD

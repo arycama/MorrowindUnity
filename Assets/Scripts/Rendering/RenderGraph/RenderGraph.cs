@@ -18,12 +18,15 @@ public class RenderGraph : IDisposable
 	private readonly List<Texture> textures = new();
 	private readonly NativeRenderPassSystem nativeRenderPassSystem = new();
 	private readonly ResourceMap resourceMap = new();
-	private readonly PassBuilder builder;
+	private readonly PassBuilder passBuilder;
+	private readonly ConstantBufferBuilder constantBufferBuilder;
+	private readonly ResizableArray<byte> constantBufferData = new();
 	public int FrameIndex { get; private set; }
 
 	public RenderGraph()
 	{
-		builder = new(this);
+		passBuilder = new(this);
+		constantBufferBuilder = new(this);
 	}
 
 	public void Dispose()
@@ -84,9 +87,9 @@ public class RenderGraph : IDisposable
 
 	public PassBuilder AddRenderPass(string name)
 	{
-		builder.Name = name;
-		builder.Index = renderPasses.Count;
-		return builder;
+		passBuilder.Name = name;
+		passBuilder.Index = renderPasses.Count;
+		return passBuilder;
 	}
 
 	public ViewInfo GetViewInfo(ViewHandle handle) => viewInfos[handle.index];
@@ -454,9 +457,6 @@ public class RenderGraph : IDisposable
 		if (lastNativePass != -1)
 			EndNativeRenderPass(command, lastNativePass, renderPasses.Count - 1);
 
-		renderTargetSystem.FreeUnreleasedResources();
-		bufferSystem.FreeUnreleasedResources();
-
 		FrameIndex++;
 	}
 
@@ -470,5 +470,27 @@ public class RenderGraph : IDisposable
 		resourceMap.Clear();
 		rayTracingAccelerationStructures.Clear();
 		textures.Clear();
+		constantBufferData.Clear();
+		renderTargetSystem.FreeUnreleasedResources();
+		bufferSystem.FreeUnreleasedResources();
+	}
+
+	public Range AddConstantBufferData(ReadOnlySpan<byte> data)
+	{
+		return constantBufferData.AddRange(data);
+	}
+
+	public Span<byte> GetConstantBufferData(Range range)
+	{
+		return constantBufferData.AsSpan(range);
+	}
+
+	public ConstantBufferBuilder AddConstantBuffer(string name, out BufferHandle handle)
+	{
+		// Constant buffer gets built inside a using statement and then the actual descriptor is created after. So
+		// a handle that indicates the next available index is returned so that it will point to the correct data once the builder has completed
+		handle = new(resourceInfo.Count);
+		constantBufferBuilder.PropertyName = name;
+		return constantBufferBuilder;
 	}
 }

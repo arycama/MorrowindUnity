@@ -36,16 +36,10 @@ public class VolumetricLight : IDisposable
 		var volumeHeight = DivRoundUp(viewSize.y, asset.VolumetricTileSize);
 		var volumeSize = new Int3(volumeWidth, volumeHeight, asset.VolumetricSlices);
 
-		var dataBuffer = renderGraph.GetBuffer(new(1, 16, GraphicsBuffer.Target.Constant), Shader.PropertyToID("VolumetricLightData"));
-		using (var pass = renderGraph.AddRenderPass("Volumetric Light Set Data"))
+		var volumetricLightData = renderGraph.GetBuffer(new(1, 16, GraphicsBuffer.Target.Constant), Shader.PropertyToID("VolumetricLightData"));
+		using (var buffer = renderGraph.AddConstantBuffer("VolumetricLightData", out volumetricLightData))
 		{
-			var data = stackalloc[] { asset.VolumetricDistance, volumeSize.x, volumeSize.y, volumeSize.z }.ToNativeArray();
-			pass.AddUavOutput(dataBuffer);
-			pass.SetRenderFunction((dataBuffer, data, renderGraph), static (command, data) =>
-			{
-				var buffer = data.renderGraph.GetBufferResource(data.dataBuffer);
-				command.SetBufferData(buffer, data.data);
-			});
+			buffer.AddData((asset.VolumetricDistance, volumeSize.x, volumeSize.y, volumeSize.z));
 		}
 
 		var volumetricViewHandle = renderGraph.AddViewInfo(new(volumeWidth, volumeHeight), 1, asset.VolumetricSlices);
@@ -59,7 +53,7 @@ public class VolumetricLight : IDisposable
 			pass.ViewHandle = volumetricViewHandle;
 
 			pass.AddUavOutput(volumetricLightTemp);
-			pass.AddResources(stackalloc ResourceHandle[] { dataBuffer });
+			pass.AddResources(stackalloc ResourceHandle[] { volumetricLightData });
 			pass.AddResources<EnvironmentData, ViewData, PointLightData, BlueNoise1D>();
 
 			var viewInfo = renderGraph.GetViewInfo(volumetricViewHandle);
@@ -89,7 +83,7 @@ public class VolumetricLight : IDisposable
 		{
 			pass.ViewHandle = volumetricViewHandle;
 			var pixelToViewDir = Float4x4.PixelToNearClip(new(volumeWidth, volumeHeight), 0f, tanHalfFov, true, false);
-			pass.AddResources(stackalloc ResourceHandle[] { volumetricLightTemp, dataBuffer });
+			pass.AddResources(stackalloc ResourceHandle[] { volumetricLightTemp, volumetricLightData });
 			pass.AddResources<EnvironmentData, ViewData>();
 			pass.AddUavOutput(volumetricLight);
 
@@ -100,6 +94,6 @@ public class VolumetricLight : IDisposable
 			});
 		}
 
-		renderGraph.SetResource(new VolumetricLightData(volumetricLight, dataBuffer));
+		renderGraph.SetResource(new VolumetricLightData(volumetricLight, volumetricLightData));
 	}
 }
