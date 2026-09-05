@@ -10,13 +10,14 @@ public class NativeRenderPassSystem : IDisposable
 	private readonly NativeList<RenderTargetHandle> attachments = new(8, Allocator.Persistent);
 	private readonly NativeList<RenderTargetHandle> outputs = new(8, Allocator.Persistent);
 	private readonly NativeList<RenderTargetHandle> inputs = new(8, Allocator.Persistent);
-	private readonly NativeList<SubPassDescriptor> subPasses = new(8, Allocator.Persistent);
 	private readonly ResizableArray<SubPassDescriptor> subPassDescriptors = new();
 
 	private RenderTargetHandle? depthStencil;
 	private SubPassFlags flags;
 	private int depthSlice = -1;
 	private int volumeDepth = 1;
+	private int subPassStartIndex;
+
 	private readonly StringBuilder passNameBuilder = new();
 	private readonly List<NativePassDescriptor> nativePassDescriptors = new();
 
@@ -26,6 +27,7 @@ public class NativeRenderPassSystem : IDisposable
 	{
 		subPassDescriptors.Clear();
 		nativePassDescriptors.Clear();
+		subPassStartIndex = 0;
 	}
 
 	public Span<SubPassDescriptor> GetSubPassDescriptors(Range range)
@@ -68,7 +70,7 @@ public class NativeRenderPassSystem : IDisposable
 
 		this.inputs.Clear();
 
-		subPasses.Add(new() { inputs = inputs, colorOutputs = colorOutputs, flags = flags });
+		subPassDescriptors.Add(new() { inputs = inputs, colorOutputs = colorOutputs, flags = flags });
 		flags = SubPassFlags.None;
 	}
 
@@ -87,10 +89,10 @@ public class NativeRenderPassSystem : IDisposable
 
 		// TODO: Should this just call end subpass?
 		var passEndIndex = index - 1; // Since this is called from the first pass that is not the render pass index, the previous pass is the end index
-		var subPassRange = subPassDescriptors.AddRange(subPasses);
+		var subPassRange = subPassStartIndex..subPassDescriptors.Count;
+		subPassStartIndex = subPassDescriptors.Count;
 		nativePassDescriptors.Add(new(new(attachments.AsArray(), Allocator.Temp), subPassRange, depthStencilAttachmentIndex, passEndIndex, depthSlice, volumeDepth, passNameBuilder.ToString()));
 		attachments.Clear();
-		subPasses.Clear();
 		_ = passNameBuilder.Clear();
 		depthStencil = default;
 		depthSlice = -1;
@@ -110,7 +112,8 @@ public class NativeRenderPassSystem : IDisposable
 	public (int nativePassIndex, bool isNewSubPass) AddRenderPass(PassBuilder builder)
 	{
 		var isNativePass = builder.Outputs.Count > 0 || builder.DepthStencil.index != -1;
-		var canMergeWithExistingPass = isNativePass && subPasses.Length < 8 && builder.DepthSlice == depthSlice && builder.VolumeDepth == volumeDepth;
+		var subPassCount = subPassDescriptors.Count - subPassStartIndex;
+		var canMergeWithExistingPass = isNativePass && subPassCount < 8 && builder.DepthSlice == depthSlice && builder.VolumeDepth == volumeDepth;
 
 		// If depth stencil is set, we can only merge if it is equal
 		if (depthStencil.HasValue && builder.DepthStencil.index != -1 && builder.DepthStencil != depthStencil.Value)
@@ -234,6 +237,5 @@ public class NativeRenderPassSystem : IDisposable
 		attachments.Dispose();
 		outputs.Dispose();
 		inputs.Dispose();
-		subPasses.Dispose();
 	}
 }
