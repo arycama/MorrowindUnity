@@ -38,7 +38,8 @@ Shader "Terrain"
 		Pass
         {
             Name "RaytracedLuminance"
-            Tags{ "LightMode" = "RaytracedLuminance" }
+
+			Tags{ "LightMode" = "RayTracing" }
 
             HLSLPROGRAM
             #pragma raytracing Raytracing
@@ -50,7 +51,8 @@ Shader "Terrain"
 		Pass
         {
             Name "RaytracedTransmittance"
-            Tags{ "LightMode" = "RaytracedTransmittance" }
+
+			Tags{ "LightMode" = "RayTracing" }
 
             HLSLPROGRAM
             #pragma raytracing Raytracing

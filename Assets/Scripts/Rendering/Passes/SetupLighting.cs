@@ -248,6 +248,9 @@ public class SetupLighting
 			}
 		}
 
+		ListPool<ShadowRequest>.Release(pointShadowRequests);
+		ListPool<ShadowRequest>.Release(spotShadowRequests);
+
 		var fogEnabled = RenderSettings.fog;
 #if UNITY_EDITOR
 		if (SceneView.currentDrawingSceneView != null)
@@ -339,7 +342,6 @@ public class SetupLighting
 
 		using (var pass = renderGraph.AddRenderPass("Set Light Data"))
 		{
-			pass.ViewHandle = tileView; // TODO: Would be nice to not need to specify this always
 			pass.AddUavOutputs(stackalloc ResourceHandle[] { lightBuffer, lightDepthMinMaxBuffer, visibleLightBits });
 
 			pass.SetRenderFunction((pointLights, pointLightCount, lightBuffer, lightDepthMinMaxBuffer, lightDepthMinMax, visibleLightBits, renderGraph), static (command, data) =>

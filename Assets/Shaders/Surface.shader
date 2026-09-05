@@ -79,6 +79,8 @@
         {
             Name "RaytracedLuminance"
 
+			Tags{ "LightMode" = "RayTracing" }
+
             HLSLPROGRAM
             #pragma raytracing Raytracing
 			#pragma multi_compile _ _ALPHABLEND_ON
@@ -90,6 +92,8 @@
 		Pass
         {
             Name "RaytracedTransmittance"
+
+			Tags{ "LightMode" = "RayTracing" }
 
             HLSLPROGRAM
             #pragma raytracing Raytracing

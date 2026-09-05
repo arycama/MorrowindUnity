@@ -356,7 +356,10 @@ public class RenderGraph : IDisposable
 				if (i == target.firstWriteIndex && !target.isExternal)
 				{
 					if (handle.type == ResourceHandleType.RenderTarget)
-						AllocateTexture(new(handle.index), renderPass.ViewHandle, true, 1);
+					{
+						var descriptor = renderTargetSystem.GetDescriptor(target.descriptorIndex);
+						AllocateTexture(new(handle.index), descriptor.viewHandle, true, 1);
+					}
 
 					if (handle.type == ResourceHandleType.Buffer)
 						AllocateBuffer(new(handle.index));

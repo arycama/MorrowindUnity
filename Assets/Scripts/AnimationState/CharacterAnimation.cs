@@ -12,15 +12,15 @@ public class CharacterAnimation : MonoBehaviour
 	private AnimStateBase currentAnimState;
 
 	private Vector3 previousRootPosition, rootOffset;
-    private Animation animation;
-    private Transform rootBone;
+	private Animation animation;
+	private Transform rootBone;
 
 	public float LastUpdateTime { get; private set; }
 
-    public AnimationParameters Parameters { get; private set; } = new AnimationParameters();
+	public AnimationParameters Parameters { get; private set; } = new AnimationParameters();
 	public AnimationState CurrentState { get; private set; }
-    
-    public void Loop(AnimationEvent animationEvent)
+
+	public void Loop(AnimationEvent animationEvent)
 	{
 		animationEvent.animationState.time = animationEvent.floatParameter;
 	}
@@ -29,13 +29,13 @@ public class CharacterAnimation : MonoBehaviour
 	{
 		animation = GetComponent<Animation>();
 
-        currentAnimState = AnimationManager.Instance.IdleState;
-        currentAnimState.OnStateEnter(this);
+		currentAnimState = AnimationManager.Instance.IdleState;
+		currentAnimState.OnStateEnter(this);
 
-        Debug.Assert(!string.IsNullOrEmpty(currentAnimState.AnimationName), "Animation name can not be null or empty.");
-        animation.Play(currentAnimState.AnimationName);
+		Debug.Assert(!string.IsNullOrEmpty(currentAnimState.AnimationName), "Animation name can not be null or empty.");
+		_ = animation.Play(currentAnimState.AnimationName);
 
-        rootBone = transform.Find("Bip01");
+		rootBone = transform.Find("Bip01");
 		if (rootBone == null)
 		{
 			rootBone = transform.Find("Root Bone");
@@ -44,36 +44,31 @@ public class CharacterAnimation : MonoBehaviour
 		// Set some values
 		previousRootPosition = rootBone.position;
 		rootOffset = rootBone.localPosition;
-		CalculateMovementSpeed();
+		_ = CalculateMovementSpeed();
 	}
 
 	private void Update()
 	{
-        // Ensure current state is not null
-        Debug.Assert(currentAnimState != null, "Current animation state is null", gameObject);
-
 		CurrentState = animation[currentAnimState.AnimationName];
 
 		// Update current state and check if the current state  needs to transition to a new state
 		var result = currentAnimState?.OnStateUpdate(this, CurrentState == null ? false : CurrentState.enabled);
-		if(result != null)
+		if (result != null)
 		{
-            currentAnimState = result.Target;
-            currentAnimState.OnStateEnter(this);
-
-            Debug.Assert(!string.IsNullOrEmpty(currentAnimState.AnimationName), "Animation name can not be null or empty.");
+			currentAnimState = result.Target;
+			currentAnimState.OnStateEnter(this);
 
 			CurrentState = animation[currentAnimState.AnimationName];
 
 			// Set the time of the state to the EnterTime if specified
-			if(animation[currentAnimState.AnimationName] != null)
+			if (animation[currentAnimState.AnimationName] != null)
 			{
-				animation.Play(currentAnimState.AnimationName);
+				_ = animation.Play(currentAnimState.AnimationName);
 				CurrentState.normalizedTime = result.HasExitTime ? result.EnterTime : CurrentState.normalizedTime;
 			}
 		}
 
-		if(CurrentState != null)
+		if (CurrentState != null)
 		{
 			LastUpdateTime = CurrentState.normalizedTime;
 		}
@@ -81,9 +76,9 @@ public class CharacterAnimation : MonoBehaviour
 
 	private void LateUpdate()
 	{
-		rootBone.position = transform.position + transform.rotation * rootOffset; 
+		rootBone.position = transform.position + transform.rotation * rootOffset;
 	}
-	
+
 	/// <summary>
 	/// Calculates movement speed by the average distance between the Loop points of an animation. If no loop points exist, the start and stop positions are used instead.
 	/// </summary>

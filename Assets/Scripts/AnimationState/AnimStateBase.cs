@@ -11,7 +11,7 @@ public abstract class AnimStateBase : ScriptableObject
 	[SerializeField]
 	protected AnimationTransition[] transitions;
 
-    public abstract string AnimationName { get; }
+	public abstract string AnimationName { get; }
 
 	public virtual void OnStateEnter(CharacterAnimation animation) { }
 	public virtual void OnStateExit(CharacterAnimation animation) { }

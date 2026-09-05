@@ -5,8 +5,13 @@
 #pragma max_recursion_depth 2
 
 RWTexture2D<float3> DepthOfField;
-float ApertureRadius, FocusDistance;
-matrix PixelToViewDir;
+
+cbuffer DepthOfFieldData
+{
+	float ApertureRadius, FocusDistance;
+	float2 DepthOfFieldDataPadding0;
+	matrix PixelToViewDir;
+};
 
 [shader("miss")]
 void LuminanceMiss(inout RayColorPayload payload : SV_RayPayload)
