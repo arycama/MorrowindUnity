@@ -11,6 +11,8 @@ public class NativeRenderPassSystem : IDisposable
 	private readonly NativeList<RenderTargetHandle> outputs = new(8, Allocator.Persistent);
 	private readonly NativeList<RenderTargetHandle> inputs = new(8, Allocator.Persistent);
 	private readonly NativeList<SubPassDescriptor> subPasses = new(8, Allocator.Persistent);
+	private readonly ResizableArray<SubPassDescriptor> subPassDescriptors = new();
+
 	private RenderTargetHandle? depthStencil;
 	private SubPassFlags flags;
 	private int depthSlice = -1;
@@ -22,7 +24,13 @@ public class NativeRenderPassSystem : IDisposable
 
 	public void Clear()
 	{
+		subPassDescriptors.Clear();
 		nativePassDescriptors.Clear();
+	}
+
+	public Span<SubPassDescriptor> GetSubPassDescriptors(Range range)
+	{
+		return subPassDescriptors.AsSpan(range);
 	}
 
 	private void EndSubPass()
@@ -79,7 +87,8 @@ public class NativeRenderPassSystem : IDisposable
 
 		// TODO: Should this just call end subpass?
 		var passEndIndex = index - 1; // Since this is called from the first pass that is not the render pass index, the previous pass is the end index
-		nativePassDescriptors.Add(new(new(attachments.AsArray(), Allocator.Temp), new(subPasses.AsArray(), Allocator.Temp), depthStencilAttachmentIndex, passEndIndex, depthSlice, volumeDepth, passNameBuilder.ToString()));
+		var subPassRange = subPassDescriptors.AddRange(subPasses);
+		nativePassDescriptors.Add(new(new(attachments.AsArray(), Allocator.Temp), subPassRange, depthStencilAttachmentIndex, passEndIndex, depthSlice, volumeDepth, passNameBuilder.ToString()));
 		attachments.Clear();
 		subPasses.Clear();
 		_ = passNameBuilder.Clear();

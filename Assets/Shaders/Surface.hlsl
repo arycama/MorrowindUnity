@@ -93,7 +93,6 @@ FragmentOutput Fragment(FragmentInput input)
 		clip(color.a - threshold);
 	#endif
 	
-	
 	#ifdef GBUFFER
 		float3 emissive = input.color * color.rgb;
 		//if (ViewPosition.y < WaterHeight)

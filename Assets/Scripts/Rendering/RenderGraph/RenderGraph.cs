@@ -291,7 +291,8 @@ public class RenderGraph : IDisposable
 		Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(nativePassDesc.debugName)];
 		_ = Encoding.UTF8.GetBytes(nativePassDesc.debugName, debugNameUtf8);
 
-		command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, nativePassDesc.volumeDepth, viewInfo.samples, attachments.Span.AsArray(), nativePassDesc.depthIndex, -1, nativePassDesc.subpasses, debugNameUtf8);
+		var subPasses = nativeRenderPassSystem.GetSubPassDescriptors(nativePassDesc.subpasses);
+		command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, nativePassDesc.volumeDepth, viewInfo.samples, attachments.Span.AsArray(), nativePassDesc.depthIndex, -1, subPasses.AsArray(), debugNameUtf8);
 	}
 
 	private void EndNativeRenderPass(CommandBuffer command, int lastNativePass, int passIndex)
