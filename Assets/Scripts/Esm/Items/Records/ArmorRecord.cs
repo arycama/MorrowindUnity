@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Pool;
 
 namespace Esm
 {
@@ -73,6 +75,13 @@ namespace Esm
 			var charge = referenceData.Charge == -1 ? data.MaxCharge : referenceData.Charge;
 
 			Armor.Create(gameObject, this, referenceData);
+
+			using (var scope = ListPool<Renderer>.Get(out var renderers))
+			{
+				gameObject.GetComponentsInChildren(renderers);
+				foreach (var skinnedMeshRenderer in renderers)
+					skinnedMeshRenderer.rayTracingMode = RayTracingMode.Off;
+			}
 
 			return gameObject;
 		}

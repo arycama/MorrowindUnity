@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Esm;
 using UnityEngine;
 using Nif;
+using UnityEngine.Pool;
+using UnityEngine.Experimental.Rendering;
 
 [Serializable]
 public class EquippedPart
@@ -56,7 +58,15 @@ public class EquippedPart
 
 		var reader = BsaFileReader.LoadArchiveFileData($"meshes\\{model}");
 		var niFile = new NiFile(reader);
-		niFile.CreateGameObject(parent);
+		var gameObject = niFile.CreateGameObject(parent);
+
+		using (var scope = ListPool<Renderer>.Get(out var renderers))
+		{
+			gameObject.GetComponentsInChildren(renderers);
+			foreach (var skinnedMeshRenderer in renderers)
+				skinnedMeshRenderer.rayTracingMode = RayTracingMode.Off;
+		}
+
 		equipment = niFile.CreatedObjects;
 	}
 

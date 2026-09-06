@@ -37,7 +37,7 @@ public class CharacterEquipment : MonoBehaviour
 
 	public WeaponType GetWeaponType()
 	{
-		if(EquippedWeapon == null)
+		if (EquippedWeapon == null)
 		{
 			return WeaponType.HandToHand;
 		}
@@ -48,7 +48,7 @@ public class CharacterEquipment : MonoBehaviour
 	// Called by the animation system
 	public void Attach()
 	{
-		if(EquippedWeapon != null)
+		if (EquippedWeapon != null)
 		{
 			EquippedWeapon.PickupSound.PlaySoundAtPoint(transform.position);
 			(EquippedWeapon as IEquippable).Equip(body.PartParts);
@@ -70,7 +70,7 @@ public class CharacterEquipment : MonoBehaviour
 		weaponEquipped = false;
 	}
 
-	public void EquipWeapon(WeaponRecord weapon,bool playSound = true)
+	public void EquipWeapon(WeaponRecord weapon, bool playSound = true)
 	{
 		// Play equip sound if needed (Don't want to play it when NPC's spawn for example)
 		if (playSound)
@@ -83,11 +83,11 @@ public class CharacterEquipment : MonoBehaviour
 		{
 			// Unequip any existing weapons from the character's hands
 			// Need this null check, as hand-to-hand could be equipped
-			if(EquippedWeapon != null)
+			if (EquippedWeapon != null)
 			{
 				(EquippedWeapon as IEquippable).Unequip(body.PartParts);
 			}
-			
+
 			(weapon as IEquippable).Equip(body.PartParts);
 			OnWeaponChanged?.Invoke(weapon.Data.type);
 		}
@@ -101,7 +101,7 @@ public class CharacterEquipment : MonoBehaviour
 	{
 		// First, unequip any existing items if they are equipped
 		IEquippable equippedItem;
-		if(equippedItems.TryGetValue(equipment.EquipmentSlot, out equippedItem))
+		if (equippedItems.TryGetValue(equipment.EquipmentSlot, out equippedItem))
 		{
 			equippedItem.Unequip(body.PartParts);
 		}
@@ -121,7 +121,7 @@ public class CharacterEquipment : MonoBehaviour
 
 	public void UnequipWeapon()
 	{
-		if(EquippedWeapon == null)
+		if (EquippedWeapon == null)
 		{
 			return;
 		}
@@ -140,7 +140,7 @@ public class CharacterEquipment : MonoBehaviour
 	public void Unequip(IEquippable equipment)
 	{
 		IEquippable itemData;
-		if(!equippedItems.TryGetValue(equipment.EquipmentSlot, out itemData))
+		if (!equippedItems.TryGetValue(equipment.EquipmentSlot, out itemData))
 		{
 			return;
 		}
@@ -153,7 +153,7 @@ public class CharacterEquipment : MonoBehaviour
 	public bool IsEquipped(IEquippable equipment)
 	{
 		IEquippable itemData;
-		return (equippedItems.TryGetValue(equipment.EquipmentSlot, out itemData) && 
+		return (equippedItems.TryGetValue(equipment.EquipmentSlot, out itemData) &&
 			itemData == equipment);
 	}
 }

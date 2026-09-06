@@ -1,9 +1,8 @@
 using System;
-using Unity.Collections;
 
 public readonly struct NativePassDescriptor
 {
-	public readonly NativeArray<RenderTargetHandle> attachments;
+	public readonly Range attachments;
 	public readonly Range subpasses;
 	public readonly int depthIndex;
 	public readonly int passEndIndex;
@@ -11,7 +10,7 @@ public readonly struct NativePassDescriptor
 	public readonly int depthSlice;
 	public readonly int volumeDepth;
 
-	public NativePassDescriptor(NativeArray<RenderTargetHandle> attachments, Range subpasses, int depthIndex, int passEndIndex, int depthSlice, int volumeDepth, string debugName)
+	public NativePassDescriptor(Range attachments, Range subpasses, int depthIndex, int passEndIndex, int depthSlice, int volumeDepth, string debugName)
 	{
 		this.attachments = attachments;
 		this.subpasses = subpasses;

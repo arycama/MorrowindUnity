@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using Esm;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Pool;
 
 namespace Esm
 {
@@ -23,9 +25,18 @@ namespace Esm
 		public static GameObject Create(BodyPartRecord record, ReferenceData data, Transform parent = null)
 		{
 			var reader = BsaFileReader.LoadArchiveFileData($"meshes\\{record.Model}");
-			return new Nif.NiFile(reader).CreateGameObject(parent);
+			var gameObject = new Nif.NiFile(reader).CreateGameObject(parent);
+
+			using (var scope = ListPool<Renderer>.Get(out var renderers))
+			{
+				gameObject.GetComponentsInChildren(renderers);
+				foreach (var skinnedMeshRenderer in renderers)
+					skinnedMeshRenderer.rayTracingMode = RayTracingMode.Off;
+			}
+
+			return gameObject;
 		}
-		
+
 		// Used to create Npc bodies
 		public static BodyPartRecord GetBodyPart(Race race, BodyPartPiece bodyPartType, bool isFemale) => RaceBodyParts[race].GetPart(bodyPartType, isFemale);
 

@@ -49,15 +49,12 @@ public abstract class AIRecord : CreatableRecord, IInventoryRecord
 		}
 
 		var gameObject = niFile.CreateGameObject(parent);
-
-		if(gameObject == null)
-		{
+		if (gameObject == null)
 			return null;
-		}
 
 		gameObject.name = name;
 
-        CharacterInventory.Create(gameObject, this, referenceData);
+		_ = CharacterInventory.Create(gameObject, this, referenceData);
 
 		var equipment = gameObject.AddComponent<CharacterEquipment>();
 

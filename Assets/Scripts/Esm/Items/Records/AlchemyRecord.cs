@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Pool;
 
 namespace Esm
 {
@@ -55,6 +57,13 @@ namespace Esm
 			var gameObject = base.CreateGameObject(referenceData, parent);
 
 			Alchemy.Create(gameObject, this, referenceData);
+
+			using (var scope = ListPool<Renderer>.Get(out var renderers))
+			{
+				gameObject.GetComponentsInChildren(renderers);
+				foreach (var skinnedMeshRenderer in renderers)
+					skinnedMeshRenderer.rayTracingMode = RayTracingMode.Static;
+			}
 
 			return gameObject;
 		}

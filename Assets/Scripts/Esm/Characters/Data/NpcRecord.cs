@@ -1,11 +1,13 @@
 ﻿using System.Collections.Generic;
 using Esm;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Pool;
 
 public class NpcRecord : AIRecord
 {
 	[SerializeField] private string cellEscortFollow;
-	[SerializeField, EnumFlags]	private NpcFlags npcFlags;
+	[SerializeField, EnumFlags] private NpcFlags npcFlags;
 	[SerializeField] private List<string> destinations = new List<string>();
 	[SerializeField] private BodyPartRecord hair;
 	[SerializeField] private BodyPartRecord head;
@@ -23,7 +25,7 @@ public class NpcRecord : AIRecord
 	public NpcRecordData NpcSubData => npcData;
 	public Race Race => race;
 	public Script Script => script;
-	
+
 	public override void Initialize(System.IO.BinaryReader reader, RecordHeader header)
 	{
 		while (reader.BaseStream.Position < header.DataEndPos)
@@ -118,7 +120,7 @@ public class NpcRecord : AIRecord
 		var body = gameObject.AddComponent<CharacterBody>();
 		body.Initialize(race, head, hair, npcFlags.HasFlag(NpcFlags.Female));
 
-		DialogController.Create(gameObject, this, referenceData);
+		_ = DialogController.Create(gameObject, this, referenceData);
 
 		var characterData = gameObject.AddComponent<Character>();
 		characterData.Initialize(this);
@@ -134,9 +136,16 @@ public class NpcRecord : AIRecord
 			collider.gameObject.layer = LayerMask.NameToLayer("Npc");
 		}
 
+		using (var scope = ListPool<SkinnedMeshRenderer>.Get(out var skinnedMeshRenderers))
+		{
+			gameObject.GetComponentsInChildren(skinnedMeshRenderers);
+			foreach (var skinnedMeshRenderer in skinnedMeshRenderers)
+				skinnedMeshRenderer.rayTracingMode = RayTracingMode.Off;
+		}
+
 		AddServices(gameObject);
 
-		CharacterAudio.Create(gameObject);
+		_ = CharacterAudio.Create(gameObject);
 
 		return gameObject;
 	}
@@ -147,7 +156,7 @@ public class NpcRecord : AIRecord
 		var services = aiData.GetServices();
 
 		// Give all Npc's persuasion
-		PersuasionService.Create(gameObject);
+		_ = PersuasionService.Create(gameObject);
 
 		foreach (var service in services)
 		{

@@ -217,8 +217,9 @@ public class RenderGraph : IDisposable
 		var viewInfo = viewInfos[renderPass.ViewHandle.index];
 
 		// Resolve the attachments to their final values
-		var attachments = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
-		foreach (var texture in nativePassDesc.attachments)
+		var attachments = nativeRenderPassSystem.GetAttachments(nativePassDesc.attachments);
+		var attachmendIndices = new FixedBuffer<AttachmentDescriptor>(stackalloc AttachmentDescriptor[8]);
+		foreach (var texture in attachments)
 		{
 			ref var target = ref resourceInfo[texture];
 			var descriptor = renderTargetSystem.GetDescriptor(target.descriptorIndex);
@@ -285,14 +286,14 @@ public class RenderGraph : IDisposable
 				attachmentDesc.storeAction = RenderBufferStoreAction.DontCare;
 			}
 
-			_ = attachments.Add(attachmentDesc);
+			_ = attachmendIndices.Add(attachmentDesc);
 		}
 
 		Span<byte> debugNameUtf8 = stackalloc byte[Encoding.UTF8.GetByteCount(nativePassDesc.debugName)];
 		_ = Encoding.UTF8.GetBytes(nativePassDesc.debugName, debugNameUtf8);
 
 		var subPasses = nativeRenderPassSystem.GetSubPassDescriptors(nativePassDesc.subpasses);
-		command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, nativePassDesc.volumeDepth, viewInfo.samples, attachments.Span.AsArray(), nativePassDesc.depthIndex, -1, subPasses.AsArray(), debugNameUtf8);
+		command.BeginRenderPass(viewInfo.size.x, viewInfo.size.y, nativePassDesc.volumeDepth, viewInfo.samples, attachmendIndices.Span.AsArray(), nativePassDesc.depthIndex, -1, subPasses.AsArray(), debugNameUtf8);
 	}
 
 	private void EndNativeRenderPass(CommandBuffer command, int lastNativePass, int passIndex)
@@ -301,7 +302,8 @@ public class RenderGraph : IDisposable
 
 		// Free any resources from the previous pass if possible
 		var nativePassDesc = nativeRenderPassSystem.GetDescriptor(lastNativePass);
-		foreach (var attachment in nativePassDesc.attachments)
+		var attachments = nativeRenderPassSystem.GetAttachments(nativePassDesc.attachments);
+		foreach (var attachment in attachments)
 		{
 			ref var target = ref resourceInfo[attachment];
 

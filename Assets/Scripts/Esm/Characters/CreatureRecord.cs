@@ -1,7 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using Esm;
+using UnityEngine.Pool;
+using UnityEngine.Experimental.Rendering;
 
 public class CreatureRecord : AIRecord
 {
@@ -84,7 +84,15 @@ public class CreatureRecord : AIRecord
 	public override GameObject CreateGameObject(ReferenceData referenceData, Transform parent = null)
 	{
 		var gameObject = base.CreateGameObject(referenceData, parent);
-		CharacterAudio.Create(gameObject, soundGeneratorName);
+		_ = CharacterAudio.Create(gameObject, soundGeneratorName);
+
+		using (var scope = ListPool<Renderer>.Get(out var renderers))
+		{
+			gameObject.GetComponentsInChildren(renderers);
+			foreach (var skinnedMeshRenderer in renderers)
+				skinnedMeshRenderer.rayTracingMode = RayTracingMode.Off;
+		}
+
 		return gameObject;
 	}
 
@@ -94,4 +102,4 @@ public class CreatureRecord : AIRecord
 		input.CreatureFlags = flags;
 		return input;
 	}
-}	
+}

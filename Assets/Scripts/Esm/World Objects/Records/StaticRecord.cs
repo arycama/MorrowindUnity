@@ -27,18 +27,18 @@ public class StaticRecord : CreatableRecord
 	{
 		var gameObject = base.CreateGameObject(referenceData, parent);
 
-        var meshRenderers = ListPool<MeshRenderer>.Get();
-        gameObject.GetComponentsInChildren(meshRenderers);
-        foreach (var meshRenderer in meshRenderers)
-        {
-            meshRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
-            meshRenderer.staticShadowCaster = true;
+		var meshRenderers = ListPool<MeshRenderer>.Get();
+		gameObject.GetComponentsInChildren(meshRenderers);
+		foreach (var meshRenderer in meshRenderers)
+		{
+			meshRenderer.motionVectorGenerationMode = MotionVectorGenerationMode.Camera;
+			meshRenderer.staticShadowCaster = true;
 			meshRenderer.rayTracingMode = RayTracingMode.Static;
 			//childGameObjects[i].gameObject.isStatic = true;
 			//CellManager.StaticBatching.Add(childGameObjects[i].gameObject);
 		}
-        ListPool<MeshRenderer>.Release(meshRenderers);
+		ListPool<MeshRenderer>.Release(meshRenderers);
 
-        return gameObject;
+		return gameObject;
 	}
 }

@@ -24,7 +24,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 7681
   <RaytracedOcclusion>k__BackingField: 0
-  <RaytracedShadows>k__BackingField: 0
+  <RaytracedShadows>k__BackingField: 1
   <RaytracedDiffuse>k__BackingField: 0
   <RaytracedSpecular>k__BackingField: 0
   <RaytracedDepthOfField>k__BackingField: 0

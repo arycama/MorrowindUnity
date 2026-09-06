@@ -1,5 +1,7 @@
 ﻿using System;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Pool;
 
 namespace Esm
 {
@@ -57,6 +59,13 @@ namespace Esm
 			var ownerData = new OwnerData(referenceData.Owner, referenceData.Global, referenceData.Faction, referenceData.Rank);
 
 			Book.Create(gameObject, this, referenceData);
+
+			using (var scope = ListPool<Renderer>.Get(out var renderers))
+			{
+				gameObject.GetComponentsInChildren(renderers);
+				foreach (var skinnedMeshRenderer in renderers)
+					skinnedMeshRenderer.rayTracingMode = RayTracingMode.Static;
+			}
 
 			return gameObject;
 		}

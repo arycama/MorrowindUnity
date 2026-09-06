@@ -1,5 +1,7 @@
 ﻿using System;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering;
+using UnityEngine.Pool;
 
 namespace Esm
 {
@@ -53,6 +55,13 @@ namespace Esm
 			var uses = referenceData.Health == -1 ? data.MaxUses : referenceData.Health;
 
 			Probe.Create(gameObject, this, referenceData);
+
+			using (var scope = ListPool<Renderer>.Get(out var renderers))
+			{
+				gameObject.GetComponentsInChildren(renderers);
+				foreach (var skinnedMeshRenderer in renderers)
+					skinnedMeshRenderer.rayTracingMode = RayTracingMode.Static;
+			}
 
 			return gameObject;
 		}

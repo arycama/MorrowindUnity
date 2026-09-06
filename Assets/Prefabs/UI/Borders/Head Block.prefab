@@ -786,6 +786,8 @@ MonoBehaviour:
   m_FlexibleWidth: 2
   m_FlexibleHeight: -1
   m_LayoutPriority: 1
+  m_MaxWidth: -1
+  m_MaxHeight: -1
 --- !u!1 &1994336634009454
 GameObject:
   m_ObjectHideFlags: 0
