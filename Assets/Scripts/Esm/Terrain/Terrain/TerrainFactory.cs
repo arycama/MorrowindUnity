@@ -114,7 +114,7 @@ public class TerrainFactory
 			{
 				var flip = (x & 1) == (y & 1);
 
-				if (!flip)
+				if (flip)
 				{
 					indices[ti + 0] = (ushort)(vi);
 					indices[ti + 1] = (ushort)(vi + cellsPerRow + 1);

@@ -32,6 +32,8 @@
 			#pragma multi_compile _ VOLUMETRIC_LIGHT_ON
 			#pragma multi_compile _ SHADOWS_ON
             #pragma multi_compile _ POINT_LIGHTS_ON
+            #pragma multi_compile _ RAYTRACED_SPECULAR
+            #pragma multi_compile _ RAYTRACED_REFRACTION
 			#define FORWARD
 			#include "Water.hlsl"
 			ENDHLSL

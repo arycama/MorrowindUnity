@@ -19,7 +19,7 @@ public class NewPipeline : RenderPipelineBase
 	private readonly LightCulling lightCulling;
 	private readonly Bloom bloom;
 	private readonly RayTracingAccelerationStructure rtas;
-	private readonly RayTracingShader occlusionRaytracingShader, shadowRaytracingShader, diffuseRaytracingShader, depthOfFieldRaytracingShader;
+	private readonly RayTracingShader occlusionRaytracingShader, shadowRaytracingShader, diffuseRaytracingShader, specularRaytracingShader, refractionRaytracingShader, depthOfFieldRaytracingShader;
 
 	public NewPipeline(NewPipelineAsset asset)
 	{
@@ -36,6 +36,8 @@ public class NewPipeline : RenderPipelineBase
 		occlusionRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindOcclusion");
 		shadowRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindShadow");
 		diffuseRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindDiffuse");
+		specularRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindSpecular");
+		refractionRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindRefraction");
 		depthOfFieldRaytracingShader = Resources.Load<RayTracingShader>("Raytracing/MorrowindDepthOfField");
 
 		var rasSettings = new RayTracingAccelerationStructure.Settings(RayTracingAccelerationStructure.ManagementMode.Automatic, RayTracingAccelerationStructure.RayTracingModeMask.Everything, asset.RayTracingLayerMask);
@@ -160,6 +162,38 @@ public class NewPipeline : RenderPipelineBase
 			renderGraph.SetResource<RaytracedDiffuse>(new(raytracedDiffuse));
 		}
 
+		if (asset.RaytracedSpecular)
+		{
+			using var pass = renderGraph.AddRenderPass("Raytraced Specular");
+			var raytracedSpecular = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("ScreenSpaceSpecular"));
+			pass.AddUavOutput(raytracedSpecular);
+			pass.AddResources<CameraDepth, AlbedoNormal, SceneRtas, BlueNoise2D, ViewData, EnvironmentData>();
+
+			pass.SetRenderFunction((specularRaytracingShader, camera.pixelWidth, camera.pixelHeight), static (command, data) =>
+			{
+				command.SetRayTracingShaderPass(data.specularRaytracingShader, "RaytracedLuminance");
+				command.DispatchRays(data.specularRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
+			});
+
+			renderGraph.SetResource<RaytracedSpecular>(new(raytracedSpecular));
+		}
+
+		if (asset.RaytracedRefraction)
+		{
+			using var pass = renderGraph.AddRenderPass("Raytraced Refraction");
+			var raytracedRefraction = renderGraph.GetTexture(new(viewHandle, GraphicsFormat.B10G11R11_UFloatPack32), Shader.PropertyToID("ScreenSpaceRefraction"));
+			pass.AddUavOutput(raytracedRefraction);
+			pass.AddResources<CameraDepth, AlbedoNormal, SceneRtas, BlueNoise2D, ViewData, EnvironmentData>();
+
+			pass.SetRenderFunction((refractionRaytracingShader, camera.pixelWidth, camera.pixelHeight), static (command, data) =>
+			{
+				command.SetRayTracingShaderPass(data.refractionRaytracingShader, "RaytracedLuminance");
+				command.DispatchRays(data.refractionRaytracingShader, "RayGeneration", (uint)data.pixelWidth, (uint)data.pixelHeight, 1);
+			});
+
+			renderGraph.SetResource<RaytracedRefraction>(new(raytracedRefraction));
+		}
+
 		using (var pass = renderGraph.AddRenderPass("Deferred"))
 		{
 			pass.ViewHandle = viewHandle;
@@ -197,7 +231,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = renderGraph.GetResource<CameraDepth>().handle;
 			pass.AddOutput(renderGraph.GetResource<CameraColor>().handle);
-			pass.AddResources<EnvironmentData, ViewData, PointLightData, VolumetricLightData>();
+			pass.AddResources<EnvironmentData, ViewData, PointLightData, VolumetricLightData, RaytracedSpecular, RaytracedRefraction>();
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 			var rendererList = context.CreateRendererList(ref rendererParams);
@@ -213,13 +247,9 @@ public class NewPipeline : RenderPipelineBase
 			using (var buffer = renderGraph.AddConstantBuffer("DepthOfFieldData", out depthOfFieldData))
 			{
 				var tanHalfFovY = Geometry.TanHalfFovDegrees(camera.fieldOfView);
-				var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
 				var focalLength = 0.5f * (asset.SensorSize / 1000.0f) / tanHalfFovY;
 				var apertureRadius = 0.5f * focalLength / asset.Aperture;
 				buffer.AddData((apertureRadius, asset.FocusDistance, 0, 0));
-
-				var pixelToViewDir = Float4x4.PixelToNearClip(new(camera.pixelWidth, camera.pixelHeight), 0f, tanHalfFov, true, false);
-				buffer.AddData(pixelToViewDir);
 			}
 
 			using var pass = renderGraph.AddRenderPass("Raytraced Depth of Field");

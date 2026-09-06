@@ -68,6 +68,9 @@ public class SetupView
 		buffer.AddData((camera.transform.WorldPosition(), 0f));
 		buffer.AddData((tanHalfFov, 0, 0));
 
+		var pixelToNear = Float4x4.PixelToNearClip(new(camera.pixelWidth, camera.pixelHeight), 0f, tanHalfFov, true, false);
+		buffer.AddData(pixelToNear);
+
 		if (isFlipped)
 			renderGraph.SetResource(new ViewDataFlipped(viewData));
 		else

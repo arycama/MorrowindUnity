@@ -91,6 +91,7 @@ cbuffer ViewData
 	float ViewDataPadding0;
 	float2 TanHalfFov;
 	float2 ViewDataPadding1;
+	matrix PixelToNearClip;
 };
 
 //cbuffer CascadeData

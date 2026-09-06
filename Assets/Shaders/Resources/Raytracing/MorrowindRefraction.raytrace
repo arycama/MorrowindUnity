@@ -1,0 +1,44 @@
+#include "../../Common.hlsl"
+#include "Packages/com.arycama.customrenderpipeline/ShaderLibrary/Raytracing.hlsl"
+
+#pragma max_recursion_depth 2
+
+RWTexture2D<float3> ScreenSpaceRefraction;
+
+[shader("miss")]
+void LuminanceMiss(inout RayColorPayload payload : SV_RayPayload)
+{
+	//payload.color += payload.transmittance * FogColor;
+}
+
+[shader("miss")]
+void TransmittanceMiss(inout RayTransmittancePayload payload : SV_RayPayload)
+{
+	payload.transmittance = 1.0;
+}
+
+[shader("raygeneration")]
+void RayGeneration()
+{
+	uint2 position = DispatchRaysIndex().xy;
+		
+	float3 worldDir = normalize(MultiplyVector(ViewToWorld, MultiplyVector(PixelToNearClip, float3(position + 0.5, 1.0))));
+	float3 worldPosition = IntersectRayPlane(ViewPosition, worldDir, 0.0, float3(0.0, 1.0, 0.0));
+	float3 N = float3(0.0, 1.0, 0.0);
+	float3 L = refract(worldDir, N, 1.0 / 1.34);
+	
+	RayColorPayload payload;
+	payload.color = 0.0;
+	payload.transmittance = 1.0;
+		
+	RayDesc ray;
+	ray.Origin = worldPosition;
+	ray.Direction = L;
+	ray.TMin = 0.1;
+	ray.TMax = 8192.0;
+		
+	uint flags = RAY_FLAG_CULL_BACK_FACING_TRIANGLES;
+	TraceRay(SceneRaytracingAccelerationStructure, flags, 0xFF, 0, 1, 0, ray, payload);
+		
+	ScreenSpaceRefraction[position] = payload.color;
+}

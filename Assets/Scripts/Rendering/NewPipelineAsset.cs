@@ -21,6 +21,7 @@ public class NewPipelineAsset : RenderPipelineAsset<NewPipeline>
 	[field: SerializeField] public bool RaytracedShadows { get; private set; }
 	[field: SerializeField] public bool RaytracedDiffuse { get; private set; }
 	[field: SerializeField] public bool RaytracedSpecular { get; private set; }
+	[field: SerializeField] public bool RaytracedRefraction { get; private set; }
 	[field: SerializeField] public bool RaytracedDepthOfField { get; private set; }
 
 	[field: SerializeField] public LightingSettings Lighting { get; private set; }
