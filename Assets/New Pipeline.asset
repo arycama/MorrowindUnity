@@ -17,7 +17,7 @@ MonoBehaviour:
   <VolumetricTileSize>k__BackingField: 8
   <VolumetricSlices>k__BackingField: 64
   <VolumetricDistance>k__BackingField: 8192
-  <FocusDistance>k__BackingField: 10
+  <FocusDistance>k__BackingField: 64
   <SensorSize>k__BackingField: 24
   <Aperture>k__BackingField: 0.0625
   <RayTracingLayerMask>k__BackingField:
