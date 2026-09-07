@@ -31,7 +31,6 @@ public class RenderGraph : IDisposable
 
 	public void Dispose()
 	{
-		nativeRenderPassSystem.Dispose();
 		bufferSystem.Dispose();
 	}
 

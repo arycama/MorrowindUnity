@@ -1,17 +1,16 @@
 {
-    "name": "Rendering",
+    "name": "UnrenderGraph",
     "rootNamespace": "",
     "references": [
         "GUID:234d1a8f0805642469a12616ea271347",
-        "GUID:e0cd26848372d4e5c891c569017e11f1",
-        "GUID:2457909f6954cfb40a3f822678076f2e"
+        "GUID:e0cd26848372d4e5c891c569017e11f1"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],
-    "autoReferenced": true,
+    "autoReferenced": false,
     "defineConstraints": [],
     "versionDefines": [],
     "noEngineReferences": false

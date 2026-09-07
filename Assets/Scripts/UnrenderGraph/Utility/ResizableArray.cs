@@ -40,4 +40,9 @@ public class ResizableArray<T>
 		Count = newCount;
 		return range;
 	}
+
+	public bool Contains(T item)
+	{
+		return Array.IndexOf(items, item) >= 0;
+	}
 }
