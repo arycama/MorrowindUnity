@@ -12,6 +12,12 @@
       "source": "embedded",
       "dependencies": {}
     },
+    "com.arycama.unrendergraph": {
+      "version": "file:UnRenderGraph",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.arycama.webglnoiseunity": {
       "version": "https://github.com/arycama/WebGLNoiseUnity.git",
       "depth": 0,

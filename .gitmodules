@@ -1,3 +1,6 @@
 [submodule "unmath"]
 	path = Packages/com.arycama.unmath
 	url = https://github.com/arycama/unmath.git
+[submodule "UnRenderGraph"]
+	path = Packages/UnRenderGraph
+	url = https://github.com/arycama/UnRenderGraph.git

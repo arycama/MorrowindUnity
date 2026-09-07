@@ -51,6 +51,7 @@ public class PostProcessVisualStudioCSProject : AssetPostprocessor
 
 			WriteProject("Unmath", "Packages/com.arycama.unmath");
 			WriteProject("CustomRenderPipeline", "Packages/com.arycama.customrenderpipeline");
+			WriteProject("UnRenderGraph", "Packages/UnRenderGraph");
 
 			if (isChanged)
 				doc.Save(slnxFile);
