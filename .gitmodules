@@ -4,3 +4,9 @@
 [submodule "UnRenderGraph"]
 	path = Packages/UnRenderGraph
 	url = https://github.com/arycama/UnRenderGraph.git
+[submodule "Packages/com.arycama.customrenderpipeline"]
+	path = Packages/com.arycama.customrenderpipeline
+	url = https://github.com/arycama/customrenderpipeline.git
+[submodule "Packages/UnRenderGraph"]
+	path = Packages/UnRenderGraph
+	url = https://github.com/arycama/unrendergraph.git
