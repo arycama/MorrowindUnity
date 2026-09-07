@@ -27,17 +27,7 @@ public class ConstantBufferBuilder : IDisposable
 	void IDisposable.Dispose()
 	{
 		var handle = renderGraph.GetBuffer(new(1, buffer.Count, GraphicsBuffer.Target.Constant), Shader.PropertyToID(PropertyName));
-		var range = renderGraph.AddConstantBufferData(buffer.AsSpan());
-
-		using var pass = renderGraph.AddRenderPass("Set Constant Buffer");
-		pass.AddUavOutput(handle);
-
-		pass.SetRenderFunction((handle, renderGraph, range), static (command, data) =>
-		{
-			var buffer = data.renderGraph.GetBufferResource(data.handle);
-			command.SetBufferData(buffer, data.renderGraph.GetConstantBufferData(data.range).AsArray());
-		});
-
+		renderGraph.AddConstantBufferData(buffer.AsSpan(), handle);
 		buffer.Clear();
 	}
 }

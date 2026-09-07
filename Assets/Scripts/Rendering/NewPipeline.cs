@@ -112,7 +112,7 @@ public class NewPipeline : RenderPipelineBase
 			});
 		}
 
-		lightCulling.Render(viewHandle);
+		//lightCulling.Render(viewHandle);
 		volumetricLight.Render(camera);
 
 		if (asset.RaytracedOcclusion)

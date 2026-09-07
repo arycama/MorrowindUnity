@@ -8,8 +8,8 @@ using static Unmath.Math;
 public class NativeRenderPassSystem : IDisposable
 {
 	private readonly NativeList<RenderTargetHandle> attachments = new(8, Allocator.Persistent);
-	private readonly NativeList<RenderTargetHandle> outputs = new(8, Allocator.Persistent);
-	private readonly NativeList<RenderTargetHandle> inputs = new(8, Allocator.Persistent);
+	private readonly ResizableArray<RenderTargetHandle> outputs = new();
+	private readonly ResizableArray<RenderTargetHandle> inputs = new();
 	private readonly ResizableArray<RenderTargetHandle> attachmentDescriptors = new();
 	private readonly ResizableArray<SubPassDescriptor> subPassDescriptors = new();
 
@@ -45,8 +45,8 @@ public class NativeRenderPassSystem : IDisposable
 	private void EndSubPass()
 	{
 		// Resolve the attachment handles into attachment indiecs
-		var colorOutputs = new AttachmentIndexArray(outputs.Length);
-		for (var i = 0; i < outputs.Length; i++)
+		var colorOutputs = new AttachmentIndexArray(outputs.Count);
+		for (var i = 0; i < outputs.Count; i++)
 		{
 			var outputHandle = outputs[i];
 			for (var j = 0; j < attachments.Length; j++)
@@ -61,8 +61,8 @@ public class NativeRenderPassSystem : IDisposable
 
 		outputs.Clear();
 
-		var inputs = new AttachmentIndexArray(this.inputs.Length);
-		for (var i = 0; i < this.inputs.Length; i++)
+		var inputs = new AttachmentIndexArray(this.inputs.Count);
+		for (var i = 0; i < this.inputs.Count; i++)
 		{
 			var inputHandle = this.inputs[i];
 			for (var j = 0; j < attachments.Length; j++)
@@ -164,7 +164,7 @@ public class NativeRenderPassSystem : IDisposable
 			if (canMergeSubPass)
 			{
 				// Check if all input indices are equal to existing ones. We don't check more than this, because this allows subpasses with no inputs to be merged with subpasses with inputs.
-				for (var i = 0; i < Min(builder.Inputs.Count, inputs.Length); i++)
+				for (var i = 0; i < Min(builder.Inputs.Count, inputs.Count); i++)
 				{
 					if (inputs[i] == builder.Inputs[i])
 						continue;
@@ -176,7 +176,7 @@ public class NativeRenderPassSystem : IDisposable
 				// Check outputs
 				if (canMergeSubPass)
 				{
-					if (builder.Outputs.Count != outputs.Length)
+					if (builder.Outputs.Count != outputs.Count)
 						canMergeSubPass = false;
 					else
 					{
@@ -198,7 +198,7 @@ public class NativeRenderPassSystem : IDisposable
 			if (!canMergeSubPass || !isInNativePass)
 			{
 				// If there is already a subpass, end it
-				var isInSubPass = outputs.Length > 0 || depthStencil.HasValue;
+				var isInSubPass = outputs.Count > 0 || depthStencil.HasValue;
 				if (isInSubPass)
 				{
 					EndSubPass();
@@ -245,7 +245,5 @@ public class NativeRenderPassSystem : IDisposable
 	public void Dispose()
 	{
 		attachments.Dispose();
-		outputs.Dispose();
-		inputs.Dispose();
 	}
 }

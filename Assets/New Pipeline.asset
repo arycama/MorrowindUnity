@@ -26,8 +26,8 @@ MonoBehaviour:
   <RaytracedOcclusion>k__BackingField: 0
   <RaytracedShadows>k__BackingField: 0
   <RaytracedDiffuse>k__BackingField: 0
-  <RaytracedSpecular>k__BackingField: 1
-  <RaytracedRefraction>k__BackingField: 1
+  <RaytracedSpecular>k__BackingField: 0
+  <RaytracedRefraction>k__BackingField: 0
   <RaytracedDepthOfField>k__BackingField: 0
   <Lighting>k__BackingField:
     <MicroShadows>k__BackingField: 1

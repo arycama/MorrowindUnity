@@ -21,6 +21,7 @@ public class RenderGraph : IDisposable
 	private readonly PassBuilder passBuilder;
 	private readonly ConstantBufferBuilder constantBufferBuilder;
 	private readonly ResizableArray<byte> constantBufferData = new();
+	private readonly List<(BufferHandle handle, Range range)> constantBufferRanges = new();
 	public int FrameIndex { get; private set; }
 
 	public RenderGraph()
@@ -142,7 +143,7 @@ public class RenderGraph : IDisposable
 		return resourceInfo[resource].lastWriteIndex != -1;
 	}
 
-	private void SetResourceWriteIndex(ResourceHandle handle, int index)
+	private void SetResourceWriteIndex(ResourceHandle handle, int index, bool isAlsoRead = true)
 	{
 		ref var target = ref resourceInfo[handle];
 
@@ -155,7 +156,8 @@ public class RenderGraph : IDisposable
 
 		// Writes are also treataed as reads for the purposes of resource tracking, this stops a texture from being discarded as a future write (Eg a 2nd pass to the same RT) would not be treated as a read otherwise, and would cause the texture to be discarded after the first pass
 		// TODO: This might not be neccessary and might make culling passes not possible?
-		target.lastReadIndex = index;
+		if (isAlsoRead)
+			target.lastReadIndex = index;
 	}
 
 	public void ExportTexture(RenderTargetHandle handle, RenderTargetIdentifier id)
@@ -207,6 +209,22 @@ public class RenderGraph : IDisposable
 	{
 		ref var target = ref resourceInfo[handle];
 		target.resourceIndex = bufferSystem.AllocateBuffer(handle, target.descriptorIndex);
+	}
+
+	public void AddConstantBufferData(ReadOnlySpan<byte> data, BufferHandle handle)
+	{
+		var range = constantBufferData.AddRange(data);
+		constantBufferRanges.Add((handle, range));
+		SetResourceWriteIndex(handle, 0, false);
+	}
+
+	public ConstantBufferBuilder AddConstantBuffer(string name, out BufferHandle handle)
+	{
+		// Constant buffer gets built inside a using statement and then the actual descriptor is created after. So
+		// a handle that indicates the next available index is returned so that it will point to the correct data once the builder has completed
+		handle = new(resourceInfo.Count);
+		constantBufferBuilder.PropertyName = name;
+		return constantBufferBuilder;
 	}
 
 	private void BeginNativeRenderPass(CommandBuffer command, int renderPassIndex, IRenderPass renderPass)
@@ -326,6 +344,20 @@ public class RenderGraph : IDisposable
 	public void Execute(CommandBuffer command)
 	{
 		nativeRenderPassSystem.CloseIfNeeded(renderPasses.Count);
+
+		// Fill constant buffers
+		foreach (var (handle, range) in constantBufferRanges)
+		{
+			// Don't allocate+fill buffers that are never read
+			var target = resourceInfo[handle];
+			if (target.lastReadIndex == -1)
+				continue;
+
+			AllocateBuffer(new(handle.index));
+			var data = constantBufferData.AsSpan(range);
+			var buffer = GetBufferResource(handle);
+			command.SetBufferData(buffer, data.AsArray());
+		}
 
 		var lastNativePass = -1;
 		for (var i = 0; i < renderPasses.Count; i++)
@@ -476,26 +508,8 @@ public class RenderGraph : IDisposable
 		rayTracingAccelerationStructures.Clear();
 		textures.Clear();
 		constantBufferData.Clear();
+		constantBufferRanges.Clear();
 		renderTargetSystem.FreeUnreleasedResources();
 		bufferSystem.FreeUnreleasedResources();
-	}
-
-	public Range AddConstantBufferData(ReadOnlySpan<byte> data)
-	{
-		return constantBufferData.AddRange(data);
-	}
-
-	public Span<byte> GetConstantBufferData(Range range)
-	{
-		return constantBufferData.AsSpan(range);
-	}
-
-	public ConstantBufferBuilder AddConstantBuffer(string name, out BufferHandle handle)
-	{
-		// Constant buffer gets built inside a using statement and then the actual descriptor is created after. So
-		// a handle that indicates the next available index is returned so that it will point to the correct data once the builder has completed
-		handle = new(resourceInfo.Count);
-		constantBufferBuilder.PropertyName = name;
-		return constantBufferBuilder;
 	}
 }
