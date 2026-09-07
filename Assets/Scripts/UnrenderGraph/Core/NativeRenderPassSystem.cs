@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Unity.Collections;
 using UnityEngine.Rendering;
 using static Unmath.Math;
 
-public class NativeRenderPassSystem : IDisposable
+public class NativeRenderPassSystem
 {
-	private readonly NativeList<RenderTargetHandle> attachments = new(8, Allocator.Persistent);
+	private readonly ResizableArray<RenderTargetHandle> attachments = new();
 	private readonly ResizableArray<RenderTargetHandle> outputs = new();
 	private readonly ResizableArray<RenderTargetHandle> inputs = new();
 	private readonly ResizableArray<RenderTargetHandle> attachmentDescriptors = new();
@@ -49,7 +48,7 @@ public class NativeRenderPassSystem : IDisposable
 		for (var i = 0; i < outputs.Count; i++)
 		{
 			var outputHandle = outputs[i];
-			for (var j = 0; j < attachments.Length; j++)
+			for (var j = 0; j < attachments.Count; j++)
 			{
 				if (outputHandle != attachments[j])
 					continue;
@@ -65,7 +64,7 @@ public class NativeRenderPassSystem : IDisposable
 		for (var i = 0; i < this.inputs.Count; i++)
 		{
 			var inputHandle = this.inputs[i];
-			for (var j = 0; j < attachments.Length; j++)
+			for (var j = 0; j < attachments.Count; j++)
 			{
 				if (inputHandle != attachments[j])
 					continue;
@@ -85,7 +84,7 @@ public class NativeRenderPassSystem : IDisposable
 	{
 		// Resolve depthStencil index
 		var depthStencilAttachmentIndex = -1;
-		for (var i = 0; i < attachments.Length; i++)
+		for (var i = 0; i < attachments.Count; i++)
 		{
 			if (attachments[i].index != depthStencil)
 				continue;
@@ -96,8 +95,7 @@ public class NativeRenderPassSystem : IDisposable
 
 		// TODO: Should this just call end subpass?
 		var passEndIndex = index - 1; // Since this is called from the first pass that is not the render pass index, the previous pass is the end index
-
-		var attachmentRange = attachmentDescriptors.AddRange(attachments);
+		var attachmentRange = attachmentDescriptors.AddRange(attachments.AsSpan());
 		var subPassRange = subPassStartIndex..subPassDescriptors.Count;
 		subPassStartIndex = subPassDescriptors.Count;
 
@@ -111,7 +109,7 @@ public class NativeRenderPassSystem : IDisposable
 
 	public void CloseIfNeeded(int index)
 	{
-		var isInNativePass = attachments.Length > 0 || depthStencil.HasValue;
+		var isInNativePass = attachments.Count > 0 || depthStencil.HasValue;
 		if (isInNativePass)
 		{
 			EndSubPass();
@@ -132,7 +130,7 @@ public class NativeRenderPassSystem : IDisposable
 		// If any current attachments are read as regualr resources, we need to start a new render pass
 		if (canMergeWithExistingPass)
 		{
-			foreach (var attachment in attachments)
+			foreach (var attachment in attachments.AsSpan())
 			{
 				if (!builder.Resources.Contains(attachment))
 					continue;
@@ -143,7 +141,7 @@ public class NativeRenderPassSystem : IDisposable
 		}
 
 		// If we have a current pass in progress we can't merge with, end it
-		var isInNativePass = attachments.Length > 0 || depthStencil.HasValue;
+		var isInNativePass = attachments.Count > 0 || depthStencil.HasValue;
 		if (isInNativePass && !canMergeWithExistingPass)
 		{
 			EndSubPass();
@@ -240,10 +238,5 @@ public class NativeRenderPassSystem : IDisposable
 		}
 
 		return (nativePassIndex, isNewSubPass);
-	}
-
-	public void Dispose()
-	{
-		attachments.Dispose();
 	}
 }

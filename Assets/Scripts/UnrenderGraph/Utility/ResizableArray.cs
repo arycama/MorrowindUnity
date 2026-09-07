@@ -43,6 +43,6 @@ public class ResizableArray<T>
 
 	public bool Contains(T item)
 	{
-		return Array.IndexOf(items, item) >= 0;
+		return Array.IndexOf(items, item, 0, Count) >= 0;
 	}
 }

@@ -13,8 +13,8 @@ using Bounds = Unmath.Bounds;
 
 public class SetupLighting
 {
-	private readonly NativeList<LightShadowCasterCullingInfo> perLightInfos = new(1, Allocator.Persistent);
-	private readonly NativeList<ShadowSplitData> splitBuffer = new(1, Allocator.Persistent);
+	private readonly ResizableArray<LightShadowCasterCullingInfo> perLightInfos = new();
+	private readonly ResizableArray<ShadowSplitData> splitBuffer = new();
 
 	private readonly RenderGraph renderGraph;
 	private readonly LightingSettings lighting;
@@ -97,8 +97,8 @@ public class SetupLighting
 
 					var shadowSplitData = CalculateShadowSplitData(worldToLightClip, lightDirection, true);
 					shadowSplitData.shadowCascadeBlendCullingFactor = 1;
-					splitRange = new RangeInt(splitBuffer.Length, 1);
-					splitBuffer.Add(in shadowSplitData);
+					splitRange = new RangeInt(splitBuffer.Count, 1);
+					splitBuffer.Add(shadowSplitData);
 
 					var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, i);
 					var rendererList = context.CreateShadowRendererList(ref shadowDrawingSettings);
@@ -163,7 +163,7 @@ public class SetupLighting
 				if (hasShadows && cullingResults.GetShadowCasterBounds(i, out _) && visibleLight.lightType == LightType.Point)
 				{
 					shadowIndex = (uint)pointShadowRequests.Count;
-					splitRange = new RangeInt(splitBuffer.Length, 6);
+					splitRange = new RangeInt(splitBuffer.Count, 6);
 
 					for (var j = 0; j < 6; j++)
 					{
@@ -202,8 +202,8 @@ public class SetupLighting
 
 		context.CullShadowCasters(cullingResults, new ShadowCastersCullingInfos
 		{
-			perLightInfos = perLightInfos.AsArray(),
-			splitBuffer = splitBuffer.AsArray()
+			perLightInfos = perLightInfos.AsSpan().AsArray(),
+			splitBuffer = splitBuffer.AsSpan().AsArray()
 		});
 
 		perLightInfos.Clear();

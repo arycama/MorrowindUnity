@@ -99,20 +99,27 @@ public class RenderGraph : IDisposable
 		var inputStart = handles.Count;
 		foreach (var resource in builder.Resources)
 		{
-			resourceInfo[resource].lastReadIndex = builder.Index;
+			SetResourceReadIndex(resource, builder.Index);
 			handles.Add(resource);
 		}
 
 		var resourceRange = inputStart..handles.Count;
-
 		if (builder.DepthStencil.index != -1)
+		{
+			// Depth stencil is counted as write and read since it is also 'read' for depth tests
 			SetResourceWriteIndex(builder.DepthStencil, builder.Index);
+			SetResourceReadIndex(builder.DepthStencil, builder.Index);
+		}
 
 		foreach (var output in builder.Outputs)
+		{
+			// Outputs can be 'read' in the case of blending etc.
 			SetResourceWriteIndex(output, builder.Index);
+			SetResourceReadIndex(output, builder.Index);
+		}
 
 		foreach (var input in builder.Inputs)
-			SetResourceWriteIndex(input, builder.Index);
+			SetResourceReadIndex(input, builder.Index);
 
 		// UAV resources are handled specially
 		var uavStart = handles.Count;
@@ -120,6 +127,7 @@ public class RenderGraph : IDisposable
 		{
 			handles.Add(handle);
 			SetResourceWriteIndex(handle, builder.Index);
+			SetResourceReadIndex(handle, builder.Index);
 		}
 
 		var uavResourceRange = uavStart..handles.Count;
@@ -143,7 +151,13 @@ public class RenderGraph : IDisposable
 		return resourceInfo[resource].lastWriteIndex != -1;
 	}
 
-	private void SetResourceWriteIndex(ResourceHandle handle, int index, bool isAlsoRead = true)
+	private void SetResourceReadIndex(ResourceHandle handle, int index)
+	{
+		ref var target = ref resourceInfo[handle];
+		target.lastReadIndex = index;
+	}
+
+	private void SetResourceWriteIndex(ResourceHandle handle, int index)
 	{
 		ref var target = ref resourceInfo[handle];
 
@@ -153,11 +167,6 @@ public class RenderGraph : IDisposable
 
 		// We also track the last write index so that we know when to resolve if msaa is enabled
 		target.lastWriteIndex = index;
-
-		// Writes are also treataed as reads for the purposes of resource tracking, this stops a texture from being discarded as a future write (Eg a 2nd pass to the same RT) would not be treated as a read otherwise, and would cause the texture to be discarded after the first pass
-		// TODO: This might not be neccessary and might make culling passes not possible?
-		if (isAlsoRead)
-			target.lastReadIndex = index;
 	}
 
 	public void ExportTexture(RenderTargetHandle handle, RenderTargetIdentifier id)
@@ -215,7 +224,7 @@ public class RenderGraph : IDisposable
 	{
 		var range = constantBufferData.AddRange(data);
 		constantBufferRanges.Add((handle, range));
-		SetResourceWriteIndex(handle, 0, false);
+		SetResourceWriteIndex(handle, 0);
 	}
 
 	public ConstantBufferBuilder AddConstantBuffer(string name, out BufferHandle handle)

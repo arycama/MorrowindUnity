@@ -15,9 +15,4 @@ public static class NativeArrayExtensions
 
 		return array;
 	}
-
-	public static NativeArray<T> ToNativeArray<T>(this Span<T> span, Allocator allocator = Allocator.Temp) where T : unmanaged
-	{
-		return new(span.AsArray(), allocator);
-	}
 }
