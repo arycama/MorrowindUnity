@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Unity.Collections;
-using Unity.Collections.LowLevel.Unsafe;
+using System.Runtime.InteropServices;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -19,8 +18,8 @@ public class SetupLighting
 	private readonly RenderGraph renderGraph;
 	private readonly LightingSettings lighting;
 	private readonly LightCulling.Settings lightCulling;
-	private LightData[] pointLights = new LightData[8];
-	private float[] pointLightDepths = new float[8];
+	private readonly ResizableArray<LightData> pointLights = new();
+	private readonly ResizableArray<float> pointLightDepths = new();
 	private int[] lightDepthMinMax;
 
 	public SetupLighting(RenderGraph renderGraph, LightingSettings lighting, LightCulling.Settings lightCulling)
@@ -32,6 +31,9 @@ public class SetupLighting
 
 	public void Render(Camera camera, CullingResults cullingResults, ScriptableRenderContext context)
 	{
+		pointLights.Clear();
+		pointLightDepths.Clear();
+
 		var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
 
@@ -48,15 +50,12 @@ public class SetupLighting
 		var far = camera.farClipPlane;
 		var viewSize = new Int2(camera.pixelWidth, camera.pixelHeight);
 
-		var lightCount = cullingResults.visibleLights.Length;
-		Array.Resize(ref pointLights, Max(pointLights.Length, lightCount));
-		Array.Resize(ref pointLightDepths, Max(pointLightDepths.Length, lightCount));
-		var pointLightCount = 0;
-
 		var pointShadowRequests = ListPool<ShadowRequest>.Get();
 		var spotShadowRequests = ListPool<ShadowRequest>.Get();
+		var worldToLightClip = Float4x4.Identity;
+		var hasSunShadow = false;
 
-		for (var i = 0; i < lightCount; i++)
+		for (var i = 0; i < cullingResults.visibleLights.Length; i++)
 		{
 			var visibleLight = cullingResults.visibleLights[i];
 			var lightToWorld = (Float4x4)visibleLight.localToWorldMatrix;
@@ -91,7 +90,7 @@ public class SetupLighting
 						}
 					}
 
-					var worldToLightClip = Float4x4.OrthoReverseZ(bounds).Mul(worldToLight);
+					worldToLightClip = Float4x4.OrthoReverseZ(bounds).Mul(worldToLight);
 					var viewToLight = Float4x4.Rotate(lightRotation.InverseRotate(viewRotation));
 					viewToSunShadow = Float4x4.OrthoReverseZSample(bounds).Mul(viewToLight);
 
@@ -99,24 +98,7 @@ public class SetupLighting
 					shadowSplitData.shadowCascadeBlendCullingFactor = 1;
 					splitRange = new RangeInt(splitBuffer.Count, 1);
 					splitBuffer.Add(shadowSplitData);
-
-					var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, i);
-					var rendererList = context.CreateShadowRendererList(ref shadowDrawingSettings);
-
-					using var pass = renderGraph.AddRenderPass("Directional Shadows");
-					pass.ViewHandle = shadowView;
-					pass.DepthStencil = sunShadow;
-					pass.AddResource<ViewData>();
-
-					pass.SetRenderFunction((rendererList, worldToLightClip, lighting), (command, data) =>
-					{
-						command.SetGlobalDepthBias(data.lighting.DirectionalShadowBias, data.lighting.DirectionalShadowSlopeBias);
-						command.SetGlobalInt("ZClip", 0);
-						command.SetGlobalMatrix("WorldToShadowClip", data.worldToLightClip);
-						command.DrawRendererList(rendererList);
-						command.SetGlobalDepthBias(0.0f, 0.0f);
-						command.SetGlobalInt("ZClip", 1);
-					});
+					hasSunShadow = true;
 				}
 			}
 
@@ -187,9 +169,8 @@ public class SetupLighting
 				var shadowProjectionX = 1.0f + radius / (nearPlane - radius);
 				var shadowProjectionY = nearPlane * radius / (radius - nearPlane);
 
-				pointLights[pointLightCount] = new(position, distanceScale, forward, angleScale, visibleLight.finalColor.Float3(), angleOffset, cullingSphere, shadowIndex, shadowProjectionX, shadowProjectionY);
-				pointLightDepths[pointLightCount] = cullingSphere.z - cullingSphere.w * 1.075f;
-				pointLightCount++;
+				pointLights.Add(new(position, distanceScale, forward, angleScale, visibleLight.finalColor.Float3(), angleOffset, cullingSphere, shadowIndex, shadowProjectionX, shadowProjectionY));
+				pointLightDepths.Add(cullingSphere.z - cullingSphere.w * 1.075f);
 			}
 
 			perLightInfos.Add(new()
@@ -208,48 +189,6 @@ public class SetupLighting
 
 		perLightInfos.Clear();
 		splitBuffer.Clear();
-
-		var pointShadowCount = Max(1, pointShadowRequests.Count);
-		var pointShadowView = renderGraph.AddViewInfo(lighting.PointShadowResolution, 1, pointShadowCount);
-		var pointShadows = renderGraph.GetTexture(new(pointShadowView, GraphicsFormat.D16_UNorm, true, dimension: TextureDimension.Tex2DArray), Shader.PropertyToID("PointShadows"));
-
-		// TODO: Can we do this in a render pass friendly way
-		using (var pass = renderGraph.AddRenderPass("Render Shadows Setup"))
-		{
-			pass.ViewHandle = pointShadowView;
-			pass.DepthStencil = pointShadows;
-
-			pass.SetRenderFunction((renderGraph, pointShadows), static (command, data) =>
-			{
-				//command.SetRenderTarget(data.renderGraph.GetTextureResource(data.pointShadows), 0, CubemapFace.Unknown, -1);
-				//command.ClearRenderTarget(true, false, default);
-			});
-		}
-
-		for (var i = 0; i < pointShadowRequests.Count; i++)
-		{
-			using (var pass = renderGraph.AddRenderPass("Render Shadow"))
-			{
-				pass.ViewHandle = pointShadowView;
-				pass.DepthStencil = pointShadows;
-				pass.DepthSlice = i;
-				var request = pointShadowRequests[i];
-				var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, request.LightIndex);
-				var rendererList = context.CreateShadowRendererList(ref shadowDrawingSettings);
-
-				var worldToShadowClip = request.ProjectionMatrix.Mul(request.ViewMatrix);
-				pass.SetRenderFunction((worldToShadowClip, rendererList, lighting.PointShadowBias, lighting.PointShadowSlopeBias), static (command, data) =>
-				{
-					command.SetGlobalDepthBias(data.PointShadowBias, data.PointShadowSlopeBias);
-					command.SetGlobalMatrix("WorldToShadowClip", data.worldToShadowClip);
-					command.DrawRendererList(data.rendererList);
-					command.SetGlobalDepthBias(0.0f, 0.0f);
-				});
-			}
-		}
-
-		ListPool<ShadowRequest>.Release(pointShadowRequests);
-		ListPool<ShadowRequest>.Release(spotShadowRequests);
 
 		var fogEnabled = RenderSettings.fog;
 #if UNITY_EDITOR
@@ -277,17 +216,16 @@ public class SetupLighting
 		}
 
 		// Sort lights by view depth
-		Array.Sort(pointLightDepths, pointLights);
+		pointLights.Sort(pointLightDepths);
 
 		Array.Resize(ref lightDepthMinMax, lightCulling.DepthSlices);
-		for (var i = 0; i < lightDepthMinMax.Length; i++)
-			lightDepthMinMax[i] = BitPack(ushort.MaxValue, 16, 0) | BitPack(0, 16, 16);
+		Array.Fill(lightDepthMinMax, BitPack(ushort.MaxValue, 16, 0) | BitPack(0, 16, 16));
 
 		// Add sorted lights to list
 		var binWidth = far / lightCulling.DepthSlices;
 		var intersectingLightCount = 0;
 
-		for (var i = 0; i < pointLightCount; i++)
+		for (var i = 0; i < pointLights.Count; i++)
 		{
 			var light = pointLights[i];
 
@@ -317,15 +255,9 @@ public class SetupLighting
 				intersectingLightCount = i + 1;
 		}
 
-		pointLightCount = Max(1, pointLightCount); // TO avoid buffer size 0 errors
 		var tileCountX = DivRoundUp(viewSize.x, lightCulling.TileSize);
 		var tileCountY = DivRoundUp(viewSize.y, lightCulling.TileSize);
-		var lightIndexCount = DivRoundUp(pointLightCount, 32);
-
-		var lightBuffer = renderGraph.GetBuffer(new(pointLightCount, UnsafeUtility.SizeOf<LightData>()), Shader.PropertyToID("PointLights"));
-		var lightDepthMinMaxBuffer = renderGraph.GetBuffer(new(lightCulling.DepthSlices), Shader.PropertyToID("LightDepthMinMax"));
-		var tileView = renderGraph.AddViewInfo(new(tileCountX, tileCountY), 1, lightIndexCount);
-		var visibleLightBits = renderGraph.GetTexture(new(tileView, GraphicsFormat.R32_UInt, true, dimension: TextureDimension.Tex2DArray), Shader.PropertyToID("VisibleLightBits"));
+		var lightIndexCount = DivRoundUp(pointLights.Count, 32);
 
 		BufferHandle pointLightData;
 		using (var buffer = renderGraph.AddConstantBuffer("PointLightData", out pointLightData))
@@ -340,22 +272,94 @@ public class SetupLighting
 			buffer.AddData(Rcp(binWidth));
 		}
 
+		var lightBuffer = renderGraph.GetBuffer(new(Max(1, pointLights.Count), Marshal.SizeOf<LightData>()), Shader.PropertyToID("PointLights"));
+		var lightDepthMinMaxBuffer = renderGraph.GetBuffer(new(lightCulling.DepthSlices), Shader.PropertyToID("LightDepthMinMax"));
 		using (var pass = renderGraph.AddRenderPass("Set Light Data"))
 		{
-			pass.AddUavOutputs(stackalloc ResourceHandle[] { lightBuffer, lightDepthMinMaxBuffer, visibleLightBits });
-
-			pass.SetRenderFunction((pointLights, pointLightCount, lightBuffer, lightDepthMinMaxBuffer, lightDepthMinMax, visibleLightBits, renderGraph), static (command, data) =>
+			pass.AddUavOutputs(stackalloc ResourceHandle[] { lightBuffer, lightDepthMinMaxBuffer });
+			pass.SetRenderFunction((pointLights, lightBuffer, lightDepthMinMaxBuffer, lightDepthMinMax, renderGraph), static (command, data) =>
 			{
-				command.SetBufferData(data.renderGraph.GetBufferResource(data.lightBuffer), data.pointLights, 0, 0, data.pointLightCount);
+				if (data.pointLights.Count > 0)
+					command.SetBufferData(data.renderGraph.GetBufferResource(data.lightBuffer), data.pointLights.AsSpan().AsArray(), 0, 0, data.pointLights.Count);
 				command.SetBufferData(data.renderGraph.GetBufferResource(data.lightDepthMinMaxBuffer), data.lightDepthMinMax);
+			});
+		}
 
-				// Clear the light bitmask texture (TODO: Can we do this in another way)
+		// Clear the light bitmask texture (TODO: Can we do this in another way)
+		var tileView = renderGraph.AddViewInfo(new(tileCountX, tileCountY), 1, Max(1, lightIndexCount));
+		var visibleLightBits = renderGraph.GetTexture(new(tileView, GraphicsFormat.R32_UInt, true, dimension: TextureDimension.Tex2DArray), Shader.PropertyToID("VisibleLightBits"));
+		using (var pass = renderGraph.AddRenderPass("Set Light Data"))
+		{
+			pass.AddUavOutput(visibleLightBits);
+			pass.SetRenderFunction((visibleLightBits, renderGraph), static (command, data) =>
+			{
 				command.SetRenderTarget(data.renderGraph.GetTextureResource(data.visibleLightBits), 0, CubemapFace.Unknown, -1);
 				command.ClearRenderTarget(false, true, default);
 			});
 		}
 
-		renderGraph.SetResource(new PointLightData(pointLightData, lightBuffer, lightDepthMinMaxBuffer, visibleLightBits, pointShadows, pointLightCount, intersectingLightCount));
+		// Sun shadows
+		if (hasSunShadow)
+		{
+			using var pass = renderGraph.AddRenderPass("Directional Shadows");
+			pass.ViewHandle = shadowView;
+			pass.DepthStencil = sunShadow;
+			pass.AddResource<ViewData>();
+
+			var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, mainLightIndex);
+			var rendererList = context.CreateShadowRendererList(ref shadowDrawingSettings);
+			pass.SetRenderFunction((rendererList, worldToLightClip, lighting), (command, data) =>
+			{
+				command.SetGlobalDepthBias(data.lighting.DirectionalShadowBias, data.lighting.DirectionalShadowSlopeBias);
+				command.SetGlobalInt("ZClip", 0);
+				command.SetGlobalMatrix("WorldToShadowClip", data.worldToLightClip);
+				command.DrawRendererList(rendererList);
+				command.SetGlobalDepthBias(0.0f, 0.0f);
+				command.SetGlobalInt("ZClip", 1);
+			});
+		}
+
+		// Point shadows
+		var pointShadowCount = Max(1, pointShadowRequests.Count);
+		var pointShadowView = renderGraph.AddViewInfo(lighting.PointShadowResolution, 1, pointShadowCount);
+		var pointShadows = renderGraph.GetTexture(new(pointShadowView, GraphicsFormat.D16_UNorm, true, dimension: TextureDimension.Tex2DArray), Shader.PropertyToID("PointShadows"));
+
+		// Clear. This just sets the whole array as active which clears it. TODO: Can we do this in a render pass friendly way
+		using (var pass = renderGraph.AddRenderPass("Render Shadows Setup"))
+		{
+			pass.ViewHandle = pointShadowView;
+			pass.DepthStencil = pointShadows;
+			pass.SetRenderFunction((renderGraph, pointShadows), static (command, data) =>
+			{
+			});
+		}
+
+		for (var i = 0; i < pointShadowRequests.Count; i++)
+		{
+			using (var pass = renderGraph.AddRenderPass("Point Shadows"))
+			{
+				pass.ViewHandle = pointShadowView;
+				pass.DepthStencil = pointShadows;
+				pass.DepthSlice = i;
+				var request = pointShadowRequests[i];
+				var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, request.LightIndex);
+				var rendererList = context.CreateShadowRendererList(ref shadowDrawingSettings);
+
+				var worldToShadowClip = request.ProjectionMatrix.Mul(request.ViewMatrix);
+				pass.SetRenderFunction((worldToShadowClip, rendererList, lighting.PointShadowBias, lighting.PointShadowSlopeBias), static (command, data) =>
+				{
+					command.SetGlobalDepthBias(data.PointShadowBias, data.PointShadowSlopeBias);
+					command.SetGlobalMatrix("WorldToShadowClip", data.worldToShadowClip);
+					command.DrawRendererList(data.rendererList);
+					command.SetGlobalDepthBias(0.0f, 0.0f);
+				});
+			}
+		}
+
+		ListPool<ShadowRequest>.Release(pointShadowRequests);
+		ListPool<ShadowRequest>.Release(spotShadowRequests);
+
+		renderGraph.SetResource(new PointLightData(pointLightData, lightBuffer, lightDepthMinMaxBuffer, visibleLightBits, pointShadows, pointLights.Count, intersectingLightCount));
 	}
 
 	private static ShadowSplitData CalculateShadowSplitData(Float4x4 matrix, Float3 lightDirection, bool skipNearPlane)

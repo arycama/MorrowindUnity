@@ -25,12 +25,15 @@ public class LightCulling
 
 	public void Render(ViewHandle viewHandle)
 	{
+		var pointLightData = renderGraph.GetResource<PointLightData>();
+		if (!renderGraph.IsResourceWritten(pointLightData.visibleLightBits))
+			return;
+
 		using var pass = renderGraph.AddRenderPass("Light Culling");
 
 		pass.ViewHandle = viewHandle;
 		pass.DepthStencil = renderGraph.GetResource<CameraDepth>().handle;
 
-		var pointLightData = renderGraph.GetResource<PointLightData>();
 		pass.AddUavOutput(pointLightData.visibleLightBits);
 		pass.AddResources<ViewData, PointLightData>();
 

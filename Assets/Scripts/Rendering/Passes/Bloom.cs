@@ -42,6 +42,9 @@ public class Bloom
 
 	public void Render(Camera camera)
 	{
+		if (settings.Strength == 0.0f)
+			return;
+
 		var mipCount = Min(settings.MaxMips, (int)Log2(Max(camera.pixelWidth, camera.pixelHeight)));
 		Span<RenderTargetHandle> bloomIds = stackalloc RenderTargetHandle[mipCount];
 		Span<ViewHandle> viewHandles = stackalloc ViewHandle[mipCount];
