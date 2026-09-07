@@ -24,8 +24,8 @@
 			HLSLPROGRAM
 			#pragma vertex Vertex
 			#pragma fragment Fragment
-			#pragma use_dxc
 			#pragma multi_compile _ VOLUMETRIC_LIGHT_ON
+			#pragma require WaveMath
 			#include "Sky.hlsl"
 			ENDHLSL
 		}

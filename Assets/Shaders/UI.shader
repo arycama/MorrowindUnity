@@ -50,6 +50,7 @@
 			#pragma vertex Vertex
 			#pragma fragment Fragment
 			#pragma multi_compile_local _ TEXT_ON
+			#pragma require WaveMath
 			#include "UI.hlsl"
 			ENDHLSL
 		}

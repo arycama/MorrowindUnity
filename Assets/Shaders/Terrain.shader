@@ -16,6 +16,7 @@ Shader "Terrain"
 			#pragma vertex Vertex
 			#pragma fragment Fragment
 			#define GBUFFER
+			#pragma require WaveMath
 			#include "Terrain.hlsl"
 			ENDHLSL
 		}
@@ -31,6 +32,7 @@ Shader "Terrain"
 			#pragma vertex Vertex
 			#pragma fragment Fragment
 			#define SHADOW
+			#pragma require WaveMath
 			#include "Terrain.hlsl"
 			ENDHLSL
 		}

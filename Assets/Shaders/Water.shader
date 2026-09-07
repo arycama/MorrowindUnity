@@ -35,6 +35,7 @@
             #pragma multi_compile _ RAYTRACED_SPECULAR
             #pragma multi_compile _ RAYTRACED_REFRACTION
 			#define FORWARD
+			#pragma require WaveMath
 			#include "Water.hlsl"
 			ENDHLSL
 		}

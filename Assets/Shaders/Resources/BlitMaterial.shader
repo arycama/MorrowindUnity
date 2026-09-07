@@ -14,6 +14,7 @@ Shader "Hidden/Blit Material"
             #pragma multi_compile _ DIRECT
             #pragma multi_compile _ RAYTRACED_DEPTH_OF_FIELD
             #pragma multi_compile _ BLOOM
+			#pragma require WaveMath
             #include "BlitMaterial.hlsl"
             ENDHLSL
         }
@@ -30,6 +31,7 @@ Shader "Hidden/Blit Material"
             #pragma multi_compile _ RAYTRACED_DEPTH_OF_FIELD
             #pragma multi_compile _ BLOOM
             #define DEPTH
+			#pragma require WaveMath
             #include "BlitMaterial.hlsl"
             ENDHLSL
         }

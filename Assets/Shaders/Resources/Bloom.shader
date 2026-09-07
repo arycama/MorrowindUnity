@@ -15,6 +15,7 @@ Shader "Hidden/Morrowind Bloom"
             #pragma vertex VertexFullscreenTriangleMinimal
             #pragma fragment FragmentDownsample
             #define FIRST
+			#pragma require WaveMath
             #include "Bloom.hlsl"
             ENDHLSL
         }
@@ -26,6 +27,7 @@ Shader "Hidden/Morrowind Bloom"
             HLSLPROGRAM
             #pragma vertex VertexFullscreenTriangleMinimal
             #pragma fragment FragmentDownsample
+			#pragma require WaveMath
             #include "Bloom.hlsl"
             ENDHLSL
         }
@@ -39,6 +41,7 @@ Shader "Hidden/Morrowind Bloom"
             HLSLPROGRAM
             #pragma vertex VertexFullscreenTriangleMinimal
             #pragma fragment FragmentUpsample
+			#pragma require WaveMath
             #include "Bloom.hlsl"
             ENDHLSL
         }

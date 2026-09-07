@@ -25,6 +25,7 @@ Shader "Hidden/Morrowind Deferred"
                 #define SCREEN_SPACE_SHADOWS
             #endif
 
+			#pragma require WaveMath
             #include "Deferred.hlsl"
             ENDHLSL
         }

@@ -33,6 +33,7 @@
 			#pragma fragment Fragment
 			#pragma multi_compile_instancing
 			#define GBUFFER
+			#pragma require WaveMath
 			#include "Surface.hlsl"
 			ENDHLSL
 		}
@@ -54,6 +55,7 @@
 			#pragma multi_compile _ SHADOWS_ON
             #pragma multi_compile _ POINT_LIGHTS_ON
 			#define FORWARD
+			#pragma require WaveMath
 			#include "Surface.hlsl"
 			ENDHLSL
 		}
@@ -71,6 +73,7 @@
 			#pragma multi_compile_instancing
 			#pragma multi_compile _ _ALPHABLEND_ON
 			#define SHADOW
+			#pragma require WaveMath
 			#include "Surface.hlsl"
 			ENDHLSL
 		}
