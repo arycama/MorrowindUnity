@@ -324,36 +324,24 @@ public class SetupLighting
 		var pointShadowView = renderGraph.AddViewInfo(lighting.PointShadowResolution, 1, pointShadowCount);
 		var pointShadows = renderGraph.GetTexture(new(pointShadowView, GraphicsFormat.D16_UNorm, true, dimension: TextureDimension.Tex2DArray), Shader.PropertyToID("PointShadows"));
 
-		// Clear. This just sets the whole array as active which clears it. TODO: Can we do this in a render pass friendly way
-		using (var pass = renderGraph.AddRenderPass("Render Shadows Setup"))
-		{
-			pass.ViewHandle = pointShadowView;
-			pass.DepthStencil = pointShadows;
-			pass.SetRenderFunction((renderGraph, pointShadows), static (command, data) =>
-			{
-			});
-		}
-
 		for (var i = 0; i < pointShadowRequests.Count; i++)
 		{
-			using (var pass = renderGraph.AddRenderPass("Point Shadows"))
-			{
-				pass.ViewHandle = pointShadowView;
-				pass.DepthStencil = pointShadows;
-				pass.DepthSlice = i;
-				var request = pointShadowRequests[i];
-				var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, request.LightIndex);
-				var rendererList = context.CreateShadowRendererList(ref shadowDrawingSettings);
+			using var pass = renderGraph.AddRenderPass("Point Shadows");
+			pass.ViewHandle = pointShadowView;
+			pass.DepthStencil = pointShadows;
+			pass.DepthSlice = i;
+			var request = pointShadowRequests[i];
+			var shadowDrawingSettings = new ShadowDrawingSettings(cullingResults, request.LightIndex);
+			var rendererList = context.CreateShadowRendererList(ref shadowDrawingSettings);
 
-				var worldToShadowClip = request.ProjectionMatrix.Mul(request.ViewMatrix);
-				pass.SetRenderFunction((worldToShadowClip, rendererList, lighting.PointShadowBias, lighting.PointShadowSlopeBias), static (command, data) =>
-				{
-					command.SetGlobalDepthBias(data.PointShadowBias, data.PointShadowSlopeBias);
-					command.SetGlobalMatrix("WorldToShadowClip", data.worldToShadowClip);
-					command.DrawRendererList(data.rendererList);
-					command.SetGlobalDepthBias(0.0f, 0.0f);
-				});
-			}
+			var worldToShadowClip = request.ProjectionMatrix.Mul(request.ViewMatrix);
+			pass.SetRenderFunction((worldToShadowClip, rendererList, lighting.PointShadowBias, lighting.PointShadowSlopeBias), static (command, data) =>
+			{
+				command.SetGlobalDepthBias(data.PointShadowBias, data.PointShadowSlopeBias);
+				command.SetGlobalMatrix("WorldToShadowClip", data.worldToShadowClip);
+				command.DrawRendererList(data.rendererList);
+				command.SetGlobalDepthBias(0.0f, 0.0f);
+			});
 		}
 
 		ListPool<ShadowRequest>.Release(pointShadowRequests);
