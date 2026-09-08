@@ -215,6 +215,24 @@ public class SetupLighting
 			renderGraph.SetResource(new EnvironmentData(environmentData, sunShadow));
 		}
 
+		var tileCountX = DivRoundUp(viewSize.x, lightCulling.TileSize);
+		var tileCountY = DivRoundUp(viewSize.y, lightCulling.TileSize);
+		var lightIndexCount = DivRoundUp(pointLights.Count, 32);
+		var binWidth = far / lightCulling.DepthSlices;
+
+		BufferHandle pointLightData;
+		using (var buffer = renderGraph.AddConstantBuffer("PointLightData", out pointLightData))
+		{
+			buffer.AddData((float)lightCulling.TileSize);
+			buffer.AddData(tileCountX * tileCountY);
+			buffer.AddData(tileCountX);
+			buffer.AddData(lightIndexCount);
+			buffer.AddData(lightCulling.DepthSlices);
+			buffer.AddData(binWidth);
+			buffer.AddData(Rcp(lightCulling.TileSize));
+			buffer.AddData(Rcp(binWidth));
+		}
+
 		// Sort lights by view depth
 		pointLights.Sort(pointLightDepths);
 
@@ -222,7 +240,6 @@ public class SetupLighting
 		Array.Fill(lightDepthMinMax, BitPack(ushort.MaxValue, 16, 0) | BitPack(0, 16, 16));
 
 		// Add sorted lights to list
-		var binWidth = far / lightCulling.DepthSlices;
 		var intersectingLightCount = 0;
 
 		for (var i = 0; i < pointLights.Count; i++)
@@ -253,23 +270,6 @@ public class SetupLighting
 			// Check if the light intersects the near plane
 			if (pointLightDepths[i] < near)
 				intersectingLightCount = i + 1;
-		}
-
-		var tileCountX = DivRoundUp(viewSize.x, lightCulling.TileSize);
-		var tileCountY = DivRoundUp(viewSize.y, lightCulling.TileSize);
-		var lightIndexCount = DivRoundUp(pointLights.Count, 32);
-
-		BufferHandle pointLightData;
-		using (var buffer = renderGraph.AddConstantBuffer("PointLightData", out pointLightData))
-		{
-			buffer.AddData((float)lightCulling.TileSize);
-			buffer.AddData(tileCountX * tileCountY);
-			buffer.AddData(tileCountX);
-			buffer.AddData(lightIndexCount);
-			buffer.AddData(lightCulling.DepthSlices);
-			buffer.AddData(binWidth);
-			buffer.AddData(Rcp(lightCulling.TileSize));
-			buffer.AddData(Rcp(binWidth));
 		}
 
 		var lightBuffer = renderGraph.GetBuffer(new(Max(1, pointLights.Count), Marshal.SizeOf<LightData>()), Shader.PropertyToID("PointLights"));
