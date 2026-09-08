@@ -380,9 +380,14 @@ float4 GetLuminanceAndFog(float4 color, float3 ambient, float3 normal, float2 sc
 	//if (ViewPosition.y < WaterHeight)
 	//	color.rgb = lerp(color.rgb, color.rgb * UnderwaterColor, UnderwaterColorWeight);
 	
+	float noise = Noise1D(screenPosition);
+	noise = noise * 2.0 - 1.0;
+	noise = FastSign(noise) * (1.0 - sqrt(1.0 - abs(noise)));
+	float jitter = (noise) / VolumeSize.z;
+	float3 volumetricUv = float3(screenPosition / ViewSize, viewPosition.z / MaxDepth + jitter);
+	
 	// Fog
 	#ifdef VOLUMETRIC_LIGHT_ON
-		float3 volumetricUv = float3(screenPosition / ViewSize, viewPosition.z / MaxDepth);
 		float4 volumetricLight = VolumetricLight.Sample(LinearClampSampler, volumetricUv);
 		float3 fogLuminance = volumetricLight.rgb;
 		float fogTransmittance = volumetricLight.a;

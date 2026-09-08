@@ -200,7 +200,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.DepthStencil = renderGraph.GetResource<CameraDepth>().handle;
 			pass.AddOutput(renderGraph.GetResource<CameraColor>().handle);
 			pass.AddInputs(stackalloc[] { renderGraph.GetResource<CameraDepth>().handle, renderGraph.GetResource<AlbedoNormal>().handle });
-			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData, PointLightData, RaytracedOcclusion, RaytracedShadows, RaytracedDiffuse>();
+			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData, PointLightData, RaytracedOcclusion, RaytracedShadows, RaytracedDiffuse, BlueNoise1D>();
 
 			if (asset.Samples > 1)
 				pass.AddKeyword("MSAA_ON");
@@ -216,7 +216,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = renderGraph.GetResource<CameraDepth>().handle;
 			pass.AddOutput(renderGraph.GetResource<CameraColor>().handle);
-			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData>();
+			pass.AddResources<EnvironmentData, ViewData, VolumetricLightData, BlueNoise1D>();
 
 			var rendererList = context.CreateRendererList(new(new ShaderTagId("Sky"), cullingResults, camera) { renderQueueRange = RenderQueueRange.all });
 			pass.SetRenderFunction((rendererList, backgroundMaterial), static (command, data) =>
@@ -231,7 +231,7 @@ public class NewPipeline : RenderPipelineBase
 			pass.ViewHandle = viewHandle;
 			pass.DepthStencil = renderGraph.GetResource<CameraDepth>().handle;
 			pass.AddOutput(renderGraph.GetResource<CameraColor>().handle);
-			pass.AddResources<EnvironmentData, ViewData, PointLightData, VolumetricLightData, RaytracedSpecular, RaytracedRefraction>();
+			pass.AddResources<EnvironmentData, ViewData, PointLightData, VolumetricLightData, RaytracedSpecular, RaytracedRefraction, BlueNoise1D>();
 
 			var rendererParams = new RendererListParams(cullingResults, new(new("Forward"), new(camera) { criteria = SortingCriteria.BackToFront | SortingCriteria.OptimizeStateChanges }) { enableInstancing = true }, new(RenderQueueRange.transparent));
 			var rendererList = context.CreateRendererList(ref rendererParams);

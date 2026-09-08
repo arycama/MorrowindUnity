@@ -49,11 +49,8 @@ void Compute(uint3 id : SV_DispatchThreadID)
 		previousScreenPosition.xy = PerspectiveDivide(previousScreenPosition).xy;
 	
 		float3 volumeUv = float3(previousScreenPosition.xy, previousScreenPosition.w / MaxDepth);
-		if (!IsFirst && all(saturate(volumeUv) == volumeUv))
-		{
-			float4 previousLuminanceExtinction = VolumetricLight.SampleLevel(TrilinearClampSampler, volumeUv, 0.0);
-			luminanceExtinction = lerp(previousLuminanceExtinction, luminanceExtinction, 0.05);
-		}
+		float4 previousLuminanceExtinction = VolumetricLight.SampleLevel(LinearClampSampler, volumeUv, 0.0);
+		luminanceExtinction = lerp(previousLuminanceExtinction, luminanceExtinction, 0.05);
 	#endif
 	
 	VolumetricLightTemp[id] = luminanceExtinction;
