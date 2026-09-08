@@ -9,11 +9,11 @@ using static Unmath.Math;
 public class VolumetricLight : IDisposable
 {
 	private readonly RenderGraph renderGraph;
-	private readonly NewPipelineAsset asset;
+	private readonly RenderPipelineAsset asset;
 	private readonly ComputeShader volumetricLightShader;
 	private readonly Dictionary<Camera, RenderTexture> volumetricHistory = new();
 
-	public VolumetricLight(RenderGraph renderGraph, NewPipelineAsset asset)
+	public VolumetricLight(RenderGraph renderGraph, RenderPipelineAsset asset)
 	{
 		this.renderGraph = renderGraph;
 		this.asset = asset;

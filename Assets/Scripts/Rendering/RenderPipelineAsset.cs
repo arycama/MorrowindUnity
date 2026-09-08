@@ -1,8 +1,8 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 
-[CreateAssetMenu(menuName = "Data/New Pipeline")]
-public class NewPipelineAsset : RenderPipelineAsset<NewPipeline>
+[CreateAssetMenu(menuName = "Data/Render Pipeline")]
+public class RenderPipelineAsset : RenderPipelineAsset<RenderPipeline>
 {
 	[field: SerializeField, Pow2(8)] public int Samples { get; private set; } = 1;
 
@@ -51,47 +51,11 @@ public class NewPipelineAsset : RenderPipelineAsset<NewPipeline>
 	public sealed override Shader terrainDetailGrassBillboardShader => defaultShaders.TerrainDetailGrassBillboardShader ?? base.terrainDetailGrassBillboardShader;
 	public sealed override Shader terrainDetailGrassShader => defaultShaders.TerrainDetailGrassShader ?? base.terrainDetailGrassShader;
 	public sealed override Shader terrainDetailLitShader => defaultShaders.TerrainDetailLitShader ?? base.terrainDetailLitShader;
+	public override string renderPipelineShaderTag => "RenderPipeline";
 
-	public override string renderPipelineShaderTag => "NewPipeline";
-
-	public SupportedRenderingFeatures SupportedRenderingFeatures => new()
+	protected override UnityEngine.Rendering.RenderPipeline CreatePipeline()
 	{
-		ambientProbeBaking = false,
-		defaultReflectionProbeBaking = false,
-		defaultMixedLightingModes = SupportedRenderingFeatures.LightmapMixedBakeModes.None,
-		editableMaterialRenderQueue = false,
-		enlighten = false,
-		lightmapBakeTypes = LightmapBakeType.Realtime,
-		lightmapsModes = LightmapsMode.NonDirectional,
-		lightProbeProxyVolumes = false,
-		mixedLightingModes = SupportedRenderingFeatures.LightmapMixedBakeModes.None,
-		motionVectors = false,
-		overridesEnableLODCrossFade = true,
-		overridesEnvironmentLighting = false,
-		overridesFog = false,
-		overridesMaximumLODLevel = false,
-		overridesLightProbeSystem = true,
-		overridesLightProbeSystemWarningMessage = default,
-		overridesLODBias = false,
-		overridesOtherLightingSettings = true,
-		overridesRealtimeReflectionProbes = true,
-		overridesShadowmask = true,
-		particleSystemInstancing = true,
-		receiveShadows = true,
-		reflectionProbeModes = SupportedRenderingFeatures.ReflectionProbeModes.None,
-		reflectionProbes = false,
-		rendererPriority = false,
-		rendererProbes = false,
-		rendersUIOverlay = true,
-		reflectionProbesBlendDistance = false,
-		skyOcclusion = false,
-		supportsClouds = false,
-		supportsHDR = true
-	};
-
-	protected override RenderPipeline CreatePipeline()
-	{
-		return new NewPipeline(this);
+		return new RenderPipeline(this);
 	}
 
 	protected override void OnValidate()
