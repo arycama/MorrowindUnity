@@ -33,6 +33,8 @@ public class SetupLighting
 	{
 		pointLights.Clear();
 		pointLightDepths.Clear();
+		perLightInfos.Clear();
+		splitBuffer.Clear();
 
 		var tanHalfFovY = Tan(0.5f * Radians(camera.fieldOfView));
 		var tanHalfFov = new Float2(tanHalfFovY * camera.aspect, tanHalfFovY);
@@ -136,41 +138,41 @@ public class SetupLighting
 				cullingSphere.xyz = viewRotation.InverseRotate(cullingSphere.xyz - viewPosition);
 
 				// Reject lights that are fully behind the near plane since Unity doesn't do it automatically..
-				if (cullingSphere.z + cullingSphere.w <= near)
-					continue;
-
-				// Shadows
-				var shadowIndex = uint.MaxValue;
-				var nearPlane = visibleLight.light.shadowNearPlane;
-				if (hasShadows && cullingResults.GetShadowCasterBounds(i, out _) && visibleLight.lightType == LightType.Point)
+				if (cullingSphere.z + cullingSphere.w > near)
 				{
-					shadowIndex = (uint)pointShadowRequests.Count;
-					splitRange = new RangeInt(splitBuffer.Count, 6);
-
-					for (var j = 0; j < 6; j++)
+					// Shadows
+					var shadowIndex = uint.MaxValue;
+					var nearPlane = visibleLight.light.shadowNearPlane;
+					if (hasShadows && cullingResults.GetShadowCasterBounds(i, out _) && visibleLight.lightType == LightType.Point)
 					{
-						var matrix = Float4x4.cubemapRotations[j];
-						var worldToView = Float4x4.WorldToLocal(matrix.column0, matrix.column1, matrix.column2, position);
-						var viewToClip = Float4x4.PerspectiveReverseZ(1, nearPlane, radius);
-						var worldToClip = viewToClip.Mul(worldToView);
-						var shadowSplitData = CalculateShadowSplitData(worldToClip, matrix.column2, false);
+						shadowIndex = (uint)pointShadowRequests.Count;
+						splitRange = new RangeInt(splitBuffer.Count, 6);
 
-						// Convert to camera relative
-						var cameraInverseTranslation = Float4x4.Translate(viewPosition);
-						worldToView = worldToView.Mul(cameraInverseTranslation);
+						for (var j = 0; j < 6; j++)
+						{
+							var matrix = Float4x4.cubemapRotations[j];
+							var worldToView = Float4x4.WorldToLocal(matrix.column0, matrix.column1, matrix.column2, position);
+							var viewToClip = Float4x4.PerspectiveReverseZ(1, nearPlane, radius);
+							var worldToClip = viewToClip.Mul(worldToView);
+							var shadowSplitData = CalculateShadowSplitData(worldToClip, matrix.column2, false);
 
-						pointShadowRequests.Add(new(i, worldToView, viewToClip, shadowSplitData, j, position, true, nearPlane, radius, position, lightRotation, 1, 1, lighting.PointShadowResolution));
-						splitBuffer.Add(shadowSplitData);
+							// Convert to camera relative
+							var cameraInverseTranslation = Float4x4.Translate(viewPosition);
+							worldToView = worldToView.Mul(cameraInverseTranslation);
+
+							pointShadowRequests.Add(new(i, worldToView, viewToClip, shadowSplitData, j, position, true, nearPlane, radius, position, lightRotation, 1, 1, lighting.PointShadowResolution));
+							splitBuffer.Add(shadowSplitData);
+						}
 					}
+
+					position = viewRotation.InverseRotate(position - viewPosition);
+
+					var shadowProjectionX = 1.0f + radius / (nearPlane - radius);
+					var shadowProjectionY = nearPlane * radius / (radius - nearPlane);
+
+					pointLights.Add(new(position, distanceScale, forward, angleScale, visibleLight.finalColor.Float3(), angleOffset, cullingSphere, shadowIndex, shadowProjectionX, shadowProjectionY));
+					pointLightDepths.Add(cullingSphere.z - cullingSphere.w * 1.075f);
 				}
-
-				position = viewRotation.InverseRotate(position - viewPosition);
-
-				var shadowProjectionX = 1.0f + radius / (nearPlane - radius);
-				var shadowProjectionY = nearPlane * radius / (radius - nearPlane);
-
-				pointLights.Add(new(position, distanceScale, forward, angleScale, visibleLight.finalColor.Float3(), angleOffset, cullingSphere, shadowIndex, shadowProjectionX, shadowProjectionY));
-				pointLightDepths.Add(cullingSphere.z - cullingSphere.w * 1.075f);
 			}
 
 			perLightInfos.Add(new()
@@ -186,9 +188,6 @@ public class SetupLighting
 			perLightInfos = perLightInfos.AsSpan().AsArray(),
 			splitBuffer = splitBuffer.AsSpan().AsArray()
 		});
-
-		perLightInfos.Clear();
-		splitBuffer.Clear();
 
 		var fogEnabled = RenderSettings.fog;
 #if UNITY_EDITOR

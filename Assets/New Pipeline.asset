@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: New Pipeline
   m_EditorClassIdentifier: Rendering::NewPipelineAsset
   <Samples>k__BackingField: 1
-  <VolumetricsEnabled>k__BackingField: 1
+  <VolumetricsEnabled>k__BackingField: 0
   <VolumetricTileSize>k__BackingField: 8
   <VolumetricSlices>k__BackingField: 64
   <VolumetricDistance>k__BackingField: 8192
