@@ -323,6 +323,15 @@ public class SetupLighting
 		var pointShadowView = renderGraph.AddViewInfo(lighting.PointShadowResolution, 1, pointShadowCount);
 		var pointShadows = renderGraph.GetTexture(new(pointShadowView, GraphicsFormat.D16_UNorm, true, dimension: TextureDimension.Tex2DArray), Shader.PropertyToID("PointShadows"));
 
+		// If no shadows exist, we still need to assign an empty texture or to avoid errors about no texture being assigned
+		if (pointShadowRequests.Count == 0)
+		{
+			using var pass = renderGraph.AddRenderPass("Point Shadows");
+			pass.ViewHandle = pointShadowView;
+			pass.DepthStencil = pointShadows;
+			pass.SetRenderFunction(0, static (command, data) => { });
+		}
+
 		for (var i = 0; i < pointShadowRequests.Count; i++)
 		{
 			using var pass = renderGraph.AddRenderPass("Point Shadows");

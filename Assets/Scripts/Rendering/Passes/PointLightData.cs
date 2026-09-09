@@ -20,10 +20,7 @@ public readonly struct PointLightData : IRenderResource
 		if (builder.RenderGraph.IsResourceWritten(visibleLightBits))
 		{
 			builder.AddKeyword("POINT_LIGHTS_ON");
-			builder.AddResources(stackalloc ResourceHandle[] { dataBuffer, lightBuffer, lightDepthMinMaxBuffer, visibleLightBits });
+			builder.AddResources(stackalloc ResourceHandle[] { dataBuffer, lightBuffer, lightDepthMinMaxBuffer, visibleLightBits, pointShadows });
 		}
-
-		if (builder.RenderGraph.IsResourceWritten(pointShadows))
-			builder.AddResource(pointShadows);
 	}
 }
